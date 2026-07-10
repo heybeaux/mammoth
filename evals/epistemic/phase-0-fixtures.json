@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "provenance": [
+    "swarmlab/experiments/17-ground-store-verification",
+    "swarmlab/experiments/16-handoff-guards",
+    "swarmlab/experiments/13-audit-forgery"
+  ],
+  "evaluatedAt": "2026-07-10T00:00:00.000Z",
+  "evidenceCases": [
+    {
+      "id": "fresh-direct-support",
+      "claimId": "claim-1",
+      "artifact": {
+        "id": "e-1",
+        "kind": "web_snapshot",
+        "retrievedAt": "2026-07-01T00:00:00.000Z",
+        "expiresAt": "2026-08-01T00:00:00.000Z",
+        "contentDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sourceLineageId": "primary-1"
+      },
+      "edge": {
+        "claimId": "claim-1",
+        "evidenceId": "e-1",
+        "stance": "supports",
+        "entailment": "direct",
+        "locator": { "section": "Results" }
+      },
+      "expected": { "trusted": true, "status": "supported" }
+    },
+    {
+      "id": "non-entailing-citation",
+      "claimId": "claim-2",
+      "artifact": {
+        "id": "e-2",
+        "kind": "paper",
+        "retrievedAt": "2026-07-01T00:00:00.000Z",
+        "contentDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "sourceLineageId": "primary-2"
+      },
+      "edge": {
+        "claimId": "claim-2",
+        "evidenceId": "e-2",
+        "stance": "supports",
+        "entailment": "none",
+        "locator": { "page": 4 }
+      },
+      "expected": {
+        "trusted": false,
+        "status": "unresolved",
+        "reason": "NON_ENTAILING_SUPPORT"
+      }
+    },
+    {
+      "id": "stale-source",
+      "claimId": "claim-3",
+      "artifact": {
+        "id": "e-3",
+        "kind": "web_snapshot",
+        "retrievedAt": "2026-06-01T00:00:00.000Z",
+        "expiresAt": "2026-07-09T00:00:00.000Z",
+        "contentDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "sourceLineageId": "primary-3"
+      },
+      "edge": {
+        "claimId": "claim-3",
+        "evidenceId": "e-3",
+        "stance": "supports",
+        "entailment": "direct",
+        "locator": { "jsonPath": "$.value" }
+      },
+      "expected": {
+        "trusted": false,
+        "status": "expired",
+        "reason": "STALE_EVIDENCE"
+      }
+    },
+    {
+      "id": "cross-model-only",
+      "claimId": "claim-4",
+      "artifact": {
+        "id": "e-4",
+        "kind": "model_observation",
+        "retrievedAt": "2026-07-09T00:00:00.000Z",
+        "contentDigest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "sourceLineageId": "shared-model-context"
+      },
+      "edge": {
+        "claimId": "claim-4",
+        "evidenceId": "e-4",
+        "stance": "supports",
+        "entailment": "direct",
+        "locator": { "jsonPath": "$.consensus" }
+      },
+      "expected": {
+        "trusted": false,
+        "status": "unresolved",
+        "reason": "CROSS_MODEL_ONLY"
+      }
+    }
+  ]
+}
