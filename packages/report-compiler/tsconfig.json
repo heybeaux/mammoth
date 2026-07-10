@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@mammoth/domain": ["../domain/src/index.ts"]
+    }
+  },
+  "include": ["src", "test"]
+}
