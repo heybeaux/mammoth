@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit && pnpm -r --if-present run typecheck",
     "verify:evidence": "tsx scripts/verify-phase-0.ts",
     "verify:audit": "tsx scripts/verify-phase-0.ts",
+    "verify:phase-1": "pnpm --filter @mammoth/retrieval --filter @mammoth/persistence --filter @mammoth/report-compiler test",
     "eval:offline": "tsx scripts/verify-phase-0.ts"
   },
   "devDependencies": {
