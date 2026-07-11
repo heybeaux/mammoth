@@ -24,6 +24,7 @@
     "verify:m3": "pnpm --filter @mammoth/cli test",
     "verify:m4": "pnpm build && tsx scripts/verify-mvp.ts",
     "verify:mvp": "pnpm verify:evidence && pnpm verify:audit && pnpm verify:phase-1 && pnpm verify:phase-2 && pnpm verify:m2 && pnpm verify:m3 && pnpm verify:m4",
+    "verify:p2": "tsx scripts/verify-p2.ts",
     "eval:offline": "tsx scripts/verify-phase-0.ts"
   },
   "devDependencies": {

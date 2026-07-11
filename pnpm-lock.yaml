@@ -76,6 +76,18 @@ importers:
         specifier: ^5.8.0
         version: 5.8.3
 
+  evals/p2-acceptance:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.15.34
+      tsx:
+        specifier: ^4.20.0
+        version: 4.20.3
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+
   packages/adapter-contracts:
     dependencies:
       '@mammoth/persistence':
@@ -153,6 +165,18 @@ importers:
       zod:
         specifier: ^3.25.0
         version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.15.34
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
+
+  packages/postgres-adapter:
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
