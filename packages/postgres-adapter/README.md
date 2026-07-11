@@ -46,3 +46,19 @@ classifies stale compare-and-swap writers as retryable; invalid references and
 graph cycles are non-retryable. Rejected or rolled-back mutations produce no
 revision, audit record, or outbox event. Publication remains outside the
 authoritative transaction and consumes only committed outbox rows.
+
+## Durable work and effects
+
+Migration v3 and `PostgresWorkState` add transactional work items, leases,
+monotonic fencing tokens, retry and cancellation state, partial receipts, and
+completed provider-effect receipts. Every authoritative transition and its work
+outbox event share one database transaction. Events retain both the attributable
+ledger revision and the work fencing token.
+
+Database atomicity cannot extend into an external provider. Callers pass the
+persisted stable idempotency key to the provider, then record its receipt before
+completing work. `PostgresOutbox` stores a stable dispatch key and uniquely
+acknowledges `(outbox_id, destination)`, making restart and duplicate delivery
+idempotent. Exhausted rows remain visible with `last_error` and `poison_at`.
+
+Run `pnpm --filter @mammoth/postgres-adapter verify:p2:d4` for the D4 gate.

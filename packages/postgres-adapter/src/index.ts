@@ -4,3 +4,4 @@ export * from './lifecycle.js';
 export * from './ledger.js';
 export * from './migration-runner.js';
 export * from './migrations.js';
+export * from './work-outbox.js';
