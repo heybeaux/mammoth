@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:ledger": "vitest run test/ledger.test.ts",
     "test:migrations": "vitest run test/lifecycle.test.ts",
+    "test:work-effects": "vitest run test/work-outbox.test.ts",
     "verify:p2:d4": "vitest run test/work-outbox.test.ts",
     "typecheck": "tsc --noEmit"
   },
