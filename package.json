@@ -12,6 +12,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
+    "mammoth": "tsx apps/cli/src/bin.ts",
     "test": "pnpm -r --if-present run test",
     "typecheck": "tsc --noEmit && pnpm -r --if-present run typecheck",
     "verify:evidence": "tsx scripts/verify-phase-0.ts",
@@ -19,6 +20,7 @@
     "verify:phase-1": "pnpm --filter @mammoth/retrieval --filter @mammoth/persistence --filter @mammoth/report-compiler test",
     "verify:phase-2": "pnpm --filter @mammoth/workflow --filter @mammoth/work-queue --filter @mammoth/governance test",
     "verify:m2": "pnpm --filter @mammoth/mvp-fixture test && pnpm --filter @mammoth/runtime test",
+    "verify:m3": "pnpm --filter @mammoth/cli test",
     "eval:offline": "tsx scripts/verify-phase-0.ts"
   },
   "devDependencies": {

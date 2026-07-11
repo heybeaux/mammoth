@@ -1,9 +1,15 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { RuntimeCharter, RuntimeStage } from '../src/index.js';
-import { runResearchProgram } from '../src/index.js';
+import {
+  cancelResearchProgram,
+  getResearchProgramStatus,
+  inspectResearchProgram,
+  resumeResearchProgram,
+  runResearchProgram,
+} from '../src/index.js';
 
 const now = new Date('2026-07-10T20:00:00.000Z');
 const source = [
@@ -52,6 +58,65 @@ async function root(): Promise<string> {
 }
 
 describe('local evidence-first runtime', () => {
+  it.each([
+    '../escape',
+    '..',
+    '/absolute',
+    'nested/program',
+    'nested\\program',
+    'control\u0000byte',
+    `p${'x'.repeat(128)}`,
+  ])(
+    'rejects unsafe program id %j at every filesystem boundary',
+    async (programId) => {
+      const directory = await root();
+      await expect(
+        runResearchProgram({
+          rootDirectory: directory,
+          charter: { ...charter, programId },
+          transport,
+        }),
+      ).rejects.toMatchObject({ code: 'INVALID_CHARTER' });
+
+      for (const operation of [
+        () => getResearchProgramStatus({ rootDirectory: directory, programId }),
+        () => inspectResearchProgram({ rootDirectory: directory, programId }),
+        () =>
+          resumeResearchProgram({
+            rootDirectory: directory,
+            programId,
+            transport,
+          }),
+        () => cancelResearchProgram({ rootDirectory: directory, programId }),
+      ]) {
+        await expect(operation()).rejects.toMatchObject({
+          code: 'INVALID_PROGRAM_ID',
+        });
+      }
+    },
+  );
+
+  it('rejects a pre-existing program-directory symlink', async () => {
+    const directory = await root();
+    const outside = await root();
+    await mkdir(directory, { recursive: true });
+    await symlink(outside, join(directory, charter.programId), 'dir');
+
+    await expect(
+      runResearchProgram({
+        rootDirectory: directory,
+        charter,
+        transport,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_PROGRAM_ID' });
+    await expect(
+      getResearchProgramStatus({
+        rootDirectory: directory,
+        programId: charter.programId,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_PROGRAM_ID' });
+  });
+
   it('runs the checked-in RFC 2606 MVP fixture end to end', async () => {
     const fixtureRoot = join(
       import.meta.dirname,
@@ -228,9 +293,19 @@ describe('local evidence-first runtime', () => {
       }),
     ).rejects.toThrow('injected interruption');
 
-    const resumed = await runResearchProgram({
+    const interrupted = await getResearchProgramStatus({
       rootDirectory: directory,
-      charter,
+      programId: charter.programId,
+    });
+    expect(interrupted).toMatchObject({
+      status: 'interrupted',
+      resumable: true,
+    });
+
+    // No charter is supplied: a fresh operator process loads the durable input.
+    const resumed = await resumeResearchProgram({
+      rootDirectory: directory,
+      programId: charter.programId,
       transport,
       resolveHost: () => Promise.resolve(['203.0.113.10']),
       now: () => now,
@@ -247,5 +322,102 @@ describe('local evidence-first runtime', () => {
       receipts: unknown[];
     };
     expect(queue.receipts).toHaveLength(1);
+
+    const inspection = await inspectResearchProgram({
+      rootDirectory: directory,
+      programId: charter.programId,
+    });
+    expect(inspection.status.status).toBe('completed');
+    expect(inspection.ledger).toEqual({
+      claimCount: 2,
+      evidenceCount: 1,
+      assessmentCount: 2,
+    });
+    expect(inspection.artifacts.report).toMatchObject({ present: true });
+  });
+
+  it('cancels terminally, preserves completed artifacts, and emits an honest partial receipt', async () => {
+    const directory = await root();
+    let retrievals = 0;
+    let cancellationReceipt:
+      | Awaited<ReturnType<typeof cancelResearchProgram>>
+      | undefined;
+    await expect(
+      runResearchProgram({
+        rootDirectory: directory,
+        charter,
+        transport: async () => {
+          retrievals += 1;
+          return transport();
+        },
+        resolveHost: () => Promise.resolve(['203.0.113.10']),
+        now: () => now,
+        onStage: async (stage) => {
+          if (stage === 'ledger_committed') {
+            cancellationReceipt = await cancelResearchProgram({
+              rootDirectory: directory,
+              programId: charter.programId,
+              now: () => new Date('2026-07-10T20:01:00.000Z'),
+            });
+          }
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'PROGRAM_CANCELLED' });
+
+    const ledgerBefore = await readFile(
+      join(directory, charter.programId, 'ledger.json'),
+      'utf8',
+    );
+    const receipt = cancellationReceipt;
+    if (!receipt) throw new Error('cancellation receipt was not emitted');
+    expect(receipt).toMatchObject({
+      status: 'cancelled',
+      publicationStatus: 'partial',
+    });
+    expect(receipt.completedArtifacts.ledger).toMatch(/^sha256:/);
+    expect(receipt.completedArtifacts.workflow).toMatch(/^sha256:/);
+    expect(receipt.completedArtifacts.queue).toMatch(/^sha256:/);
+    expect(receipt.completedArtifacts.governance).toMatch(/^sha256:/);
+    expect(receipt.missingArtifacts).toEqual(
+      expect.arrayContaining(['report', 'manifest', 'traces']),
+    );
+
+    await expect(
+      runResearchProgram({
+        rootDirectory: directory,
+        charter,
+        transport: async () => {
+          retrievals += 1;
+          return transport();
+        },
+        resolveHost: () => Promise.resolve(['203.0.113.10']),
+        now: () => now,
+      }),
+    ).rejects.toMatchObject({ code: 'PROGRAM_CANCELLED' });
+    await expect(
+      resumeResearchProgram({
+        rootDirectory: directory,
+        programId: charter.programId,
+        transport,
+      }),
+    ).rejects.toMatchObject({ code: 'PROGRAM_CANCELLED' });
+
+    expect(retrievals).toBe(1);
+    expect(
+      await readFile(join(directory, charter.programId, 'ledger.json'), 'utf8'),
+    ).toBe(ledgerBefore);
+    expect(
+      await getResearchProgramStatus({
+        rootDirectory: directory,
+        programId: charter.programId,
+      }),
+    ).toMatchObject({ status: 'cancelled', resumable: false });
+
+    const inspection = await inspectResearchProgram({
+      rootDirectory: directory,
+      programId: charter.programId,
+    });
+    expect(inspection.status.status).toBe('cancelled');
+    expect(inspection.receipt).toMatchObject({ publicationStatus: 'partial' });
   });
 });

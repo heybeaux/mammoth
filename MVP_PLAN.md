@@ -23,7 +23,7 @@ broader model, novelty, experiment, desktop, and pipeline ecosystems.
 - [x] Phase 1: evidence-first vertical slice.
 - [x] Phase 2: durable local orchestration and governance.
 - [x] Runtime composition: one complete research-program workflow.
-- [ ] Operator CLI and inspectability.
+- [x] Operator CLI and inspectability.
 - [ ] Black-box MVP verification and clean-checkout receipt.
 
 ## Delivery loops
