@@ -115,6 +115,35 @@ describe('mammoth operator CLI spawned-process behavior', () => {
     }
   });
 
+  it('runs the checked-in README quickstart without network access', async () => {
+    const quickstartRoot = join(await temporaryRoot(), 'programs');
+    const quickstartCharter = join(
+      repositoryRoot,
+      'examples/quickstart/charter.json',
+    );
+    const result = await invoke(
+      repositoryRoot,
+      'run',
+      quickstartCharter,
+      '--root',
+      quickstartRoot,
+      '--json',
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(json(result)).toMatchObject({
+      ok: true,
+      command: 'run',
+      programId: 'quickstart-example-domains',
+      status: 'completed',
+      result: {
+        publicationStatus: 'evidence_complete',
+        supportedClaimIds: ['claim:quickstart:reserved-domains'],
+        unresolvedClaimIds: ['claim:quickstart:https-guarantee'],
+      },
+    });
+  });
+
   it('runs a charter and emits a stable JSON envelope', async () => {
     const result = await invoke(
       workspace,
