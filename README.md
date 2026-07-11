@@ -19,6 +19,8 @@ pnpm verify:evidence
 pnpm verify:audit
 pnpm verify:phase-1
 pnpm verify:phase-2
+pnpm verify:m2
+pnpm verify:m3
 pnpm eval:offline
 ```
 
@@ -48,3 +50,20 @@ assessment to fresh immutable evidence with an exact locator.
 `pnpm verify:phase-2` runs the process-death and duplicate-delivery gates. Local
 MVP stores use atomic rename plus file and directory fsync; runtime ports remain
 compatible with a future Temporal and Postgres deployment.
+
+## Local operator CLI
+
+Build and run Mammoth with a charter that includes a checked-in `sourcePath` for
+offline operation:
+
+```sh
+pnpm --filter @mammoth/cli build
+pnpm mammoth run ./charter.json --root ./.mammoth --json
+pnpm mammoth status <program-id> --root ./.mammoth --json
+pnpm mammoth inspect <program-id> --root ./.mammoth --json
+```
+
+Interrupted programs can be continued with `mammoth resume`; `mammoth cancel`
+commits a terminal partial receipt while preserving already completed artifacts.
+The durable program directory contains workflow, queue, governance, ledger, CAS,
+report, manifest, traces, operator state, and terminal receipt artifacts.

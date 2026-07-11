@@ -47,6 +47,7 @@ export interface RuntimeArtifactPaths {
   manifest: string;
   traces: string;
   receipt: string;
+  operator: string;
 }
 
 export interface RuntimeResult {
@@ -60,12 +61,84 @@ export interface RuntimeResult {
   paths: RuntimeArtifactPaths;
 }
 
+export type RuntimeProgramStatus =
+  | 'pending'
+  | 'running'
+  | 'waiting'
+  | 'paused'
+  | 'interrupted'
+  | 'completed'
+  | 'cancelled';
+
+export interface RuntimeProgramStatusResult {
+  programId: string;
+  status: RuntimeProgramStatus;
+  executionId?: string;
+  updatedAt?: string;
+  resumable: boolean;
+  paths: RuntimeArtifactPaths;
+  error?: string;
+}
+
+export interface RuntimeProgramReference {
+  rootDirectory: string;
+  programId: string;
+}
+
+export interface RuntimeResumeOptions extends RuntimeProgramReference {
+  transport: SourceTransport;
+  resolveHost?: (hostname: string) => Promise<readonly string[]>;
+  now?: () => Date;
+  onStage?: (stage: RuntimeStage) => void | Promise<void>;
+}
+
+export interface RuntimeCancelOptions extends RuntimeProgramReference {
+  now?: () => Date;
+}
+
+export interface RuntimePartialReceipt {
+  id: string;
+  programId: string;
+  executionId?: string;
+  status: 'cancelled';
+  publicationStatus: 'partial';
+  completedArtifacts: Record<string, string>;
+  missingArtifacts: string[];
+  issuedAt: string;
+  integrityHash: string;
+}
+
+export interface RuntimeInspection {
+  status: RuntimeProgramStatusResult;
+  artifacts: Record<
+    string,
+    { path: string; present: boolean; byteLength?: number }
+  >;
+  receipt?: unknown;
+  executions: {
+    id: string;
+    status: string;
+    attempt: number;
+    updatedAt: string;
+    error?: string;
+  }[];
+  ledger?: {
+    claimCount: number;
+    evidenceCount: number;
+    assessmentCount: number;
+  };
+}
+
 export type RuntimeErrorCode =
   | 'INVALID_CHARTER'
   | 'WORKFLOW_FAILED'
   | 'RETRIEVAL_FAILED'
   | 'CLAIM_COMMIT_DENIED'
-  | 'REPORT_COMPILATION_FAILED';
+  | 'REPORT_COMPILATION_FAILED'
+  | 'PROGRAM_NOT_FOUND'
+  | 'INVALID_PROGRAM_ID'
+  | 'PROGRAM_CANCELLED'
+  | 'PROGRAM_NOT_RESUMABLE';
 
 export class RuntimeExecutionError extends Error {
   public constructor(
