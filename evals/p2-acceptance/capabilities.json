@@ -1,0 +1,12 @@
+{
+  "gates": {
+    "d3-content-addressed-artifacts": {
+      "requiredPath": "packages/production-cas/package.json",
+      "command": ["pnpm", "--filter", "@mammoth/production-cas", "test"]
+    },
+    "d6-observatory-projection": {
+      "requiredPath": "packages/observatory-projection/package.json",
+      "command": ["pnpm", "--filter", "@mammoth/observatory-projection", "test"]
+    }
+  }
+}

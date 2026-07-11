@@ -157,6 +157,25 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
 
+  packages/observatory-projection:
+    dependencies:
+      '@mammoth/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@mammoth/report-compiler':
+        specifier: workspace:*
+        version: link:../report-compiler
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
+
   packages/persistence:
     dependencies:
       '@mammoth/domain':
@@ -177,6 +196,26 @@ importers:
         version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
 
   packages/postgres-adapter:
+    dependencies:
+      '@mammoth/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.15.34
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
+
+  packages/production-cas:
+    dependencies:
+      '@mammoth/retrieval':
+        specifier: workspace:*
+        version: link:../retrieval
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

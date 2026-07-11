@@ -1,5 +1,5 @@
 {
-  "name": "@mammoth/postgres-adapter",
+  "name": "@mammoth/production-cas",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,12 +12,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
-    "test:ledger": "vitest run test/ledger.test.ts",
-    "test:migrations": "vitest run test/lifecycle.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mammoth/persistence": "workspace:*"
+    "@mammoth/retrieval": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

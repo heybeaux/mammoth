@@ -1,5 +1,6 @@
 export * from './driver.js';
 export * from './errors.js';
 export * from './lifecycle.js';
+export * from './ledger.js';
 export * from './migration-runner.js';
 export * from './migrations.js';
