@@ -7,6 +7,14 @@ type JsonRecord = Record<string, unknown>;
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const ORACLE = {
+  fixtureDigest:
+    'sha256:a5bc9525ca686b3cf41fa0b4d389891fb5f3fd0f9bb07e82dff21bbb5ce0110d',
+  charterDigest:
+    'sha256:7d7fa5a08b6d48ff60cddffff3dbce9ab95cb580de7bc7685eee31147697d09d',
+  schemaDigest:
+    'sha256:0a99e398f1ed4e2d3a2950d26b8b589c21bb435f0360122ae01076ed6beb3d46',
+} as const;
 
 export const defaultFixtureRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -78,8 +86,9 @@ export interface FixtureVerification {
 export async function verifyFixtureRoot(
   root = defaultFixtureRoot,
 ): Promise<FixtureVerification> {
+  const fixtureBytes = await readFile(resolve(root, 'fixture.json'));
   const fixture = object(
-    JSON.parse(await readFile(resolve(root, 'fixture.json'), 'utf8')),
+    JSON.parse(new TextDecoder().decode(fixtureBytes)),
     '$',
   );
   exactKeys(
@@ -90,6 +99,7 @@ export async function verifyFixtureRoot(
       'clock',
       'charterPath',
       'sources',
+      'hostileInstructions',
       'claims',
       'expected',
     ],
@@ -106,8 +116,9 @@ export async function verifyFixtureRoot(
     '$.charterPath must be charter.json',
   );
 
+  const schemaBytes = await readFile(resolve(root, 'fixture.schema.json'));
   const schema = object(
-    JSON.parse(await readFile(resolve(root, 'fixture.schema.json'), 'utf8')),
+    JSON.parse(new TextDecoder().decode(schemaBytes)),
     '$schema',
   );
   invariant(
@@ -118,10 +129,12 @@ export async function verifyFixtureRoot(
     object(schema.properties, '$schema.properties').schemaVersion !== undefined,
     'schema must declare schemaVersion',
   );
-  object(
-    JSON.parse(await readFile(resolve(root, 'charter.json'), 'utf8')),
+  const charterBytes = await readFile(resolve(root, 'charter.json'));
+  const charter = object(
+    JSON.parse(new TextDecoder().decode(charterBytes)),
     '$charter',
   );
+  verifyCharter(charter);
 
   const sources = array(fixture.sources, '$.sources');
   invariant(sources.length > 0, '$.sources must not be empty');
@@ -197,6 +210,52 @@ export async function verifyFixtureRoot(
   }
   unique(sourceIds, '$.sources[].id');
 
+  const hostileInstructions = array(
+    fixture.hostileInstructions,
+    '$.hostileInstructions',
+  );
+  invariant(
+    hostileInstructions.length > 0,
+    '$.hostileInstructions must not be empty',
+  );
+  const hostileTexts: string[] = [];
+  const hostileSourceIds = new Set<string>();
+  for (const [index, raw] of hostileInstructions.entries()) {
+    const path = `$.hostileInstructions[${String(index)}]`;
+    const instruction = object(raw, path);
+    exactKeys(instruction, ['sourceId', 'exactText', 'mustNotAffect'], path);
+    const sourceId = string(instruction.sourceId, `${path}.sourceId`);
+    hostileSourceIds.add(sourceId);
+    const text = sourceText.get(sourceId);
+    invariant(text !== undefined, `${path}.sourceId is unknown`);
+    const exactText = string(instruction.exactText, `${path}.exactText`);
+    invariant(
+      text.includes(exactText),
+      `${path}.exactText is absent from source`,
+    );
+    const effects = array(
+      instruction.mustNotAffect,
+      `${path}.mustNotAffect`,
+    ).map((effect, effectIndex) =>
+      string(effect, `${path}.mustNotAffect[${String(effectIndex)}]`),
+    );
+    unique(effects, `${path}.mustNotAffect`);
+    const requiredEffects = [
+      'criterion',
+      'policy',
+      'budget',
+      'claimVerdicts',
+      'report',
+      'network',
+      'filesystem',
+    ];
+    invariant(
+      requiredEffects.every((effect) => effects.includes(effect)),
+      `${path}.mustNotAffect omits a control-plane boundary`,
+    );
+    hostileTexts.push(exactText);
+  }
+
   const claims = array(fixture.claims, '$.claims');
   invariant(
     claims.length >= 2,
@@ -250,6 +309,7 @@ export async function verifyFixtureRoot(
     ['locators', 'assessments', 'renderedClaimIds', 'excludedClaimIds'],
     '$.expected',
   );
+  const locatorSourcesByClaim = new Map<string, string[]>();
   for (const [index, raw] of array(
     expected.locators,
     '$.expected.locators',
@@ -278,6 +338,10 @@ export async function verifyFixtureRoot(
       `${path} unresolved claims must not have accepted locators`,
     );
     const sourceId = string(locator.sourceId, `${path}.sourceId`);
+    invariant(
+      !hostileSourceIds.has(sourceId),
+      `${path} hostile source data cannot become accepted evidence`,
+    );
     const text = sourceText.get(sourceId);
     invariant(text !== undefined, `${path}.sourceId is unknown`);
     const start = integer(locator.startOffset, `${path}.startOffset`);
@@ -314,6 +378,10 @@ export async function verifyFixtureRoot(
           verdictByClaim.get(claimId) === 'contradicted'),
       `${path}.stance does not match the expected claim verdict`,
     );
+    locatorSourcesByClaim.set(claimId, [
+      ...(locatorSourcesByClaim.get(claimId) ?? []),
+      sourceId,
+    ]);
   }
 
   const assessmentClaimIds: string[] = [];
@@ -341,7 +409,11 @@ export async function verifyFixtureRoot(
       assessment.verdict === verdictByClaim.get(claimId),
       `${path}.verdict differs from claim expectedVerdict`,
     );
-    string(assessment.policyId, `${path}.policyId`);
+    const policyId = string(assessment.policyId, `${path}.policyId`);
+    invariant(
+      policyId === charter.evidencePolicyId,
+      `${path}.policyId differs from the pinned charter policy`,
+    );
     string(assessment.policyVersion, `${path}.policyVersion`);
     const reasons = array(assessment.reasonCodes, `${path}.reasonCodes`).map(
       (reason, reasonIndex) =>
@@ -360,8 +432,11 @@ export async function verifyFixtureRoot(
     );
     if (assessment.verdict === 'supported')
       invariant(
-        evidenceIds.length > 0,
-        `${path} supported verdict requires evidence`,
+        evidenceIds.length > 0 &&
+          evidenceIds.every((id) =>
+            (locatorSourcesByClaim.get(claimId) ?? []).includes(id),
+          ),
+        `${path} supported verdict requires locator-bound evidence`,
       );
     if (assessment.verdict === 'unresolved')
       invariant(
@@ -404,6 +479,33 @@ export async function verifyFixtureRoot(
     claimIds.every((id) => rendered.includes(id) !== excluded.includes(id)),
     'every claim must be in exactly one render outcome',
   );
+  const authoritativeOracle = JSON.stringify({ charter, claims, expected });
+  invariant(
+    hostileTexts.every((text) => !authoritativeOracle.includes(text)),
+    'hostile source text leaked into authoritative fixture decisions',
+  );
+  invariant(
+    object(charter.criterion, '$charter.criterion').id ===
+      'criterion:mvp-example-domains:v1',
+    'hostile input altered the pinned criterion',
+  );
+  invariant(
+    charter.evidencePolicyId === 'policy:public-direct-locator-v1',
+    'hostile input altered the pinned evidence policy',
+  );
+
+  invariant(
+    digest(fixtureBytes) === ORACLE.fixtureDigest,
+    'fixture.json drifted from independent oracle',
+  );
+  invariant(
+    digest(charterBytes) === ORACLE.charterDigest,
+    'charter.json drifted from independent oracle',
+  );
+  invariant(
+    digest(schemaBytes) === ORACLE.schemaDigest,
+    'fixture.schema.json drifted from independent oracle',
+  );
 
   return {
     fixtureId,
@@ -411,4 +513,71 @@ export async function verifyFixtureRoot(
     supportedClaimIds: rendered,
     nonSupportedClaimIds: excluded,
   };
+}
+
+function verifyCharter(charter: JsonRecord): void {
+  exactKeys(
+    charter,
+    [
+      'schemaVersion',
+      'id',
+      'title',
+      'question',
+      'criterion',
+      'evidencePolicyId',
+      'budget',
+      'stopConditions',
+    ],
+    '$charter',
+  );
+  invariant(
+    charter.schemaVersion === '1.0.0',
+    '$charter.schemaVersion must be 1.0.0',
+  );
+  string(charter.id, '$charter.id');
+  string(charter.title, '$charter.title');
+  string(charter.question, '$charter.question');
+  string(charter.evidencePolicyId, '$charter.evidencePolicyId');
+  const criterion = object(charter.criterion, '$charter.criterion');
+  exactKeys(
+    criterion,
+    [
+      'id',
+      'version',
+      'standard',
+      'admissibleEvidence',
+      'prohibitedEvidence',
+      'tiePolicy',
+    ],
+    '$charter.criterion',
+  );
+  string(criterion.id, '$charter.criterion.id');
+  invariant(
+    integer(criterion.version, '$charter.criterion.version') > 0,
+    '$charter.criterion.version must be positive',
+  );
+  string(criterion.standard, '$charter.criterion.standard');
+  invariant(
+    criterion.tiePolicy === 'unresolved',
+    '$charter.criterion.tiePolicy must fail closed',
+  );
+  const budget = object(charter.budget, '$charter.budget');
+  exactKeys(
+    budget,
+    ['maxCostUsd', 'maxTokens', 'maxDurationSeconds'],
+    '$charter.budget',
+  );
+  invariant(
+    integer(budget.maxCostUsd, '$charter.budget.maxCostUsd') === 0,
+    '$charter budget must prohibit cost',
+  );
+  invariant(
+    integer(budget.maxTokens, '$charter.budget.maxTokens') === 0,
+    '$charter budget must prohibit tokens',
+  );
+  invariant(
+    integer(budget.maxDurationSeconds, '$charter.budget.maxDurationSeconds') >
+      0,
+    '$charter duration must be positive',
+  );
 }

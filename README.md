@@ -13,8 +13,8 @@ Mammoth requires Node.js 22 or later and pnpm 8.15.6. From the repository root:
 pnpm install
 pnpm lint
 pnpm typecheck
-pnpm test
 pnpm build
+pnpm test
 pnpm verify:evidence
 pnpm verify:audit
 pnpm verify:phase-1
@@ -43,6 +43,9 @@ Packages should extend `tsconfig.base.json` and expose the applicable `build`,
 - **Phase 2 — Durable orchestration:** restart-safe workflow execution and
   schedules, leased task queues, provider-idempotent side-effect receipts,
   multi-dimensional budgets, human gates, and revalidation scheduling.
+- **Initial MVP runtime:** a durable evidence-first research workflow, pinned
+  fixture and entailment oracle, inspectable report/manifest/traces, audit and
+  cancellation receipts, budget and revalidation gates, and a local operator CLI.
 
 `pnpm verify:phase-1` runs the Phase 1 exit-gate suites. The compiler fails closed
 unless each factual sentence resolves through an eligible claim and named policy
@@ -77,7 +80,8 @@ report, manifest, traces, operator state, and terminal receipt artifacts.
 Run `pnpm mammoth --help` for all commands and options. The CLI exits with `0` on
 success, `2` for invalid input, `3` when a program is absent, `4` for state
 conflicts, and `5` for execution or integrity failures. `--json` always writes its
-stable envelope to stdout; diagnostics also go to stderr.
+stable envelope to stdout when the built CLI or `pnpm --silent mammoth` is used;
+diagnostics also go to stderr.
 
 ## MVP limitations
 

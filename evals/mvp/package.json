@@ -3,9 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "@mammoth/runtime": "workspace:*"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "tsx --test test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify": "tsx src/cli.ts"
   }
 }

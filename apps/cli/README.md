@@ -1,26 +1,40 @@
 # `@mammoth/cli`
 
-The local operator surface for Mammoth's durable runtime.
+Local MVP operator commands:
 
-```sh
-mammoth run charter.json [--root .mammoth]
-mammoth status program-id [--root .mammoth]
-mammoth resume program-id [--root .mammoth]
-mammoth cancel program-id [--root .mammoth]
-mammoth inspect program-id [--root .mammoth]
+```text
+mammoth run <charter.json> [--root PATH] [--json]
+mammoth status <program> [--root PATH] [--json]
+mammoth resume <program> [--root PATH] [--json]
+mammoth cancel <program> [--root PATH] [--json]
+mammoth inspect <program> [--root PATH] [--json]
 ```
 
-Add `--json` for stable machine-readable output. The default root is
-`$MAMMOTH_HOME` or `.mammoth` beneath the current directory. Exit codes are `0`
-for success, `2` for invalid input, `3` for a missing program, `4` for a state
-conflict, and `5` for an execution, integrity, policy, or storage failure.
+The input document is strict JSON with `schemaVersion`, `charter`, and an
+`verifications` map keyed by claim ID. It may include a
+`sourceFixture` containing a relative `path`, pinned SHA-256 `digest`, and media
+type. The CLI copies and pins that explicitly named read-only source; its
+transport serves it only for the charter URL. Missing and negative verifications
+fail closed to unresolved claims.
 
-The charter is the `RuntimeCharter` JSON shape. For deterministic offline runs it
-may additionally include `sourcePath`, resolved relative to the charter file. The
-declared `sourceUrl` remains the evidence URI; the local file supplies its bytes.
-Mammoth stores an operator copy in the confined program directory so a later
-process can resume with the same source configuration.
+For the initial MVP, the CLI does not treat arbitrary operator-supplied verifier
+strings as evidence authority. A positive support verdict is accepted only when
+the source digest, URL, policy, criterion, claim text, exact quote, locator, and
+verifier identity exactly match the checked RFC 2606 fixture oracle. Every other
+positive verdict fails with `UNTRUSTED_ENTAILMENT`. General verifier plugins and
+governed human attestations are deliberately deferred.
 
-Program IDs are restricted to letters, digits, `.`, `_`, `:`, and `-` and may not
-contain path separators. This is a deliberate security boundary: operator commands
-never resolve a program outside the configured root.
+The operator document may pin `charter.budgetLimit`,
+`charter.sourceRevalidateAfter`, and a top-level `retrievalUsage` containing
+strict non-negative `estimated` and `actual` cost, token, and duration values.
+These are forwarded unchanged to the runtime. `status` reports the durable
+`revalidation.json` artifact and `inspect` exposes its schedule projection.
+
+`--max-steps N` stops after N distinct durable runtime stage receipts and records
+the execution as paused. `status` and `inspect` are read-only durable
+projections. `cancel` uses the workflow store's atomic cancellation transition.
+`resume` resumes paused work or delegates failed work to the runtime's stable
+replay behavior; cancelled and completed executions are not resumable.
+Cancellation writes `cancellation-receipt.json`, including an integrity hash,
+completed and omitted stages, timestamps, reason, and captured workflow state.
+`inspect` exposes that receipt and the runtime `audit.json` chain.

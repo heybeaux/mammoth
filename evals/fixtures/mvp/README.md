@@ -18,6 +18,10 @@ The expected result deliberately includes:
 - one supported claim with direct, locator-specific evidence; and
 - one unresolved claim with no evidence, which must not render as a supported
   report fact.
+- a separate hostile source containing attempts to alter policy, verdicts,
+  budget, network destination, filesystem destination, and report output. The
+  payload is pinned source data only and is forbidden from affecting any
+  control-plane or report decision.
 
 Run `pnpm --filter @mammoth/mvp-fixture test` to validate the contract, source
 bytes, locators, references, and fail-closed expected outcome.

@@ -10,6 +10,7 @@
     "clock",
     "charterPath",
     "sources",
+    "hostileInstructions",
     "claims",
     "expected"
   ],
@@ -22,6 +23,11 @@
       "type": "array",
       "minItems": 1,
       "items": { "$ref": "#/$defs/source" }
+    },
+    "hostileInstructions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/hostileInstruction" }
     },
     "claims": {
       "type": "array",
@@ -80,6 +86,31 @@
         "object": { "type": "string", "minLength": 1 },
         "expectedVerdict": {
           "enum": ["supported", "contradicted", "unresolved"]
+        }
+      }
+    },
+    "hostileInstruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "exactText", "mustNotAffect"],
+      "properties": {
+        "sourceId": { "type": "string", "minLength": 1 },
+        "exactText": { "type": "string", "minLength": 1 },
+        "mustNotAffect": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "criterion",
+              "policy",
+              "budget",
+              "claimVerdicts",
+              "report",
+              "network",
+              "filesystem"
+            ]
+          }
         }
       }
     },

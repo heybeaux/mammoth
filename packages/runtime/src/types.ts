@@ -1,5 +1,12 @@
 import type { SourceTransport } from '@mammoth/retrieval';
 
+export interface EntailmentVerification {
+  entails: boolean;
+  receiptId: string;
+  verifierId: string;
+  verifierVersion: string;
+}
+
 export interface RuntimeClaimProposal {
   id: string;
   canonicalText: string;
@@ -8,6 +15,8 @@ export interface RuntimeClaimProposal {
   object: string;
   /** Exact source text that deterministically establishes the claim. */
   supportingQuote: string;
+  /** Optional declared locator. When present it must exactly select supportingQuote. */
+  locator?: { startOffset: number; endOffset: number };
 }
 
 export interface RuntimeCharter {
@@ -18,6 +27,9 @@ export interface RuntimeCharter {
   sourceUrl: string;
   evidencePolicyId: string;
   evidencePolicyVersion: string;
+  sourceExpiresAt?: string;
+  sourceRevalidateAfter?: string;
+  budgetLimit?: RuntimeBudgetAmount;
   proposals: readonly RuntimeClaimProposal[];
 }
 
@@ -25,6 +37,17 @@ export interface RuntimeOptions {
   rootDirectory: string;
   charter: RuntimeCharter;
   transport: SourceTransport;
+  verifyEntailment(input: {
+    claim: RuntimeClaimProposal;
+    sourceText: string;
+    quote: string;
+    locator: { startOffset: number; endOffset: number };
+    snapshotDigest: string;
+  }): Promise<EntailmentVerification> | EntailmentVerification;
+  retrievalUsage?: {
+    estimated: RuntimeBudgetAmount;
+    actual: RuntimeBudgetAmount;
+  };
   resolveHost?: (hostname: string) => Promise<readonly string[]>;
   now?: () => Date;
   /** Test/operator fault boundary. Throwing simulates a process interruption. */
@@ -33,6 +56,7 @@ export interface RuntimeOptions {
 
 export type RuntimeStage =
   | 'snapshot_committed'
+  | 'budget_committed'
   | 'claims_assessed'
   | 'ledger_committed'
   | 'report_compiled'
@@ -48,7 +72,17 @@ export interface RuntimeArtifactPaths {
   manifest: string;
   traces: string;
   receipt: string;
-  operator: string;
+  snapshot: string;
+  assessments: string;
+  charter: string;
+  audit: string;
+  revalidation: string;
+}
+
+export interface RuntimeBudgetAmount {
+  costUsd: number;
+  tokens: number;
+  durationMs: number;
 }
 
 export interface RuntimeResult {
@@ -62,90 +96,34 @@ export interface RuntimeResult {
   paths: RuntimeArtifactPaths;
 }
 
-export type RuntimeProgramStatus =
-  | 'pending'
-  | 'running'
-  | 'waiting'
-  | 'paused'
-  | 'interrupted'
-  | 'completed'
-  | 'cancelled';
-
-export interface RuntimeProgramStatusResult {
+export interface RuntimeAuditEvent {
+  eventId: string;
+  sequence: number;
+  previousHash: string;
+  eventHash: string;
+  kind: 'stage.committed' | 'runtime.completed';
+  stage: RuntimeStage | 'completed';
   programId: string;
-  status: RuntimeProgramStatus;
-  executionId?: string;
-  updatedAt?: string;
-  resumable: boolean;
-  paths: RuntimeArtifactPaths;
-  error?: string;
+  occurredAt: string;
 }
 
-export interface RuntimeProgramReference {
-  rootDirectory: string;
-  programId: string;
-}
-
-export interface RuntimeResumeOptions extends RuntimeProgramReference {
-  transport: SourceTransport;
-  resolveHost?: (hostname: string) => Promise<readonly string[]>;
-  now?: () => Date;
-  onStage?: (stage: RuntimeStage) => void | Promise<void>;
-}
-
-export interface RuntimeCancelOptions extends RuntimeProgramReference {
-  now?: () => Date;
-}
-
-export interface RuntimePartialReceipt {
-  id: string;
-  programId: string;
-  executionId?: string;
-  status: 'cancelled';
-  publicationStatus: 'partial';
-  completedArtifacts: Record<string, string>;
-  missingArtifacts: string[];
-  issuedAt: string;
-  integrityHash: string;
-}
-
-export interface RuntimeInspection {
-  status: RuntimeProgramStatusResult;
-  integrity: {
-    status: 'verified';
-    checks: string[];
-  };
-  artifacts: Record<
-    string,
-    { path: string; present: boolean; byteLength?: number }
-  >;
-  receipt?: unknown;
-  executions: {
-    id: string;
-    status: string;
-    attempt: number;
-    updatedAt: string;
-    error?: string;
-  }[];
-  ledger?: {
-    claimCount: number;
-    evidenceCount: number;
-    assessmentCount: number;
-  };
+export interface RuntimeAuditArtifact {
+  schemaVersion: 1;
+  streamId: string;
+  events: RuntimeAuditEvent[];
+  eventCount: number;
+  highWaterSequence: number;
+  headHash: string;
 }
 
 export type RuntimeErrorCode =
   | 'INVALID_CHARTER'
   | 'WORKFLOW_FAILED'
   | 'RETRIEVAL_FAILED'
+  | 'INVALID_LOCATOR'
+  | 'ARTIFACT_INTEGRITY_FAILED'
   | 'CLAIM_COMMIT_DENIED'
-  | 'REPORT_COMPILATION_FAILED'
-  | 'PROGRAM_NOT_FOUND'
-  | 'INVALID_PROGRAM_ID'
-  | 'PROGRAM_CANCELLED'
-  | 'PROGRAM_NOT_RESUMABLE'
-  | 'PROGRAM_ACTIVE'
-  | 'INTEGRITY_FAILED';
+  | 'REPORT_COMPILATION_FAILED';
 
 export class RuntimeExecutionError extends Error {
   public constructor(

@@ -1,28 +1,58 @@
 {
-  "programId": "quickstart-example-domains",
-  "criterionId": "criterion:quickstart-example-domains:v1",
-  "title": "Reserved example domains",
-  "question": "Which domains does the checked-in source identify as reserved for documentation?",
-  "sourceUrl": "https://www.rfc-editor.org/rfc/rfc2606",
-  "sourcePath": "./source-rfc2606.txt",
-  "evidencePolicyId": "policy:public-direct-locator-v1",
-  "evidencePolicyVersion": "1.0.0",
-  "proposals": [
-    {
-      "id": "claim:quickstart:reserved-domains",
-      "canonicalText": "IANA has reserved example.com, example.net, and example.org for use in documentation.",
-      "subject": "IANA",
-      "predicate": "has reserved for use in documentation",
-      "object": "example.com, example.net, and example.org",
-      "supportingQuote": "The Internet Assigned Numbers Authority (IANA) has reserved example.com, example.net, and example.org for use in documentation."
+  "schemaVersion": 1,
+  "charter": {
+    "programId": "quickstart-example-domains",
+    "criterionId": "criterion:mvp-example-domains:v1",
+    "title": "Reserved example domains",
+    "question": "Which example domain is reserved, and is HTTPS reachability guaranteed?",
+    "sourceUrl": "https://www.rfc-editor.org/rfc/rfc2606.txt",
+    "evidencePolicyId": "policy:public-direct-locator-v1",
+    "evidencePolicyVersion": "1.0.0",
+    "budgetLimit": {
+      "costUsd": 0,
+      "tokens": 0,
+      "durationMs": 1000
     },
-    {
-      "id": "claim:quickstart:https-guarantee",
-      "canonicalText": "IANA guarantees that the reserved example domains always support HTTPS.",
-      "subject": "IANA",
-      "predicate": "guarantees",
-      "object": "the reserved example domains always support HTTPS",
-      "supportingQuote": "IANA guarantees that the reserved example domains always support HTTPS."
+    "proposals": [
+      {
+        "id": "claim:example-com-reserved",
+        "canonicalText": "IANA reserves example.com for use as an example.",
+        "subject": "IANA",
+        "predicate": "reserves for use as an example",
+        "object": "example.com",
+        "supportingQuote": "The Internet Assigned Numbers Authority (IANA) also currently has the\nfollowing second level domain names reserved which can be used as examples.\n\nexample.com",
+        "locator": {
+          "startOffset": 95,
+          "endOffset": 253
+        }
+      },
+      {
+        "id": "claim:example-com-https-guarantee",
+        "canonicalText": "IANA guarantees that example.com remains reachable over HTTPS.",
+        "subject": "IANA",
+        "predicate": "guarantees HTTPS reachability",
+        "object": "example.com",
+        "supportingQuote": "No HTTPS guarantee appears in this source."
+      }
+    ]
+  },
+  "verifications": {
+    "claim:example-com-reserved": {
+      "entails": true,
+      "receiptId": "verification:rfc2606-example-com",
+      "verifierId": "mvp-deterministic-fixture-verifier",
+      "verifierVersion": "1.0.0"
+    },
+    "claim:example-com-https-guarantee": {
+      "entails": false,
+      "receiptId": "verification:rfc2606-no-https-guarantee",
+      "verifierId": "mvp-deterministic-fixture-verifier",
+      "verifierVersion": "1.0.0"
     }
-  ]
+  },
+  "sourceFixture": {
+    "path": "source-rfc2606.txt",
+    "digest": "sha256:02950ec26917b3cf2f613fd1ec16b4d2f8fd376fb9b3aa3e72f881d9d8ecc331",
+    "mediaType": "text/plain"
+  }
 }
