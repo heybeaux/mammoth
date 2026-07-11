@@ -2,6 +2,9 @@
 
 Local-first, hybrid, long-horizon epistemic engine.
 
+The active delivery contract is documented in [MVP_PLAN.md](MVP_PLAN.md).
+Autonomous workers follow [AGENTS.md](AGENTS.md) and [LOOP.md](LOOP.md).
+
 ## Development
 
 Mammoth requires Node.js 22 or later and pnpm 8.15.6. From the repository root:
