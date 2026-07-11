@@ -56,3 +56,6 @@ jobs:
 
       - name: Run offline evaluations
         run: pnpm eval:offline
+
+      - name: Verify MVP checkpoint
+        run: pnpm verify:mvp
