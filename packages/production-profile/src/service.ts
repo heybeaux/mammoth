@@ -54,22 +54,27 @@ export class NativePostgresService {
     await this.initialize();
     if (await this.ready()) return;
     const pgCtl = await postgresTool('pg_ctl');
-    await run(
-      pgCtl,
-      [
-        '-D',
-        this.#data,
-        '-l',
-        this.#log,
-        '-w',
-        '-t',
-        String(Math.ceil(this.config.startupTimeoutMs / 1000)),
-        '-o',
-        `-h ${this.config.host} -p ${String(this.config.port)}`,
-        'start',
-      ],
-      { timeoutMs: this.config.startupTimeoutMs + 5_000 },
-    );
+    try {
+      await run(
+        pgCtl,
+        [
+          '-D',
+          this.#data,
+          '-l',
+          this.#log,
+          '-w',
+          '-t',
+          String(Math.ceil(this.config.startupTimeoutMs / 1000)),
+          '-o',
+          `-h ${this.config.host} -p ${String(this.config.port)}`,
+          'start',
+        ],
+        { timeoutMs: this.config.startupTimeoutMs + 5_000 },
+      );
+    } catch (error) {
+      const log = await readFile(this.#log, 'utf8').catch(() => '<no log>');
+      throw new Error(`${String(error)}\nPostgres log:\n${log.slice(-8_000)}`);
+    }
     if (!(await this.ready()))
       throw new Error(
         `Postgres started but readiness failed; inspect ${this.#log}`,
