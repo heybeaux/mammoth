@@ -137,11 +137,25 @@ describe('runtime fail-closed boundaries', () => {
   });
 
   it('rejects stale source evidence instead of compiling it as supported', async () => {
-    const runtime = harness(await directory());
+    const root = await directory();
+    const runtime = harness(root);
     runtime.options.charter.sourceExpiresAt = '2026-07-10T19:00:00.000Z';
     await expect(runResearchProgram(runtime.options)).rejects.toThrow(
       'CLAIM_COMMIT_DENIED',
     );
+    const artifact = JSON.parse(
+      await readFile(
+        join(root, baseCharter.programId, 'revalidation.json'),
+        'utf8',
+      ),
+    ) as { schedules: { id: string; state: string; dueAt: string }[] };
+    expect(artifact.schedules).toEqual([
+      expect.objectContaining({
+        id: 'runtime-hardening:revalidate:snapshot',
+        state: 'scheduled',
+        dueAt: '2026-07-10T19:00:00.000Z',
+      }),
+    ]);
   });
 
   it('detects a tampered CAS object on restart', async () => {

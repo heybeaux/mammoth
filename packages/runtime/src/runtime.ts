@@ -290,7 +290,9 @@ async function executePipeline(
     dataClassification: 'public',
   };
   let revalidationSchedule;
-  if (charter.sourceRevalidateAfter) {
+  const revalidationDueAt =
+    charter.sourceRevalidateAfter ?? charter.sourceExpiresAt;
+  if (revalidationDueAt) {
     const scheduleId = `${charter.programId}:revalidate:snapshot`;
     if (!governance.getRevalidation(scheduleId)) {
       await governance.scheduleRevalidation(
@@ -299,7 +301,7 @@ async function executePipeline(
           programId: charter.programId,
           subjectType: 'evidence',
           subjectId: evidence.id,
-          dueAt: charter.sourceRevalidateAfter,
+          dueAt: revalidationDueAt,
         },
         'runtime-local',
       );
