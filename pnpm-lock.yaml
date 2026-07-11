@@ -64,6 +64,18 @@ importers:
         specifier: workspace:*
         version: link:../../packages/runtime
 
+  evals/mvp-acceptance:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.15.34
+      tsx:
+        specifier: ^4.20.0
+        version: 4.20.3
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+
   packages/domain:
     dependencies:
       '@noble/hashes':
