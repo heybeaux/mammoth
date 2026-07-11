@@ -15,6 +15,7 @@ pnpm build
 pnpm verify:evidence
 pnpm verify:audit
 pnpm verify:phase-1
+pnpm verify:phase-2
 pnpm eval:offline
 ```
 
@@ -33,7 +34,14 @@ Packages should extend `tsconfig.base.json` and expose the applicable `build`,
   content-addressed snapshots, deterministic parsing, source lineage, claim graph,
   crash-safe local persistence with a Postgres reference migration, and an
   evidence-bound report compiler with sentence-level provenance traces.
+- **Phase 2 — Durable orchestration:** restart-safe workflow execution and
+  schedules, leased task queues, provider-idempotent side-effect receipts,
+  multi-dimensional budgets, human gates, and revalidation scheduling.
 
 `pnpm verify:phase-1` runs the Phase 1 exit-gate suites. The compiler fails closed
 unless each factual sentence resolves through an eligible claim and named policy
 assessment to fresh immutable evidence with an exact locator.
+
+`pnpm verify:phase-2` runs the process-death and duplicate-delivery gates. Local
+MVP stores use atomic rename plus file and directory fsync; runtime ports remain
+compatible with a future Temporal and Postgres deployment.
