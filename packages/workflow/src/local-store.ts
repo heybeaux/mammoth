@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
+import {
+  mkdir,
+  open,
+  readFile,
+  rename,
+  rm,
+  stat,
+  unlink,
+} from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { WorkflowSnapshot, WorkflowStore } from './types.js';
 
@@ -27,9 +35,61 @@ export class LocalWorkflowStore implements WorkflowStore {
   }
 
   public async save(snapshot: WorkflowSnapshot): Promise<void> {
-    const operation = this.#queue.then(() => this.#write(snapshot));
+    const operation = this.#queue.then(() =>
+      this.#withLock(() => this.#write(snapshot)),
+    );
     this.#queue = operation.catch(() => undefined);
     await operation;
+  }
+
+  public async transact<T>(
+    mutate: (snapshot: WorkflowSnapshot) => T,
+  ): Promise<T> {
+    let result: { value: T } | undefined;
+    const operation = this.#queue.then(() =>
+      this.#withLock(async () => {
+        const snapshot = await this.load();
+        result = { value: mutate(snapshot) };
+        await this.#write(snapshot);
+      }),
+    );
+    this.#queue = operation.catch(() => undefined);
+    await operation;
+    if (!result) throw new Error('workflow transaction produced no result');
+    return result.value;
+  }
+
+  async #withLock<T>(operation: () => Promise<T>): Promise<T> {
+    const lock = `${this.#path}.lock`;
+    await mkdir(dirname(lock), { recursive: true });
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await mkdir(lock);
+        break;
+      } catch (error: unknown) {
+        if (!hasCode(error, 'EEXIST')) throw error;
+        // A dead process must not permanently strand the MVP store.
+        let age: number;
+        try {
+          age = Date.now() - (await stat(lock)).mtimeMs;
+        } catch (statError: unknown) {
+          // The owner may release the lock between our EEXIST and stat.
+          if (hasCode(statError, 'ENOENT')) continue;
+          throw statError;
+        }
+        if (age > 30_000) {
+          await rm(lock, { recursive: true }).catch(() => undefined);
+          continue;
+        }
+        if (attempt >= 1_000) throw new Error('workflow store lock timeout');
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+    }
+    try {
+      return await operation();
+    } finally {
+      await rm(lock, { recursive: true });
+    }
   }
 
   async #write(snapshot: WorkflowSnapshot): Promise<void> {
@@ -95,6 +155,17 @@ function validateSnapshot(value: unknown): WorkflowSnapshot {
     ) {
       throw new Error(`invalid workflow snapshot execution: ${id}`);
     }
+    if (
+      (execution.runToken !== undefined &&
+        typeof execution.runToken !== 'string') ||
+      (execution.cancellation !== undefined &&
+        (!isRecord(execution.cancellation) ||
+          typeof execution.cancellation.requestedAt !== 'string' ||
+          typeof execution.cancellation.completedAt !== 'string' ||
+          !isRecord(execution.cancellation.partialState)))
+    ) {
+      throw new Error(`invalid workflow snapshot execution metadata: ${id}`);
+    }
   }
   for (const [id, schedule] of Object.entries(value.schedules)) {
     if (
@@ -117,10 +188,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isMissing(error: unknown): boolean {
+  return hasCode(error, 'ENOENT');
+}
+
+function hasCode(error: unknown, code: string): boolean {
   return (
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
-    error.code === 'ENOENT'
+    error.code === code
   );
 }

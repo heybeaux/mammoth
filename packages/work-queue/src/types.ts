@@ -43,7 +43,21 @@ export interface WorkItem<
   lease?: WorkLease;
   output?: TOutput;
   lastError?: WorkFailure;
+  cancellation?: WorkCancellation;
   completedAt?: number;
+}
+
+export interface WorkCancellation<TPartial = unknown> {
+  readonly receiptId: string;
+  readonly reason: string;
+  readonly cancelledAt: number;
+  readonly partialOutput?: TPartial;
+}
+
+export interface CancelWork<TPartial = unknown> {
+  readonly receiptId: string;
+  readonly reason: string;
+  readonly partialOutput?: TPartial;
 }
 
 export interface WorkLease {

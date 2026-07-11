@@ -320,68 +320,79 @@ describe('local evidence-first runtime', () => {
     expect(await readFile(result.paths.ledger, 'utf8')).toBe(tampered);
   });
 
-  it('resumes after a durable-boundary interruption without duplicate effects', async () => {
-    const directory = await root();
-    let crash = true;
-    const onStage = (stage: RuntimeStage): void => {
-      if (crash && stage === 'ledger_committed') {
-        crash = false;
-        throw new Error('injected interruption');
-      }
-    };
-    await expect(
-      runResearchProgram({
+  it.each<RuntimeStage>([
+    'snapshot_committed',
+    'claims_assessed',
+    'ledger_committed',
+    'report_compiled',
+    'receipt_committed',
+  ])(
+    'resumes after an interruption at %s without lost state or duplicate effects',
+    async (interruptedStage) => {
+      const directory = await root();
+      let crash = true;
+      const onStage = (stage: RuntimeStage): void => {
+        if (crash && stage === interruptedStage) {
+          crash = false;
+          throw new Error('injected interruption');
+        }
+      };
+      await expect(
+        runResearchProgram({
+          rootDirectory: directory,
+          charter,
+          transport,
+          resolveHost: () => Promise.resolve(['203.0.113.10']),
+          now: () => now,
+          onStage,
+        }),
+      ).rejects.toThrow('injected interruption');
+
+      const interrupted = await getResearchProgramStatus({
         rootDirectory: directory,
-        charter,
+        programId: charter.programId,
+      });
+      expect(interrupted).toMatchObject({
+        status: 'interrupted',
+        resumable: true,
+      });
+
+      // No charter is supplied: a fresh operator process loads the durable input.
+      const resumed = await resumeResearchProgram({
+        rootDirectory: directory,
+        programId: charter.programId,
         transport,
         resolveHost: () => Promise.resolve(['203.0.113.10']),
         now: () => now,
         onStage,
-      }),
-    ).rejects.toThrow('injected interruption');
+      });
+      expect(resumed.status).toBe('completed');
+      const ledger = JSON.parse(
+        await readFile(resumed.paths.ledger, 'utf8'),
+      ) as {
+        claims: unknown[];
+        evidence: unknown[];
+      };
+      expect(ledger.claims).toHaveLength(2);
+      expect(ledger.evidence).toHaveLength(1);
+      const queue = JSON.parse(await readFile(resumed.paths.queue, 'utf8')) as {
+        receipts: unknown[];
+      };
+      expect(queue.receipts).toHaveLength(1);
 
-    const interrupted = await getResearchProgramStatus({
-      rootDirectory: directory,
-      programId: charter.programId,
-    });
-    expect(interrupted).toMatchObject({
-      status: 'interrupted',
-      resumable: true,
-    });
-
-    // No charter is supplied: a fresh operator process loads the durable input.
-    const resumed = await resumeResearchProgram({
-      rootDirectory: directory,
-      programId: charter.programId,
-      transport,
-      resolveHost: () => Promise.resolve(['203.0.113.10']),
-      now: () => now,
-      onStage,
-    });
-    expect(resumed.status).toBe('completed');
-    const ledger = JSON.parse(await readFile(resumed.paths.ledger, 'utf8')) as {
-      claims: unknown[];
-      evidence: unknown[];
-    };
-    expect(ledger.claims).toHaveLength(2);
-    expect(ledger.evidence).toHaveLength(1);
-    const queue = JSON.parse(await readFile(resumed.paths.queue, 'utf8')) as {
-      receipts: unknown[];
-    };
-    expect(queue.receipts).toHaveLength(1);
-
-    const inspection = await inspectResearchProgram({
-      rootDirectory: directory,
-      programId: charter.programId,
-    });
-    expect(inspection.status.status).toBe('completed');
-    expect(inspection.ledger).toEqual({
-      claimCount: 2,
-      evidenceCount: 1,
-      assessmentCount: 2,
-    });
-    expect(inspection.artifacts.report).toMatchObject({ present: true });
-  });
+      const inspection = await inspectResearchProgram({
+        rootDirectory: directory,
+        programId: charter.programId,
+      });
+      expect(inspection.status.status).toBe('completed');
+      expect(inspection.ledger).toEqual({
+        claimCount: 2,
+        evidenceCount: 1,
+        assessmentCount: 2,
+      });
+      expect(inspection.artifacts.report).toMatchObject({ present: true });
+    },
+  );
 
   it('replays from a durable receipt byte-identically under a different wall clock', async () => {
     const directory = await root();

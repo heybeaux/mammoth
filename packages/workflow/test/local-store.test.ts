@@ -24,4 +24,36 @@ describe('LocalWorkflowStore', () => {
       'invalid workflow snapshot',
     );
   });
+
+  it('does not lose updates from independent store instances', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'mammoth-workflow-race-'));
+    directories.push(directory);
+    const path = join(directory, 'state.json');
+    const first = new LocalWorkflowStore(path);
+    const second = new LocalWorkflowStore(path);
+
+    await Promise.all([
+      first.transact((snapshot) => {
+        snapshot.schedules.first = schedule('first');
+      }),
+      second.transact((snapshot) => {
+        snapshot.schedules.second = schedule('second');
+      }),
+    ]);
+
+    expect(Object.keys((await first.load()).schedules).sort()).toEqual([
+      'first',
+      'second',
+    ]);
+  });
 });
+
+function schedule(id: string) {
+  return {
+    id,
+    workflow: 'research',
+    input: {},
+    nextRunAt: '2026-01-01T00:00:00.000Z',
+    enabled: true,
+  };
+}

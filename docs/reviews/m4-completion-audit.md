@@ -131,3 +131,15 @@ the final proof. The coordinator should also decide whether M1's literal
 “restart at each step” wording requires adding the remaining stage-injection
 matrix before merge; current coverage proves multiple critical crash windows but
 not every declared stage.
+
+## Integration resolution
+
+The reconciled M4 integration branch closes the residual restart gap with a
+parameterized runtime test covering `snapshot_committed`, `claims_assessed`,
+`ledger_committed`, `report_compiled`, and `receipt_committed`. Each injected
+interruption resumes to a verified completed program with one evidence record and
+one external-effect receipt. Integration also fixed the governance coordinator
+API migration, report-compiler build resolution, the workflow lock-release race,
+README JSON output, and receipt history. The complete `pnpm verify:mvp` ladder and
+`pnpm eval:offline` passed locally; default-branch merge and expanded CI remain the
+only checkpoint conditions pending at this point in the audit trail.
