@@ -4,8 +4,8 @@
 >
 > Checkpoint: `v0.1.0-mvp`
 >
-> The complete ladder passed from clean checkouts and on default-branch revision
-> `2c39082` in GitHub Actions run `29135142717`.
+> The complete ladder passed from clean checkouts and on implementation revision
+> `e7f96d0` in GitHub Actions run `29135509949`.
 
 ## Criterion
 
@@ -62,7 +62,7 @@ Record results:
 | Phase 2                        | pass   | 31 tests plus 10 repeated workflow-concurrency runs |
 | Fixture oracle                 | pass   | pinned RFC and hostile-source digests verified      |
 | Black-box MVP                  | pass   | 14 fresh-process, security, and integrity checks    |
-| Default-branch CI              | pass   | run `29135142717` on revision `2c39082`             |
+| Default-branch CI              | pass   | run `29135509949` on revision `e7f96d0`             |
 
 ## Black-box evidence required
 
@@ -101,10 +101,10 @@ none of it is represented as part of this MVP.
 ## Final checkpoint metadata
 
 ```text
-revision: 2c3908276d4c8349179bb6e7cd9b82d63b0d8c0c
-pull requests: #1-#9 and #11-#13 merged
-default-branch CI: https://github.com/heybeaux/mammoth/actions/runs/29135142717
-verified at: 2026-07-10 18:46 America/Vancouver
+implementation revision: e7f96d0a9c85ed511c389728f1a62466324a8047
+pull requests: #1-#9 and #11-#15 merged
+default-branch CI: https://github.com/heybeaux/mammoth/actions/runs/29135509949
+verified at: 2026-07-10 18:58 America/Vancouver
 node: v22.22.2
 pnpm: 8.15.6
 lockfile digest: b3243286d7838fdc85a80741691f0fb1c2230151c6a7654f3b9de58d77a0c898
