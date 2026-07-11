@@ -1,5 +1,6 @@
 import type {
   ClaimedWork,
+  CancelWork,
   EnqueueWork,
   RetryPolicy,
   WorkFailure,
@@ -165,12 +166,31 @@ export class InMemoryWorkQueue {
     return structuredClone(item);
   }
 
-  public cancel(id: string): WorkItem {
+  public cancel<TPartial>(
+    id: string,
+    cancellation: CancelWork<TPartial>,
+  ): WorkItem {
     const item = this.#required(id);
-    if (item.state === 'succeeded' || item.state === 'dead-lettered')
+    if (
+      item.state === 'succeeded' ||
+      item.state === 'dead-lettered' ||
+      item.state === 'cancelled'
+    )
       return structuredClone(item);
+    if (cancellation.receiptId.trim().length === 0)
+      throw new Error('cancellation receipt id is required');
+    if (cancellation.reason.trim().length === 0)
+      throw new Error('cancellation reason is required');
     item.state = 'cancelled';
     item.completedAt = this.#now();
+    item.cancellation = {
+      receiptId: cancellation.receiptId,
+      reason: cancellation.reason,
+      cancelledAt: item.completedAt,
+      ...(cancellation.partialOutput === undefined
+        ? {}
+        : { partialOutput: structuredClone(cancellation.partialOutput) }),
+    };
     delete item.lease;
     return structuredClone(item);
   }

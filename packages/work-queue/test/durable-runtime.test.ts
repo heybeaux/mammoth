@@ -1,12 +1,19 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { execFile, spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { DurableWorkRuntime, LocalWorkStateStore } from '../src/index.js';
 
 const directories: string[] = [];
+const execFileAsync = promisify(execFile);
+const fixture = fileURLToPath(
+  new URL('./fixtures/work-process.ts', import.meta.url),
+);
 
 afterEach(() => {
   for (const directory of directories.splice(0)) {
@@ -119,5 +126,123 @@ describe('durable work runtime', () => {
     expect(actualEffects).toBe(1);
     const finalProcess = new DurableWorkRuntime(new LocalWorkStateStore(path));
     expect(finalProcess.receipts.get('email:report-1')).toEqual(receipt);
+  });
+
+  it('serializes concurrent writers and fences leases across OS processes', async () => {
+    const path = statePath();
+    await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        execFileAsync(process.execPath, [
+          '--import',
+          'tsx',
+          fixture,
+          'enqueue',
+          path,
+          `work-${String(index)}`,
+        ]),
+      ),
+    );
+    const runtime = new DurableWorkRuntime(new LocalWorkStateStore(path));
+    expect(runtime.queue.list()).toHaveLength(8);
+
+    const resultA = `${path}.claim-a`;
+    const resultB = `${path}.claim-b`;
+    await Promise.all([
+      execFileAsync(process.execPath, [
+        '--import',
+        'tsx',
+        fixture,
+        'claim',
+        path,
+        'worker-a',
+        resultA,
+      ]),
+      execFileAsync(process.execPath, [
+        '--import',
+        'tsx',
+        fixture,
+        'claim',
+        path,
+        'worker-b',
+        resultB,
+      ]),
+    ]);
+    const claimed = [
+      readFileSync(resultA, 'utf8'),
+      readFileSync(resultB, 'utf8'),
+    ].filter((result) => result !== 'none');
+    expect(claimed).toHaveLength(2);
+    expect(new Set(claimed).size).toBe(2);
+  });
+
+  it('persists an attributable cancellation receipt and partial output', () => {
+    const path = statePath();
+    const runtime = new DurableWorkRuntime(new LocalWorkStateStore(path));
+    runtime.enqueue({
+      id: 'cancel-me',
+      programId: 'program',
+      kind: 'compile',
+      queue: 'research-control',
+      input: {},
+      idempotencyKey: 'cancel-me',
+    });
+    runtime.cancel('cancel-me', {
+      receiptId: 'receipt:cancel-me',
+      reason: 'operator requested cancellation',
+      partialOutput: { artifactIds: ['partial-1'] },
+    });
+    runtime.cancel('cancel-me', {
+      receiptId: 'receipt:must-not-replace',
+      reason: 'duplicate delivery',
+    });
+    const restarted = new DurableWorkRuntime(new LocalWorkStateStore(path));
+    expect(restarted.queue.get('cancel-me')).toMatchObject({
+      state: 'cancelled',
+      cancellation: {
+        receiptId: 'receipt:cancel-me',
+        reason: 'operator requested cancellation',
+        partialOutput: { artifactIds: ['partial-1'] },
+      },
+    });
+  });
+
+  it('recovers a process lock left behind by SIGKILL', async () => {
+    const path = statePath();
+    const ready = `${path}.ready`;
+    const child = spawn(process.execPath, [
+      '--import',
+      'tsx',
+      fixture,
+      'hold-lock',
+      path,
+      ready,
+    ]);
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      try {
+        if (readFileSync(ready, 'utf8') === 'ready') break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    }
+    expect(readFileSync(ready, 'utf8')).toBe('ready');
+    child.kill('SIGKILL');
+    await new Promise<void>((resolve, reject) => {
+      child.once('exit', () => {
+        resolve();
+      });
+      child.once('error', reject);
+    });
+
+    const runtime = new DurableWorkRuntime(new LocalWorkStateStore(path));
+    expect(() =>
+      runtime.enqueue({
+        id: 'after-crash',
+        programId: 'program',
+        kind: 'recover',
+        queue: 'retrieval',
+        input: {},
+        idempotencyKey: 'after-crash',
+      }),
+    ).not.toThrow();
   });
 });

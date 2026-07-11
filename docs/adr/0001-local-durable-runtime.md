@@ -30,8 +30,10 @@ Use option 3.
 The workflow, work-queue, and governance packages expose deterministic runtime
 APIs whose clocks, handlers, and stores are injectable. Their local adapters write
 versioned snapshots through exclusive temporary files, sync file contents, rename
-atomically, and sync the parent directory. Loaded state is validated and malformed
-or inconsistent snapshots fail closed.
+atomically, and sync the parent directory. The work queue additionally uses a
+host-local process lock and fresh read/modify/write transactions so concurrent
+workers cannot overwrite queue state or acquire the same lease. Loaded state is
+validated and malformed or inconsistent snapshots fail closed.
 
 Workflow steps and work items use stable idempotency keys. Exactly-once external
 effects additionally require the provider adapter to honor that key; a local
@@ -49,12 +51,20 @@ packages do not depend on either infrastructure choice.
 - Process restart, expired leases, corrupt state, and the remote-commit crash
   window are deterministic test fixtures.
 - Local stores are single-host adapters, not distributed coordination systems.
-- Multi-process writers are not a supported deployment topology for the MVP.
+- Multiple local work-queue processes are supported and fenced. Workflow and
+  governance writers remain owned by one orchestrator process in the MVP; they
+  are not safe for independent multi-process mutation.
+- A work-queue process lock is recovered when its recorded PID no longer exists.
+  Host crash recovery therefore relies on the atomic state image, not the lock.
+- Cancellation receipts preserve the operator reason and partial output, but
+  terminating arbitrary subprocesses remains the worker adapter's responsibility.
 - Production adapters must preserve the same state transitions, fencing tokens,
   idempotency keys, receipts, and fail-closed validation.
 
 ## Evidence
 
-`pnpm verify:phase-2` covers fresh-runtime recovery, lease reclamation, duplicate
-delivery, provider-idempotent side effects, budget exhaustion, human-gate expiry,
-revalidation retry scheduling, and snapshot corruption.
+`pnpm verify:phase-2` covers fresh-runtime recovery, lease reclamation,
+cross-process writer serialization and fencing, stale-lock recovery after SIGKILL,
+cancellation receipts and partial output, duplicate delivery, provider-idempotent
+side effects, budget exhaustion, human-gate expiry, revalidation retry scheduling,
+and snapshot corruption.

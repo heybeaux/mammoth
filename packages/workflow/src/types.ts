@@ -21,8 +21,19 @@ export interface WorkflowExecution<Input = unknown, Output = unknown> {
   attempt: number;
   wakeAt?: string;
   error?: string;
+  /** Fences stale workers when an execution is replayed after interruption. */
+  runToken?: string;
+  cancellation?: WorkflowCancellation;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WorkflowCancellation {
+  requestedAt: string;
+  completedAt: string;
+  reason?: string;
+  /** Honest, inspectable progress captured before cancellation. */
+  partialState: Record<string, unknown>;
 }
 
 export interface StepContext<Input> {
@@ -32,6 +43,8 @@ export interface StepContext<Input> {
   /** Stable across crash retries. Use this for downstream idempotency. */
   idempotencyKey: string;
   now: string;
+  /** Cooperative cancellation for in-process activities. Durable fencing remains authoritative. */
+  signal: AbortSignal;
 }
 
 export type StepResult<Output = unknown> =
@@ -70,6 +83,8 @@ export interface WorkflowSnapshot {
 export interface WorkflowStore {
   load(): Promise<WorkflowSnapshot>;
   save(snapshot: WorkflowSnapshot): Promise<void>;
+  /** Atomic read-modify-write boundary used by runtimes sharing one store. */
+  transact<T>(mutate: (snapshot: WorkflowSnapshot) => T): Promise<T>;
 }
 
 export interface Clock {

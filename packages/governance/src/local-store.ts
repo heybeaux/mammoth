@@ -41,7 +41,7 @@ export class LocalGovernanceStore {
     } catch (error) {
       await handle?.close().catch(() => undefined);
       await unlink(temporary).catch(() => undefined);
-      throw error;
+      throw error instanceof Error ? error : new Error(String(error));
     }
   }
 
@@ -53,7 +53,7 @@ export class LocalGovernanceStore {
       raw = await readFile(this.path, 'utf8');
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-      throw error;
+      throw error instanceof Error ? error : new Error(String(error));
     }
     let input: unknown;
     try {
@@ -77,33 +77,183 @@ export class LocalGovernanceStore {
     return new GovernanceCoordinator(
       this,
       clock,
-      BudgetLedger.restore(envelope.budgets, clock),
-      HumanGateRegistry.restore(envelope.humanGates, clock),
-      RevalidationScheduler.restore(envelope.revalidation, clock),
+      envelope as GovernanceSnapshot,
     );
   }
 }
 
 export class GovernanceCoordinator {
+  #budgets: BudgetLedger;
+  #humanGates: HumanGateRegistry;
+  #revalidation: RevalidationScheduler;
+  #queue: Promise<unknown> = Promise.resolve();
+
   constructor(
     readonly store: LocalGovernanceStore,
     private readonly clock: Clock = systemClock,
-    readonly budgets = new BudgetLedger(clock),
-    readonly humanGates = new HumanGateRegistry(clock),
-    readonly revalidation = new RevalidationScheduler(clock),
-  ) {}
+    restored?: GovernanceSnapshot,
+  ) {
+    this.#budgets = restored
+      ? BudgetLedger.restore(restored.budgets, clock)
+      : new BudgetLedger(clock);
+    this.#humanGates = restored
+      ? HumanGateRegistry.restore(restored.humanGates, clock)
+      : new HumanGateRegistry(clock);
+    this.#revalidation = restored
+      ? RevalidationScheduler.restore(restored.revalidation, clock)
+      : new RevalidationScheduler(clock);
+  }
 
   snapshot(): GovernanceSnapshot {
     return {
       version: 1,
       savedAt: this.clock(),
-      budgets: this.budgets.snapshot(),
-      humanGates: this.humanGates.snapshot(),
-      revalidation: this.revalidation.snapshot(),
+      budgets: this.#budgets.snapshot(),
+      humanGates: this.#humanGates.snapshot(),
+      revalidation: this.#revalidation.snapshot(),
     };
   }
 
   async checkpoint(): Promise<void> {
     await this.store.save(this.snapshot());
+  }
+
+  getBudgetAccount(id: string) {
+    return this.#budgets.getAccount(id);
+  }
+
+  getBudgetReservation(id: string) {
+    return this.#budgets.getReservation(id);
+  }
+
+  async createBudgetAccount(
+    input: Parameters<BudgetLedger['createAccount']>[0],
+    actorId: string,
+  ) {
+    return this.#mutate(() => this.#budgets.createAccount(input, actorId));
+  }
+
+  async reserveBudget(
+    input: Parameters<BudgetLedger['reserve']>[0],
+    actorId: string,
+  ) {
+    return this.#mutate(() => this.#budgets.reserve(input, actorId));
+  }
+
+  async commitBudget(
+    id: string,
+    actual: Parameters<BudgetLedger['commit']>[1],
+    actorId: string,
+  ) {
+    return this.#mutate(() => this.#budgets.commit(id, actual, actorId));
+  }
+
+  async releaseBudget(id: string, actorId: string, reason: string) {
+    return this.#mutate(() => this.#budgets.release(id, actorId, reason));
+  }
+
+  async getHumanGate(id: string) {
+    // Reading a gate may expire it, which is an authoritative transition.
+    return this.#mutate(() => this.#humanGates.get(id));
+  }
+
+  async openHumanGate(
+    input: Parameters<HumanGateRegistry['open']>[0],
+    actorId: string,
+  ) {
+    return this.#mutate(() => this.#humanGates.open(input, actorId));
+  }
+
+  async decideHumanGate(
+    id: string,
+    decision: Parameters<HumanGateRegistry['decide']>[1],
+    input: Parameters<HumanGateRegistry['decide']>[2],
+  ) {
+    return this.#mutate(() => this.#humanGates.decide(id, decision, input));
+  }
+
+  async cancelHumanGate(id: string, actorId: string, reason: string) {
+    return this.#mutate(() => this.#humanGates.cancel(id, actorId, reason));
+  }
+
+  getRevalidation(id: string) {
+    return this.#revalidation.get(id);
+  }
+
+  async scheduleRevalidation(
+    input: Parameters<RevalidationScheduler['schedule']>[0],
+    actorId: string,
+  ) {
+    return this.#mutate(() => this.#revalidation.schedule(input, actorId));
+  }
+
+  async claimDueRevalidations(
+    workerId: string,
+    leaseMs: number,
+    limit?: number,
+  ) {
+    return this.#mutate(() =>
+      this.#revalidation.claimDue(workerId, leaseMs, limit),
+    );
+  }
+
+  async completeRevalidation(
+    id: string,
+    input: Parameters<RevalidationScheduler['complete']>[1],
+  ) {
+    return this.#mutate(() => this.#revalidation.complete(id, input));
+  }
+
+  budgetAudit() {
+    return this.#budgets.audit.list();
+  }
+
+  humanGateAudit() {
+    return this.#humanGates.audit.list();
+  }
+
+  revalidationAudit() {
+    return this.#revalidation.audit.list();
+  }
+
+  async #mutate<T>(mutation: () => T): Promise<T> {
+    const operation = this.#queue.then(() => this.#performMutation(mutation));
+    this.#queue = operation.catch(() => undefined);
+    return operation;
+  }
+
+  async #performMutation<T>(mutation: () => T): Promise<T> {
+    const before = this.snapshot();
+    let result: T | undefined;
+    let mutationError: unknown;
+    try {
+      result = mutation();
+    } catch (error: unknown) {
+      // Denials and expirations append authoritative audit events before
+      // throwing. Persist that state before surfacing the domain error.
+      mutationError = error;
+    }
+    try {
+      await this.store.save(this.snapshot());
+    } catch (error: unknown) {
+      this.#budgets = BudgetLedger.restore(before.budgets, this.clock);
+      this.#humanGates = HumanGateRegistry.restore(
+        before.humanGates,
+        this.clock,
+      );
+      this.#revalidation = RevalidationScheduler.restore(
+        before.revalidation,
+        this.clock,
+      );
+      throw error instanceof Error
+        ? error
+        : new Error('governance snapshot save failed');
+    }
+    if (mutationError !== undefined) {
+      throw mutationError instanceof Error
+        ? mutationError
+        : new Error('governance mutation failed with a non-Error value');
+    }
+    return result as T;
   }
 }
