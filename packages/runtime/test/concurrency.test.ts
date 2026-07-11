@@ -47,12 +47,6 @@ describe('runtime concurrent ownership', () => {
       },
       resolveHost: () => Promise.resolve(['203.0.113.10']),
       now: () => new Date('2026-07-10T20:00:00.000Z'),
-      verifyEntailment: ({ claim }) => ({
-        entails: true,
-        receiptId: `verify:${claim.id}`,
-        verifierId: 'deterministic-fixture-verifier',
-        verifierVersion: '1.0.0',
-      }),
     };
 
     const settled = await Promise.allSettled([
