@@ -6,8 +6,9 @@ The completed MVP contract is documented in [MVP_PLAN.md](MVP_PLAN.md). Active
 post-MVP delivery is sequenced in
 [POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md): production adapters first, then
 broader research-cell orchestration. The active autonomous checkpoint is
-[P2 production data](P2_PLAN.md), and the future read-only visualization contract
-is [Mammoth Observatory](docs/OBSERVATORY.md).
+[P3 Temporal control plane](P3_PLAN.md), building on completed
+[P2 production data](P2_PLAN.md). The future read-only visualization contract is
+[Mammoth Observatory](docs/OBSERVATORY.md).
 Autonomous workers follow [AGENTS.md](AGENTS.md) and [LOOP.md](LOOP.md).
 
 ## Development
@@ -16,6 +17,7 @@ Mammoth requires Node.js 22 or later and pnpm 8.15.6. From the repository root:
 
 ```sh
 pnpm install
+pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm build
@@ -24,11 +26,17 @@ pnpm verify:evidence
 pnpm verify:audit
 pnpm verify:phase-1
 pnpm verify:phase-2
+pnpm verify:adapters
 pnpm verify:m2
 pnpm verify:m3
 pnpm verify:mvp
+pnpm verify:p2
 pnpm eval:offline
+git diff --check
 ```
+
+The active P3 checkpoint must add `pnpm verify:p3` before
+`v0.3.0-temporal-control-plane` can be recorded.
 
 Run `pnpm format` to format tracked source and documentation, or
 `pnpm format:check` to check formatting without changing files.
@@ -58,7 +66,8 @@ assessment to fresh immutable evidence with an exact locator.
 
 `pnpm verify:phase-2` runs the process-death and duplicate-delivery gates. Local
 MVP stores use atomic rename plus file and directory fsync; runtime ports remain
-compatible with a future Temporal and Postgres deployment.
+compatible with the completed Postgres/CAS production-data adapters and the active
+Temporal control-plane work.
 
 The MVP topology limits and production adapter boundary are recorded in
 [`docs/adr/0001-local-durable-runtime.md`](docs/adr/0001-local-durable-runtime.md).
@@ -95,8 +104,9 @@ diagnostics also go to stderr.
   available, but offline fixtures are the reproducible release evidence.
 - Parliament model cells, cloud providers, novelty search, experiment runners,
   external stack adapters, and `mammoth-pipelines` are deferred beyond MVP.
-- Local JSON and content-addressed files are the MVP durability implementation;
-  production Temporal and Postgres adapters remain future work behind runtime ports.
+- Local JSON and content-addressed files are the MVP durability implementation.
+  Postgres/CAS production-data adapters exist for P2; Temporal remains active P3
+  work behind runtime ports.
 - A completed run may honestly contain unresolved claims. Only supported claims
   with a named policy assessment and exact immutable locator render as report facts.
 - Source parsing supports bounded plain text, HTML, and JSON; PDF and browser
