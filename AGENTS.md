@@ -2,24 +2,25 @@
 
 ## Mission and authority
 
-Build Mammoth from the completed `v0.1.0-mvp` baseline through the active
-`v0.2.0-production-data` checkpoint in `P2_PLAN.md`. `ARCHITECTURE.md` is the
-normative architecture, `POST_MVP_ROADMAP.md` defines long-range sequencing,
-`P2_PLAN.md` defines the current acceptance contract, `docs/OBSERVATORY.md`
-defines the read-only visualization direction, and `LOOP.md` defines team
-execution. Preserve architecture invariants if wording conflicts and record the
-conflict instead of weakening a gate.
+Build Mammoth from the completed `v0.2.0-production-data` baseline through the
+active `v0.3.0-temporal-control-plane` checkpoint in `P3_PLAN.md`.
+`ARCHITECTURE.md` is the normative architecture, `POST_MVP_ROADMAP.md` defines
+long-range sequencing, `P3_PLAN.md` defines the current acceptance contract,
+`docs/OBSERVATORY.md` defines the read-only visualization direction, and
+`LOOP.md` defines team execution. Preserve architecture invariants if wording
+conflicts and record the conflict instead of weakening a gate.
 
 Workers may inspect, implement, test, commit, push, open or review pull requests,
 repair CI, and merge accepted work without human confirmation until the checkpoint.
-Do not send routine progress to Beaux. Contact him only when the P2 stopping
+Do not send routine progress to Beaux. Contact him only when the P3 stopping
 condition is met or an escalation condition in `LOOP.md` is unavoidable.
 
 ## Before taking work
 
-Read this file, `P2_PLAN.md`, `POST_MVP_ROADMAP.md`, `LOOP.md`, the relevant
-package tests, and `ARCHITECTURE.md` sections 6, 7, 15, 28, 38, 40, 42, and 44.
-Read `docs/OBSERVATORY.md` for projection work. Every assignment must name:
+Read this file, `P3_PLAN.md`, `P2_PLAN.md`, `POST_MVP_ROADMAP.md`, `LOOP.md`,
+the relevant package tests, and `ARCHITECTURE.md` sections 6, 7, 15, 28, 38, 40,
+42, and 44. Read `docs/OBSERVATORY.md` for projection work. Every assignment
+must name:
 
 - objective and acceptance evidence;
 - owned paths;
@@ -39,12 +40,12 @@ slot available for coordination and integration.
 Delegate only concrete, bounded work that can proceed independently. Prefer
 path-disjoint ownership such as:
 
-- migrations and database lifecycle;
-- ledger repositories and transaction tests;
-- CAS implementation and integrity tests;
-- work-state/effect/outbox implementation;
-- adversarial conformance and restart verification;
-- Observatory projection schema and fixture;
+- Temporal adapter lifecycle and capability descriptor;
+- deterministic workflow definitions and versioning;
+- Activity implementation, retry policy, and idempotency receipts;
+- signal, query, cancellation, and human-gate behavior;
+- crash/restart and replay verification;
+- Temporal-linked Observatory projection fixture;
 - documentation and receipt audit.
 
 Every delegated task must include objective, owned paths, non-owned paths,
@@ -95,6 +96,8 @@ A green test that violates an invariant is a failing implementation.
   conformance suites; concrete adapters may not weaken these gates.
 - Production Postgres/CAS packages implement inward-facing ports and do not become
   dependencies of the domain.
+- Temporal adapter and worker packages implement orchestration ports and may not
+  become authoritative product stores.
 - Observatory projections are read-only and non-authoritative. UI code never
   imports database or Temporal internals.
 - Runtime, adapters, workers, and apps depend inward through ports. Adapters do not
@@ -148,10 +151,12 @@ pnpm eval:offline
 ```
 
 Also run every verifier introduced by the active loop, including
-`verify:phase-2`, `verify:mvp`, `verify:adapters`, and `verify:p2`. Never claim a
-check passed unless it ran; record the command and result. P2 requires migration,
-concurrency, rollback, restart, tamper, outbox, backup/restore, and projection
-tests against the production-like local profile.
+`verify:phase-2`, `verify:mvp`, `verify:adapters`, `verify:p2`, and `verify:p3`.
+Never claim a check passed unless it ran; record the command and result. P3
+requires Temporal adapter startup, deterministic replay, workflow versioning,
+signals, queries, retries, timers, cancellation, `continueAsNew`, duplicate
+Activity delivery, process/service restart, and projection-linkage tests against
+the production-like local profile.
 
 ## Commits, reviews, and handoffs
 
@@ -168,6 +173,6 @@ tests and results / risks or unverified areas / blockers / next task
 ```
 
 An item is done only when its acceptance evidence exists, tests and docs are
-updated, required gates pass, the change is merged, and `P2_PLAN.md` or the P2
+updated, required gates pass, the change is merged, and `P3_PLAN.md` or the P3
 receipt reflects reality. Do not stop because one task or PR is done; claim the
-next unblocked P2 item and continue until the checkpoint is proven.
+next unblocked P3 item and continue until the checkpoint is proven.
