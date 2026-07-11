@@ -167,3 +167,8 @@ The first post-MVP batch is P1 and should remain deliberately narrow:
 
 Only after that command passes on the default branch should implementation begin
 on the Postgres and Temporal packages.
+
+The read-only visualization track is specified in
+[`docs/OBSERVATORY.md`](docs/OBSERVATORY.md). Its projection contract may advance
+alongside P1, but UI implementation remains downstream of stable Postgres/CAS read
+models.

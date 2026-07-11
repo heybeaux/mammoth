@@ -39,7 +39,14 @@ export interface RetrievedSource {
 export interface CasObject {
   digest: string;
   size: number;
-  path: string;
+  storageUri: string;
+  /** Local compatibility aid. Production consumers must use the store port. */
+  path?: string;
+}
+
+export interface ContentAddressedStore {
+  put(bytes: Uint8Array): Promise<CasObject>;
+  get(digest: string): Promise<Uint8Array>;
 }
 
 export interface ParsedArtifact {

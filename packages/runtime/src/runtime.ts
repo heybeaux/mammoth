@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { mkdir, open, readFile, realpath, rename } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import {
@@ -25,6 +24,7 @@ import {
 import {
   FileContentStore,
   snapshotSource,
+  type ContentAddressedStore,
   type SourceSnapshot,
 } from '@mammoth/retrieval';
 import { DurableWorkRuntime, LocalWorkStateStore } from '@mammoth/work-queue';
@@ -202,6 +202,9 @@ async function executePipeline(
     new LocalWorkStateStore(paths.queue),
     () => nowMs,
   );
+  const contentStore = new FileContentStore(
+    join(paths.programDirectory, 'cas'),
+  );
   const queued = work.enqueue({
     id: workId,
     programId: charter.programId,
@@ -221,23 +224,17 @@ async function executePipeline(
       idempotencyKey: `${workflowIdempotencyKey}:snapshot`,
       execute: async (idempotencyKey) => ({
         providerReceiptId: `local:${canonicalDigest(idempotencyKey)}`,
-        result: await snapshotSource(
-          { url: charter.sourceUrl },
-          new FileContentStore(join(paths.programDirectory, 'cas')),
-          {
-            transport: options.transport,
-            ...(options.resolveHost
-              ? { resolveHost: options.resolveHost }
-              : {}),
-            ...(options.now ? { now: options.now } : {}),
-          },
-        ),
+        result: await snapshotSource({ url: charter.sourceUrl }, contentStore, {
+          transport: options.transport,
+          ...(options.resolveHost ? { resolveHost: options.resolveHost } : {}),
+          ...(options.now ? { now: options.now } : {}),
+        }),
       }),
     });
     snapshot = sideEffect.result;
     work.complete(workId, claimed.leaseToken, snapshot);
   }
-  await validateSnapshotIntegrity(snapshot);
+  await validateSnapshotIntegrity(snapshot, contentStore);
   await writeJson(paths.snapshot, {
     schemaVersion: 1,
     kind: 'source_snapshot',
@@ -820,24 +817,18 @@ async function assertContainedDirectory(root: string, child: string) {
 
 async function validateSnapshotIntegrity(
   snapshot: SourceSnapshot,
+  store: ContentAddressedStore,
 ): Promise<void> {
-  const content = await readFile(snapshot.contentObject.path);
-  const parsed = await readFile(snapshot.parsedObject.path);
-  if (
-    canonicalDigestBytes(content) !== snapshot.contentDigest ||
-    canonicalDigestBytes(parsed) !== snapshot.parsedObject.digest
-  ) {
+  try {
+    await store.get(snapshot.contentDigest);
+    await store.get(snapshot.parsedObject.digest);
+  } catch (error: unknown) {
     throw new RuntimeExecutionError(
       'ARTIFACT_INTEGRITY_FAILED',
       'snapshot CAS object failed digest validation',
+      { cause: error },
     );
   }
-}
-
-function canonicalDigestBytes(bytes: Uint8Array): string {
-  // FileContentStore performs the authoritative digest check. Reuse its CAS URI
-  // algorithm through a temporary-free canonical byte digest calculation.
-  return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 }
 
 export async function verifyRuntimeAudit(

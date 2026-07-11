@@ -20,8 +20,20 @@ export interface DurableWorkState {
   readonly receipts: readonly SideEffectReceipt[];
 }
 
+/** Persistence boundary for local files or a transactional production adapter. */
+export interface WorkStateStore {
+  load(): DurableWorkState | undefined;
+  save(state: DurableWorkState): void;
+  update<T>(
+    operation: (state: DurableWorkState | undefined) => {
+      readonly state: DurableWorkState;
+      readonly result: T;
+    },
+  ): T;
+}
+
 /** Atomic JSON persistence with file and parent-directory fsync. */
-export class LocalWorkStateStore {
+export class LocalWorkStateStore implements WorkStateStore {
   readonly #path: string;
 
   public constructor(path: string) {

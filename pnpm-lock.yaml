@@ -81,6 +81,12 @@ importers:
       '@mammoth/persistence':
         specifier: workspace:*
         version: link:../persistence
+      '@mammoth/retrieval':
+        specifier: workspace:*
+        version: link:../retrieval
+      '@mammoth/work-queue':
+        specifier: workspace:*
+        version: link:../work-queue
       '@mammoth/workflow':
         specifier: workspace:*
         version: link:../workflow

@@ -4,7 +4,7 @@ import {
   type IdempotentExternalResult,
   type SideEffectReceipt,
 } from './receipts.js';
-import type { LocalWorkStateStore } from './local-state.js';
+import type { WorkStateStore } from './local-state.js';
 import type {
   CancelWork,
   ClaimedWork,
@@ -19,10 +19,10 @@ import type {
  * local transaction can atomically commit with an external system.
  */
 export class DurableWorkRuntime {
-  readonly #store: LocalWorkStateStore;
+  readonly #store: WorkStateStore;
   readonly #now: () => number;
 
-  public constructor(store: LocalWorkStateStore, now: () => number = Date.now) {
+  public constructor(store: WorkStateStore, now: () => number = Date.now) {
     this.#store = store;
     this.#now = now;
   }
