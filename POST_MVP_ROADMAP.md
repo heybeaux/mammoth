@@ -5,6 +5,8 @@
 > Baseline: `v0.1.0-mvp`
 >
 > Direction: production adapters first, then broader research-cell orchestration.
+>
+> Active checkpoint: [`P2_PLAN.md`](P2_PLAN.md)
 
 ## Outcome
 
@@ -154,9 +156,9 @@ cannot become release scope until P2 and P3 pass their exit gates.
   cross-adapter imports.
 - Cloud egress requires policy, classification, provider, budget, and cost records.
 
-## Immediate implementation batch
+## Active implementation checkpoint
 
-The first post-MVP batch is P1 and should remain deliberately narrow:
+P1 contract freeze is the entry gate to the active P2 production-data checkpoint:
 
 1. Publish adapter capability and error contracts.
 2. Extract reusable conformance suites from the proven local runtime behavior.
@@ -165,8 +167,9 @@ The first post-MVP batch is P1 and should remain deliberately narrow:
 4. Record the Postgres transaction boundary and Temporal ownership decision.
 5. Add `pnpm verify:adapters` as the batch exit command.
 
-Only after that command passes on the default branch should implementation begin
-on the Postgres and Temporal packages.
+After the P1 freeze is recorded, the autonomous loop proceeds directly through the
+Postgres/CAS checkpoint in [`P2_PLAN.md`](P2_PLAN.md). Temporal remains P3 and must
+not be pulled into P2 implementation.
 
 The read-only visualization track is specified in
 [`docs/OBSERVATORY.md`](docs/OBSERVATORY.md). Its projection contract may advance

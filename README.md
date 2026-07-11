@@ -5,7 +5,9 @@ Local-first, hybrid, long-horizon epistemic engine.
 The completed MVP contract is documented in [MVP_PLAN.md](MVP_PLAN.md). Active
 post-MVP delivery is sequenced in
 [POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md): production adapters first, then
-broader research-cell orchestration.
+broader research-cell orchestration. The active autonomous checkpoint is
+[P2 production data](P2_PLAN.md), and the future read-only visualization contract
+is [Mammoth Observatory](docs/OBSERVATORY.md).
 Autonomous workers follow [AGENTS.md](AGENTS.md) and [LOOP.md](LOOP.md).
 
 ## Development
