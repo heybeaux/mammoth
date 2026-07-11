@@ -4,6 +4,24 @@
       "requiredPath": "packages/production-cas/package.json",
       "command": ["pnpm", "--filter", "@mammoth/production-cas", "test"]
     },
+    "d5-service-lifecycle": {
+      "requiredPath": "packages/production-profile/package.json",
+      "command": [
+        "pnpm",
+        "--filter",
+        "@mammoth/production-profile",
+        "verify:lifecycle"
+      ]
+    },
+    "d5-backup-restore": {
+      "requiredPath": "packages/production-profile/package.json",
+      "command": [
+        "pnpm",
+        "--filter",
+        "@mammoth/production-profile",
+        "verify:backup"
+      ]
+    },
     "d6-observatory-projection": {
       "requiredPath": "packages/observatory-projection/package.json",
       "command": ["pnpm", "--filter", "@mammoth/observatory-projection", "test"]

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import {
   PostgresEpistemicLedger,
   PostgresLifecycle,
+  PostgresWorkState,
   foundationMigrations,
   type PostgresConnection,
 } from '@mammoth/postgres-adapter';
@@ -49,6 +50,7 @@ export async function verifyLifecycle(
     });
     if ((await ledger.read()).revision === 0)
       await ledger.transact(() => undefined);
+    await seedCompletedEffect(active.connection);
     await writeArtifact(
       config.root,
       new TextEncoder().encode('mammoth-production-profile-fixture-v1'),
@@ -91,6 +93,7 @@ export async function verifyBackupRestore(
     });
     if ((await ledger.read()).revision === 0)
       await ledger.transact(() => undefined);
+    await seedCompletedEffect(source.connection);
     await writeArtifact(
       config.root,
       new TextEncoder().encode('mammoth-production-profile-fixture-v1'),
@@ -171,6 +174,43 @@ export async function verifyBackupRestore(
     if (restored) await restored.lifecycle.shutdown().catch(() => undefined);
     await service.stop().catch(() => undefined);
   }
+}
+
+async function seedCompletedEffect(
+  connection: PostgresConnection,
+): Promise<void> {
+  const workId = 'p2-profile-effect-v1';
+  const existing = await connection.query(
+    'select 1 from mammoth_work_items where id = $1',
+    [workId],
+  );
+  if (existing.rowCount === 1) return;
+  let sequence = 0;
+  const work = new PostgresWorkState(connection, {
+    transaction: { statementTimeoutMs: 10_000, transactionTimeoutMs: 15_000 },
+    now: () => '2026-01-01T00:00:00.000Z',
+    id: () => `p2-profile-${String(++sequence)}`,
+  });
+  await work.enqueue({
+    id: workId,
+    payload: { fixture: 'production-profile-v1' },
+    maxAttempts: 3,
+    authoritativeRevision: 1,
+  });
+  const claimed = await work.claim({
+    owner: 'p2-profile-worker',
+    now: '2026-01-01T00:00:00.000Z',
+    leaseExpiresAt: '2026-01-01T00:05:00.000Z',
+  });
+  if (!claimed) throw new Error('production profile fixture was not claimable');
+  await work.complete({
+    workId,
+    owner: 'p2-profile-worker',
+    fencingToken: claimed.fencingToken,
+    provider: 'p2-profile-provider',
+    idempotencyKey: 'p2-profile-effect-v1',
+    providerReceipt: { acknowledged: true },
+  });
 }
 
 async function connect(

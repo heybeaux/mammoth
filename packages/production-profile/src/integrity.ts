@@ -15,6 +15,9 @@ export interface IntegrityManifest {
   readonly ledgerRevision: number;
   readonly auditRows: number;
   readonly outboxRows: number;
+  readonly workRows: number;
+  readonly effectReceiptRows: number;
+  readonly workOutboxRows: number;
   readonly migrations: readonly {
     readonly version: number;
     readonly checksum: string;
@@ -45,25 +48,38 @@ export async function buildManifest(
   connection: PostgresConnection,
   root: string,
 ): Promise<IntegrityManifest> {
-  const [ledger, audit, outbox, migrations] = await Promise.all([
-    connection.query<{ revision: string | number }>(
-      'select revision from mammoth_epistemic_ledger where singleton = true',
-    ),
-    connection.query<{ count: string }>(
-      'select count(*)::text as count from mammoth_audit_log',
-    ),
-    connection.query<{ count: string }>(
-      'select count(*)::text as count from mammoth_outbox',
-    ),
-    connection.query<{ version: number; checksum: string }>(
-      'select version, checksum from mammoth_schema_migrations order by version',
-    ),
-  ]);
+  const [ledger, audit, outbox, work, receipts, workOutbox, migrations] =
+    await Promise.all([
+      connection.query<{ revision: string | number }>(
+        'select revision from mammoth_epistemic_ledger where singleton = true',
+      ),
+      connection.query<{ count: string }>(
+        'select count(*)::text as count from mammoth_audit_log',
+      ),
+      connection.query<{ count: string }>(
+        'select count(*)::text as count from mammoth_outbox',
+      ),
+      connection.query<{ count: string }>(
+        'select count(*)::text as count from mammoth_work_items',
+      ),
+      connection.query<{ count: string }>(
+        'select count(*)::text as count from mammoth_effect_receipts',
+      ),
+      connection.query<{ count: string }>(
+        'select count(*)::text as count from mammoth_work_outbox',
+      ),
+      connection.query<{ version: number; checksum: string }>(
+        'select version, checksum from mammoth_schema_migrations order by version',
+      ),
+    ]);
   return {
     schemaVersion: 1,
     ledgerRevision: Number(ledger.rows[0]?.revision ?? -1),
     auditRows: Number(audit.rows[0]?.count ?? -1),
     outboxRows: Number(outbox.rows[0]?.count ?? -1),
+    workRows: Number(work.rows[0]?.count ?? -1),
+    effectReceiptRows: Number(receipts.rows[0]?.count ?? -1),
+    workOutboxRows: Number(workOutbox.rows[0]?.count ?? -1),
     migrations: migrations.rows,
     artifacts: await scanArtifacts(root),
   };
