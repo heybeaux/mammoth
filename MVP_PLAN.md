@@ -25,7 +25,7 @@ broader model, novelty, experiment, desktop, and pipeline ecosystems.
 - [x] Runtime composition: one complete research-program workflow.
 - [x] Operator CLI and inspectability.
 - [x] Black-box MVP verification and clean-checkout receipt.
-- [ ] M4 merged to the default branch with green expanded CI.
+- [x] M4 merged to the default branch with green expanded CI.
 
 ## Delivery loops
 
