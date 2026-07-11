@@ -76,4 +76,69 @@ create index mammoth_outbox_unpublished_idx
   on mammoth_outbox (created_at, id) where published_at is null;
 `.trim(),
   }),
+  defineMigration({
+    version: 3,
+    name: 'durable_work_effects_outbox',
+    sql: `
+create table mammoth_work_items (
+  id text primary key,
+  authoritative_revision bigint references mammoth_epistemic_revisions(revision),
+  status text not null check (status in ('pending','leased','retry_wait','completed','failed','cancelled')),
+  payload jsonb not null,
+  attempt integer not null default 0 check (attempt >= 0),
+  max_attempts integer not null check (max_attempts > 0),
+  next_attempt_at timestamptz not null,
+  lease_owner text,
+  lease_expires_at timestamptz,
+  fencing_token bigint not null default 0 check (fencing_token >= 0),
+  cancellation_requested_at timestamptz,
+  terminal_reason text,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  check ((status = 'leased') = (lease_owner is not null and lease_expires_at is not null))
+);
+create index mammoth_work_claimable_idx
+  on mammoth_work_items (next_attempt_at, id)
+  where status in ('pending','retry_wait');
+
+create table mammoth_effect_receipts (
+  id text primary key,
+  work_id text not null references mammoth_work_items(id),
+  provider text not null,
+  idempotency_key text not null,
+  fencing_token bigint not null check (fencing_token > 0),
+  state text not null check (state in ('partial','completed')),
+  provider_receipt jsonb not null,
+  recorded_at timestamptz not null,
+  unique (provider, idempotency_key, state),
+  unique (work_id, fencing_token, state)
+);
+
+create table mammoth_work_outbox (
+  id text primary key,
+  work_id text not null references mammoth_work_items(id),
+  authoritative_revision bigint references mammoth_epistemic_revisions(revision),
+  fencing_token bigint not null check (fencing_token >= 0),
+  topic text not null,
+  payload jsonb not null,
+  created_at timestamptz not null,
+  available_at timestamptz not null,
+  attempt_count integer not null default 0 check (attempt_count >= 0),
+  last_error text,
+  poison_at timestamptz
+);
+create index mammoth_work_outbox_available_idx
+  on mammoth_work_outbox (available_at, id) where poison_at is null;
+
+create table mammoth_outbox_dispatches (
+  outbox_id text not null references mammoth_work_outbox(id),
+  destination text not null,
+  dispatch_key text not null,
+  provider_receipt jsonb not null,
+  dispatched_at timestamptz not null,
+  primary key (outbox_id, destination),
+  unique (destination, dispatch_key)
+);
+`.trim(),
+  }),
 ]);
