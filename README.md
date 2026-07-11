@@ -17,6 +17,7 @@ Mammoth requires Node.js 22 or later and pnpm 8.15.6. From the repository root:
 
 ```sh
 pnpm install
+pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm build
@@ -25,11 +26,17 @@ pnpm verify:evidence
 pnpm verify:audit
 pnpm verify:phase-1
 pnpm verify:phase-2
+pnpm verify:adapters
 pnpm verify:m2
 pnpm verify:m3
 pnpm verify:mvp
+pnpm verify:p2
 pnpm eval:offline
+git diff --check
 ```
+
+The active P3 checkpoint must add `pnpm verify:p3` before
+`v0.3.0-temporal-control-plane` can be recorded.
 
 Run `pnpm format` to format tracked source and documentation, or
 `pnpm format:check` to check formatting without changing files.

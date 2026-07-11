@@ -79,6 +79,10 @@ work, and diagnose without fabricating a team.
 
 A green test that violates an invariant is a failing implementation.
 
+The claim-ID invariant governs Mammoth research outputs, dossiers, reports, and
+evidence-bearing product artifacts. Planning documents may discuss scope and
+process without inventing synthetic claim IDs.
+
 ## Package boundaries
 
 - `packages/domain`: pure schemas and state machines; no database, HTTP, model SDK,

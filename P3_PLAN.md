@@ -151,7 +151,9 @@ proven in P2.
 
 ## Required verification
 
-Add `pnpm verify:p3`. From a clean checkout it must run or orchestrate:
+Add `pnpm verify:p3`. The command must be a non-recursive wrapper around the P3
+acceptance implementation and the existing gates. From a clean checkout, the
+checkpoint verification ladder is:
 
 ```sh
 pnpm install --frozen-lockfile
@@ -169,7 +171,6 @@ pnpm verify:m2
 pnpm verify:m3
 pnpm verify:mvp
 pnpm verify:p2
-pnpm verify:p3
 pnpm eval:offline
 ```
 

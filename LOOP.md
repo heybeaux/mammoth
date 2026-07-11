@@ -57,9 +57,11 @@ worker.
 3. **Delegate** — assign independent implementation, adversarial verification,
    replay/version review, or projection work when ownership does not overlap.
    Prove activity through the live status tool.
-4. **Build** — implement deterministic workflow/application behavior first, then
-   Temporal adapter plumbing. Keep transactions, clocks, IDs, network calls,
-   storage, workflow clients, and external effects injectable.
+4. **Build** — implement Temporal adapter lifecycle/plumbing first, then
+   deterministic workflow/application behavior. Keep transactions, clocks, IDs,
+   network calls, storage, workflow clients, and external effects injectable. If
+   sequencing pressure conflicts with this order, record the conflict instead of
+   weakening the architecture gate.
 5. **Attack** — test negative paths: nondeterministic workflow code, replay
    failure, stale workflow versions, process death before/after commits, duplicate
    Activity delivery, heartbeat timeout, stale signals, cancellation races,
