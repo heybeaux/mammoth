@@ -3,7 +3,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@mammoth/postgres-adapter": ["../postgres-adapter/src/index.ts"]
+      "@mammoth/postgres-adapter": ["../postgres-adapter/src/index.ts"],
+      "@mammoth/temporal-adapter": ["../temporal-adapter/src/index.ts"]
     }
   },
   "include": ["src", "test"]

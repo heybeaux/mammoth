@@ -232,6 +232,9 @@ importers:
       '@mammoth/postgres-adapter':
         specifier: workspace:*
         version: link:../postgres-adapter
+      '@mammoth/temporal-adapter':
+        specifier: workspace:*
+        version: link:../temporal-adapter
       pg:
         specifier: ^8.16.3
         version: 8.22.0
@@ -310,6 +313,25 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.15.34
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
+
+  packages/temporal-adapter:
+    dependencies:
+      '@mammoth/adapter-contracts':
+        specifier: workspace:*
+        version: link:../adapter-contracts
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.15.34
+      tsx:
+        specifier: ^4.20.3
+        version: 4.20.3
       typescript:
         specifier: ^5.8.0
         version: 5.8.3

@@ -5,7 +5,10 @@ import {
   evaluateProductionLikeReadiness,
   LOCAL_ADAPTER_DESCRIPTORS,
   LOCAL_ADAPTER_ROLES,
+  P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS,
   PRODUCTION_LIKE_LOCAL_REQUIREMENTS,
+  TEMPORAL_WORKFLOW_CAPABILITIES,
+  TEMPORAL_WORKFLOW_REQUIREMENT,
 } from '../src/index.js';
 
 describe('frozen adapter descriptors', () => {
@@ -32,6 +35,33 @@ describe('frozen adapter descriptors', () => {
       expect(requirement.requireProductionProfile).toBe(true);
       expect(requirement.capabilities).toContain('health-reporting');
     }
+  });
+
+  it('freezes the Temporal workflow orchestrator descriptor under contract major 1', () => {
+    expect(TEMPORAL_WORKFLOW_REQUIREMENT).toEqual({
+      kind: 'workflow-orchestrator',
+      contractMajor: 1,
+      capabilities: TEMPORAL_WORKFLOW_CAPABILITIES,
+      requireProductionProfile: true,
+    });
+    expect(P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS).toHaveLength(7);
+    expect(P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS.at(-1)).toBe(
+      TEMPORAL_WORKFLOW_REQUIREMENT,
+    );
+    expect(TEMPORAL_WORKFLOW_CAPABILITIES).toEqual([
+      'workflow-history',
+      'workflow-signals',
+      'workflow-queries',
+      'workflow-timers',
+      'workflow-retries',
+      'workflow-versioning',
+      'continue-as-new',
+      'namespace-readiness',
+      'task-queue-readiness',
+      'durable-restart',
+      'cooperative-cancellation',
+      'health-reporting',
+    ]);
   });
 });
 

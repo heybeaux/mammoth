@@ -1,4 +1,9 @@
 import assert from 'node:assert/strict';
+import {
+  assertAdapterCompatibility,
+  type AdapterDescriptor,
+} from './capabilities.js';
+import { TEMPORAL_WORKFLOW_REQUIREMENT } from './descriptors.js';
 import type { EpistemicLedger } from '@mammoth/persistence';
 import { contentDigest, type ContentAddressedStore } from '@mammoth/retrieval';
 import {
@@ -15,6 +20,31 @@ export interface DurableAdapterFactory<T> {
 
 export interface SynchronousDurableAdapterFactory<T> {
   open(): T;
+}
+
+export interface WorkflowOrchestratorReadiness {
+  readonly ready: boolean;
+  readonly checkedAt: string;
+  readonly failures: readonly string[];
+}
+
+export interface WorkflowOrchestratorLifecycle {
+  descriptor(): AdapterDescriptor;
+  readiness(): Promise<WorkflowOrchestratorReadiness>;
+  shutdown(): Promise<void>;
+}
+
+export async function verifyWorkflowOrchestratorConformance(
+  factory: DurableAdapterFactory<WorkflowOrchestratorLifecycle>,
+): Promise<void> {
+  const adapter = await factory.open();
+  const descriptor = adapter.descriptor();
+  assert.equal(descriptor.kind, 'workflow-orchestrator');
+  assertAdapterCompatibility([descriptor], [TEMPORAL_WORKFLOW_REQUIREMENT]);
+  const readiness = await adapter.readiness();
+  assert.equal(readiness.ready, true);
+  assert.deepEqual(readiness.failures, []);
+  await adapter.shutdown();
 }
 
 export async function verifyWorkflowStoreConformance(

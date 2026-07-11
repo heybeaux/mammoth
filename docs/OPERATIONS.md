@@ -6,6 +6,9 @@
 - A native PostgreSQL server/client installation. `pg_config --bindir` must
   contain `initdb`, `pg_ctl`, `pg_isready`, `psql`, `createdb`, `dropdb`,
   `pg_dump`, and `pg_restore`.
+- A native Temporal CLI installation for P3 Temporal control-plane work. The
+  `temporal` binary must support `server start-dev`, namespace operations, task
+  queue inspection, and cluster health checks.
 - A private password of at least 12 characters. Mammoth has no embedded database
   credential and deliberately fails if `MAMMOTH_PG_PASSWORD` is absent.
 
@@ -21,9 +24,21 @@ pnpm profile:status
 pnpm profile:stop
 ```
 
+Temporal uses explicit local profile settings and no managed account:
+
+```sh
+export MAMMOTH_TEMPORAL_NAMESPACE="mammoth-local"
+export MAMMOTH_TEMPORAL_TASK_QUEUE="research-control"
+pnpm --filter @mammoth/temporal-adapter start
+pnpm --filter @mammoth/temporal-adapter status
+pnpm --filter @mammoth/temporal-adapter stop
+```
+
 Do not place the password in `infra/production-profile.env.example`, shell
 history, logs, or committed files. Override the host, port, user, database and
 timeouts only through the documented `MAMMOTH_*` variables in that example.
+Temporal host, port, namespace, task queue, retention, CLI path, and bounded
+timeouts are also configured only through `MAMMOTH_TEMPORAL_*` variables.
 
 ## Acceptance and recovery
 

@@ -1,5 +1,5 @@
 {
-  "name": "@mammoth/production-profile",
+  "name": "@mammoth/temporal-adapter",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,23 +7,21 @@
     ".": "./src/index.ts"
   },
   "bin": {
-    "mammoth-profile": "./src/cli.ts"
+    "mammoth-temporal": "./src/cli.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "status": "tsx src/cli.ts status",
+    "start": "tsx src/cli.ts start",
+    "stop": "tsx src/cli.ts stop",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "verify:lifecycle": "tsx src/cli.ts verify-lifecycle",
-    "verify:backup": "tsx src/cli.ts verify-backup"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mammoth/postgres-adapter": "workspace:*",
-    "@mammoth/temporal-adapter": "workspace:*",
-    "pg": "^8.16.3"
+    "@mammoth/adapter-contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/pg": "^8.15.5",
     "tsx": "^4.20.3",
     "typescript": "^5.8.0",
     "vitest": "^3.2.0"

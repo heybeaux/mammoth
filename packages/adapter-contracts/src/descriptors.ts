@@ -19,6 +19,21 @@ export const LOCAL_ADAPTER_ROLES = [
 
 export type LocalAdapterRole = (typeof LOCAL_ADAPTER_ROLES)[number];
 
+export const TEMPORAL_WORKFLOW_CAPABILITIES = [
+  'workflow-history',
+  'workflow-signals',
+  'workflow-queries',
+  'workflow-timers',
+  'workflow-retries',
+  'workflow-versioning',
+  'continue-as-new',
+  'namespace-readiness',
+  'task-queue-readiness',
+  'durable-restart',
+  'cooperative-cancellation',
+  'health-reporting',
+] as const satisfies readonly AdapterCapability[];
+
 export interface LocalAdapterDescriptor extends AdapterDescriptor {
   readonly role: LocalAdapterRole;
 }
@@ -126,6 +141,16 @@ export const PRODUCTION_LIKE_LOCAL_REQUIREMENTS = [
     'content-verification',
     'health-reporting',
   ]),
+] as const satisfies readonly AdapterRequirement[];
+
+export const TEMPORAL_WORKFLOW_REQUIREMENT = requirement(
+  'workflow-orchestrator',
+  TEMPORAL_WORKFLOW_CAPABILITIES,
+);
+
+export const P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS = [
+  ...PRODUCTION_LIKE_LOCAL_REQUIREMENTS,
+  TEMPORAL_WORKFLOW_REQUIREMENT,
 ] as const satisfies readonly AdapterRequirement[];
 
 function requirement(
