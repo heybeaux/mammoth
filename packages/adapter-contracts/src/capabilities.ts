@@ -1,6 +1,7 @@
 export const ADAPTER_KINDS = [
   'workflow-store',
   'epistemic-ledger',
+  'work-state-store',
   'artifact-store',
   'side-effect-executor',
   'receipt-writer',

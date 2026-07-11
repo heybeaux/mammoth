@@ -24,15 +24,15 @@ Observatory can safely visualize.
 
 Before production adapter implementation begins:
 
-- [ ] Record transaction ownership and Postgres/Temporal responsibility boundaries
+- [x] Record transaction ownership and Postgres/Temporal responsibility boundaries
       in an accepted ADR.
-- [ ] Publish capability descriptors for the local workflow, ledger, work-state,
+- [x] Publish capability descriptors for the local workflow, ledger, work-state,
       effect-receipt, and artifact adapters.
-- [ ] Define health and readiness semantics for `production-like-local`.
-- [ ] Confirm `pnpm verify:adapters` covers workflow state, ledger revisions, work
+- [x] Define health and readiness semantics for `production-like-local`.
+- [x] Confirm `pnpm verify:adapters` covers workflow state, ledger revisions, work
       state, completed-effect replay, CAS deduplication, invalid digests, and tampered
       bytes.
-- [ ] Freeze contract major `1` or explicitly version any required change.
+- [x] Freeze contract major `1` or explicitly version any required change.
 
 P1 freeze evidence belongs in `evals/reports/p1-adapter-contracts.md`.
 
