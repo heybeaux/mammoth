@@ -2,21 +2,24 @@
 
 ## Mission and authority
 
-Build Mammoth from the completed `v0.1.0-mvp` baseline through the active batch in
-`POST_MVP_ROADMAP.md`. `ARCHITECTURE.md` is the normative architecture,
-`POST_MVP_ROADMAP.md` defines post-MVP sequencing, `MVP_PLAN.md` records the
-completed initial checkpoint, and `LOOP.md` defines execution. Preserve
-architecture invariants if any wording conflicts and record the conflict instead
-of weakening a gate.
+Build Mammoth from the completed `v0.1.0-mvp` baseline through the active
+`v0.2.0-production-data` checkpoint in `P2_PLAN.md`. `ARCHITECTURE.md` is the
+normative architecture, `POST_MVP_ROADMAP.md` defines long-range sequencing,
+`P2_PLAN.md` defines the current acceptance contract, `docs/OBSERVATORY.md`
+defines the read-only visualization direction, and `LOOP.md` defines team
+execution. Preserve architecture invariants if wording conflicts and record the
+conflict instead of weakening a gate.
 
 Workers may inspect, implement, test, commit, push, open or review pull requests,
 repair CI, and merge accepted work without human confirmation until the checkpoint.
-Contact Beaux only under the escalation conditions in `LOOP.md`.
+Do not send routine progress to Beaux. Contact him only when the P2 stopping
+condition is met or an escalation condition in `LOOP.md` is unavoidable.
 
 ## Before taking work
 
-Read this file, `MVP_PLAN.md`, `LOOP.md`, the relevant package tests, and
-`ARCHITECTURE.md` sections 6, 7, 38, 40, 42, and 44. Every assignment must name:
+Read this file, `P2_PLAN.md`, `POST_MVP_ROADMAP.md`, `LOOP.md`, the relevant
+package tests, and `ARCHITECTURE.md` sections 6, 7, 15, 28, 38, 40, 42, and 44.
+Read `docs/OBSERVATORY.md` for projection work. Every assignment must name:
 
 - objective and acceptance evidence;
 - owned paths;
@@ -26,6 +29,39 @@ Read this file, `MVP_PLAN.md`, `LOOP.md`, the relevant package tests, and
 - handoff recipient.
 
 Do not silently broaden an assignment. The coordinator owns cross-package scope.
+
+## Coordinator and sub-agent direction
+
+The coordinator owns the active checklist, contract changes, integration order,
+PR decisions, CI repair, checkpoint receipt, and final claim. Keep one execution
+slot available for coordination and integration.
+
+Delegate only concrete, bounded work that can proceed independently. Prefer
+path-disjoint ownership such as:
+
+- migrations and database lifecycle;
+- ledger repositories and transaction tests;
+- CAS implementation and integrity tests;
+- work-state/effect/outbox implementation;
+- adversarial conformance and restart verification;
+- Observatory projection schema and fixture;
+- documentation and receipt audit.
+
+Every delegated task must include objective, owned paths, non-owned paths,
+contracts allowed to change, exact verification, and handoff recipient. A worker
+must stop and return a conflict note before editing outside its ownership.
+
+Agent activity is a fact requiring live tool evidence. Use these exact states:
+
+- **spawn requested** — a delegation tool call was made;
+- **active** — the live agent-status tool reports the worker running;
+- **completed** — the worker returned a handoff;
+- **integrated** — the coordinator reviewed and incorporated the work;
+- **merged/verified** — the default branch and CI prove it.
+
+Branches, commits, worktrees, or prose assignments are not proof that an agent is
+active. If delegation fails, report it in the loop record, continue useful local
+work, and diagnose without fabricating a team.
 
 ## Non-negotiable invariants
 
@@ -55,6 +91,12 @@ A green test that violates an invariant is a failing implementation.
 - `packages/workflow`: deterministic durable program state and runtime ports.
 - `packages/work-queue`: leases, retries, idempotency, and effect receipts.
 - `packages/governance`: budgets, human gates, revalidation, and fail-closed policy.
+- `packages/adapter-contracts`: versioned adapter descriptors and behavioral
+  conformance suites; concrete adapters may not weaken these gates.
+- Production Postgres/CAS packages implement inward-facing ports and do not become
+  dependencies of the domain.
+- Observatory projections are read-only and non-authoritative. UI code never
+  imports database or Temporal internals.
 - Runtime, adapters, workers, and apps depend inward through ports. Adapters do not
   import each other and UI projections are never authoritative.
 
@@ -106,9 +148,10 @@ pnpm eval:offline
 ```
 
 Also run every verifier introduced by the active loop, including
-`verify:phase-2` and `verify:mvp`. Never claim a check passed unless it ran; record
-the command and result. Phase 2 requires crash, restart, retry, lease-expiry,
-idempotency, budget, and cancellation tests.
+`verify:phase-2`, `verify:mvp`, `verify:adapters`, and `verify:p2`. Never claim a
+check passed unless it ran; record the command and result. P2 requires migration,
+concurrency, rollback, restart, tamper, outbox, backup/restore, and projection
+tests against the production-like local profile.
 
 ## Commits, reviews, and handoffs
 
@@ -125,6 +168,6 @@ tests and results / risks or unverified areas / blockers / next task
 ```
 
 An item is done only when its acceptance evidence exists, tests and docs are
-updated, required gates pass, the change is merged, and `MVP_PLAN.md` or the loop
-receipt reflects reality. Do not stop because one task is done; claim the next
-unblocked loop item and continue until the checkpoint is proven.
+updated, required gates pass, the change is merged, and `P2_PLAN.md` or the P2
+receipt reflects reality. Do not stop because one task or PR is done; claim the
+next unblocked P2 item and continue until the checkpoint is proven.
