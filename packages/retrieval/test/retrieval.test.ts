@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FileContentStore,
   contentDigest,
+  isPrivateAddress,
   parseSource,
   retrieveSource,
   snapshotSource,
@@ -32,6 +33,14 @@ function response(
 }
 
 describe('source retrieval', () => {
+  it('denies private IPv4 destinations encoded as IPv6-mapped addresses', () => {
+    expect(isPrivateAddress('::ffff:127.0.0.1')).toBe(true);
+    expect(isPrivateAddress('::ffff:172.16.0.1')).toBe(true);
+    expect(isPrivateAddress('::ffff:7f00:1')).toBe(true);
+    expect(isPrivateAddress('::ffff:ac10:1')).toBe(true);
+    expect(isPrivateAddress('::ffff:5db8:d822')).toBe(false);
+  });
+
   it('records redirects and final response metadata', async () => {
     const transport: SourceTransport = (url) =>
       Promise.resolve(
