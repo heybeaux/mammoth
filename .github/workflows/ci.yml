@@ -60,6 +60,9 @@ jobs:
       - name: Verify Phase 2
         run: pnpm verify:phase-2
 
+      - name: Verify adapter contracts
+        run: pnpm verify:adapters
+
       - name: Verify runtime composition
         run: pnpm verify:m2
 
