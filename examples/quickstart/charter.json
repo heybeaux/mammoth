@@ -1,0 +1,28 @@
+{
+  "programId": "quickstart-example-domains",
+  "criterionId": "criterion:quickstart-example-domains:v1",
+  "title": "Reserved example domains",
+  "question": "Which domains does the checked-in source identify as reserved for documentation?",
+  "sourceUrl": "https://www.rfc-editor.org/rfc/rfc2606",
+  "sourcePath": "./source-rfc2606.txt",
+  "evidencePolicyId": "policy:public-direct-locator-v1",
+  "evidencePolicyVersion": "1.0.0",
+  "proposals": [
+    {
+      "id": "claim:quickstart:reserved-domains",
+      "canonicalText": "IANA has reserved example.com, example.net, and example.org for use in documentation.",
+      "subject": "IANA",
+      "predicate": "has reserved for use in documentation",
+      "object": "example.com, example.net, and example.org",
+      "supportingQuote": "The Internet Assigned Numbers Authority (IANA) has reserved example.com, example.net, and example.org for use in documentation."
+    },
+    {
+      "id": "claim:quickstart:https-guarantee",
+      "canonicalText": "IANA guarantees that the reserved example domains always support HTTPS.",
+      "subject": "IANA",
+      "predicate": "guarantees",
+      "object": "the reserved example domains always support HTTPS",
+      "supportingQuote": "IANA guarantees that the reserved example domains always support HTTPS."
+    }
+  ]
+}

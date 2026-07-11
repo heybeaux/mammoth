@@ -104,6 +104,46 @@ describe('mammoth operator CLI spawned-process behavior', () => {
     await writeFile(charterPath, JSON.stringify(charter(programId)));
   });
 
+  it('shows discoverable help from either conventional help flag', async () => {
+    for (const flag of ['--help', '-h']) {
+      const result = await invoke(workspace, flag);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stderr).toBe('');
+      expect(result.stdout).toContain('mammoth run <charter>');
+      expect(result.stdout).toContain('--root <directory>');
+      expect(result.stdout).toContain('-h, --help');
+    }
+  });
+
+  it('runs the checked-in README quickstart without network access', async () => {
+    const quickstartRoot = join(await temporaryRoot(), 'programs');
+    const quickstartCharter = join(
+      repositoryRoot,
+      'examples/quickstart/charter.json',
+    );
+    const result = await invoke(
+      repositoryRoot,
+      'run',
+      quickstartCharter,
+      '--root',
+      quickstartRoot,
+      '--json',
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(json(result)).toMatchObject({
+      ok: true,
+      command: 'run',
+      programId: 'quickstart-example-domains',
+      status: 'completed',
+      result: {
+        publicationStatus: 'evidence_complete',
+        supportedClaimIds: ['claim:quickstart:reserved-domains'],
+        unresolvedClaimIds: ['claim:quickstart:https-guarantee'],
+      },
+    });
+  });
+
   it('runs a charter and emits a stable JSON envelope', async () => {
     const result = await invoke(
       workspace,
