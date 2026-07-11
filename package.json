@@ -17,6 +17,7 @@
     "verify:evidence": "tsx scripts/verify-phase-0.ts",
     "verify:audit": "tsx scripts/verify-phase-0.ts",
     "verify:phase-1": "pnpm --filter @mammoth/retrieval --filter @mammoth/persistence --filter @mammoth/report-compiler test",
+    "verify:phase-2": "pnpm --filter @mammoth/workflow --filter @mammoth/work-queue --filter @mammoth/governance test",
     "eval:offline": "tsx scripts/verify-phase-0.ts"
   },
   "devDependencies": {

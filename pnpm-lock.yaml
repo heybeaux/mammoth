@@ -64,6 +64,22 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@22.20.1)(tsx@4.20.3)
 
+  packages/governance:
+    dependencies:
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.15.34
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
+
   packages/persistence:
     dependencies:
       '@mammoth/domain':
@@ -109,6 +125,30 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.0.0
+        version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
+
+  packages/work-queue:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.15.34
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
+
+  packages/workflow:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.15.34
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.0
         version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
 
 packages:
