@@ -2,10 +2,12 @@
 
 ## Mission and authority
 
-Build Mammoth to the initial checkpoint in `MVP_PLAN.md`. `ARCHITECTURE.md` is the
-normative architecture, `MVP_PLAN.md` defines checkpoint scope, and `LOOP.md`
-defines execution. Preserve architecture invariants if any wording conflicts and
-record the conflict instead of weakening a gate.
+Build Mammoth from the completed `v0.1.0-mvp` baseline through the active batch in
+`POST_MVP_ROADMAP.md`. `ARCHITECTURE.md` is the normative architecture,
+`POST_MVP_ROADMAP.md` defines post-MVP sequencing, `MVP_PLAN.md` records the
+completed initial checkpoint, and `LOOP.md` defines execution. Preserve
+architecture invariants if any wording conflicts and record the conflict instead
+of weakening a gate.
 
 Workers may inspect, implement, test, commit, push, open or review pull requests,
 repair CI, and merge accepted work without human confirmation until the checkpoint.
