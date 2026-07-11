@@ -21,6 +21,8 @@
     "verify:phase-2": "pnpm --filter @mammoth/workflow --filter @mammoth/work-queue --filter @mammoth/governance test",
     "verify:m2": "pnpm --filter @mammoth/mvp-fixture test && pnpm --filter @mammoth/runtime test",
     "verify:m3": "pnpm --filter @mammoth/cli test",
+    "verify:m4": "tsx scripts/verify-mvp.ts",
+    "verify:mvp": "pnpm verify:evidence && pnpm verify:audit && pnpm verify:phase-1 && pnpm verify:phase-2 && pnpm verify:m2 && pnpm verify:m3 && pnpm verify:m4",
     "eval:offline": "tsx scripts/verify-phase-0.ts"
   },
   "devDependencies": {
