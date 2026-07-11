@@ -102,7 +102,7 @@ none of it is represented as part of this MVP.
 
 ```text
 revision: 2c3908276d4c8349179bb6e7cd9b82d63b0d8c0c
-pull requests: #1-#9, #11, and #12 merged
+pull requests: #1-#9 and #11-#13 merged
 default-branch CI: https://github.com/heybeaux/mammoth/actions/runs/29135142717
 verified at: 2026-07-10 18:46 America/Vancouver
 node: v22.22.2
