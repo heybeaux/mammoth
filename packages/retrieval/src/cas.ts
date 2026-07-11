@@ -38,7 +38,12 @@ export class FileContentStore {
       if (contentDigest(existing) !== digest)
         throw new Error(`CAS_COLLISION:${digest}`);
     }
-    return { digest, size: bytes.byteLength, path };
+    return {
+      digest,
+      size: bytes.byteLength,
+      storageUri: `file://${path}`,
+      path,
+    };
   }
 
   public async get(digest: string): Promise<Uint8Array> {

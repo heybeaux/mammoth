@@ -1,9 +1,20 @@
 import assert from 'node:assert/strict';
 import type { EpistemicLedger } from '@mammoth/persistence';
+import { contentDigest, type ContentAddressedStore } from '@mammoth/retrieval';
+import {
+  InMemoryWorkQueue,
+  type IdempotentExternalResult,
+  type SideEffectReceipt,
+  type WorkStateStore,
+} from '@mammoth/work-queue';
 import type { WorkflowExecution, WorkflowStore } from '@mammoth/workflow';
 
 export interface DurableAdapterFactory<T> {
   open(): Promise<T> | T;
+}
+
+export interface SynchronousDurableAdapterFactory<T> {
+  open(): T;
 }
 
 export async function verifyWorkflowStoreConformance(
@@ -74,6 +85,115 @@ export async function verifyEpistemicLedgerConformance(
     /intentional rollback/,
   );
   assert.equal((await reopened.read()).revision, 16);
+}
+
+export function verifyWorkStateStoreConformance(
+  factory: SynchronousDurableAdapterFactory<WorkStateStore>,
+): void {
+  const first = factory.open();
+  const second = factory.open();
+  assert.equal(first.load(), undefined);
+
+  for (let index = 0; index < 16; index += 1) {
+    const store = index % 2 === 0 ? first : second;
+    store.update((saved) => ({
+      result: undefined,
+      state: {
+        version: 1,
+        queue: saved?.queue ?? new InMemoryWorkQueue().snapshot(),
+        receipts: [
+          ...(saved?.receipts ?? []),
+          {
+            idempotencyKey: `conformance:${String(index)}`,
+            state: 'started',
+            startedAt: index,
+          },
+        ],
+      },
+    }));
+  }
+
+  const reopened = factory.open();
+  const committed = reopened.load();
+  assert.ok(committed);
+  assert.equal(committed.receipts.length, 16);
+  assert.equal(new Set(committed.receipts.map(receiptKey)).size, 16);
+
+  assert.throws(() =>
+    first.update(() => {
+      throw new Error('intentional rollback');
+    }),
+  );
+  assert.deepEqual(reopened.load(), committed);
+}
+
+export interface ExactlyOnceEffectRuntime {
+  executeExactlyOnce<TResult>(options: {
+    readonly idempotencyKey: string;
+    readonly execute: (
+      idempotencyKey: string,
+    ) => Promise<IdempotentExternalResult<TResult>>;
+  }): Promise<SideEffectReceipt<TResult> & { readonly state: 'completed' }>;
+}
+
+export async function verifyEffectReceiptConformance(
+  factory: DurableAdapterFactory<ExactlyOnceEffectRuntime>,
+): Promise<void> {
+  let effects = 0;
+  const execute = (key: string) => {
+    effects += 1;
+    return Promise.resolve({
+      providerReceiptId: `provider:${key}`,
+      result: { accepted: true },
+    });
+  };
+  const first = await factory.open();
+  const initial = await first.executeExactlyOnce({
+    idempotencyKey: 'effect:conformance',
+    execute,
+  });
+  const restarted = await factory.open();
+  const replayed = await restarted.executeExactlyOnce({
+    idempotencyKey: 'effect:conformance',
+    execute,
+  });
+  assert.deepEqual(replayed, initial);
+  assert.equal(effects, 1, 'completed effects must not execute after restart');
+}
+
+export interface CorruptibleContentAddressedStoreFactory
+  extends DurableAdapterFactory<ContentAddressedStore> {
+  corrupt(digest: string): Promise<void> | void;
+}
+
+export async function verifyContentAddressedStoreConformance(
+  factory: CorruptibleContentAddressedStoreFactory,
+): Promise<void> {
+  const bytes = new TextEncoder().encode('immutable conformance artifact');
+  const expectedDigest = contentDigest(bytes);
+  const first = await factory.open();
+  const stored = await first.put(bytes);
+  assert.equal(stored.digest, expectedDigest);
+  assert.equal(stored.size, bytes.byteLength);
+  assert.ok(stored.storageUri.length > 0);
+  assert.deepEqual(
+    await first.put(bytes),
+    stored,
+    'identical bytes must dedupe',
+  );
+
+  const reopened = await factory.open();
+  assert.deepEqual([...(await reopened.get(expectedDigest))], [...bytes]);
+  await assert.rejects(reopened.get('sha256:not-a-digest'), /INVALID_DIGEST/);
+  await factory.corrupt(expectedDigest);
+  await assert.rejects(
+    reopened.get(expectedDigest),
+    /INTEGRITY|DIGEST|CORRUPT|TAMPER/i,
+  );
+}
+
+function receiptKey(receipt: SideEffectReceipt): string {
+  return receipt.idempotencyKey;
 }
 
 function executionFixture(): WorkflowExecution {

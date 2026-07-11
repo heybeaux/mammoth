@@ -13,6 +13,12 @@ TypeScript compatibility:
   mutation, no lost updates, and rollback after a failed transaction.
 - `verifyEpistemicLedgerConformance` checks ordered revisions across independent
   adapter instances, durable reopen, and rollback after a failed transaction.
+- `verifyWorkStateStoreConformance` checks durable state across independent
+  adapter instances, unique receipt retention, and rollback.
+- `verifyEffectReceiptConformance` checks that a completed provider effect is not
+  executed again after runtime restart.
+- `verifyContentAddressedStoreConformance` checks deterministic addressing,
+  deduplication, durable reads, invalid digests, and fail-closed corruption reads.
 
 Production adapters must run these same helpers against their real backing
 services. Passing the local fixture does not certify a future adapter.

@@ -154,6 +154,7 @@ describe('parsing and immutable snapshots', () => {
     expect(new TextDecoder().decode(await store.get(first.digest))).toBe(
       'immutable',
     );
+    if (!first.path) throw new Error('expected local artifact path');
     await chmod(first.path, 0o640);
     await writeFile(first.path, 'tampered');
     await expect(store.get(first.digest)).rejects.toThrow(
@@ -180,6 +181,9 @@ describe('parsing and immutable snapshots', () => {
       contentDigest(encoder.encode('<p>A fact</p>')),
     );
     expect(snapshot.parsedArtifact.text).toBe('A fact');
+    if (!snapshot.contentObject.path || !snapshot.parsedObject.path) {
+      throw new Error('expected local artifact paths');
+    }
     expect(await readFile(snapshot.contentObject.path, 'utf8')).toBe(
       '<p>A fact</p>',
     );

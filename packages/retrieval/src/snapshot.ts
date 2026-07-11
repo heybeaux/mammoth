@@ -1,11 +1,14 @@
-import type { FileContentStore } from './cas.js';
 import { parseSource } from './parse.js';
 import { retrieveSource } from './retrieve.js';
-import type { SourceRequest, SourceSnapshot } from './types.js';
+import type {
+  ContentAddressedStore,
+  SourceRequest,
+  SourceSnapshot,
+} from './types.js';
 
 export async function snapshotSource(
   request: SourceRequest,
-  store: FileContentStore,
+  store: ContentAddressedStore,
   retrievalOptions: Parameters<typeof retrieveSource>[1] = {},
 ): Promise<SourceSnapshot> {
   const retrieved = await retrieveSource(request, retrievalOptions);

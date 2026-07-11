@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "@mammoth/persistence": "workspace:*",
+    "@mammoth/retrieval": "workspace:*",
+    "@mammoth/work-queue": "workspace:*",
     "@mammoth/workflow": "workspace:*"
   },
   "devDependencies": {
