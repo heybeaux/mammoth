@@ -13,6 +13,10 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "mammoth": "tsx apps/cli/src/bin.ts",
+    "profile:start": "pnpm --filter @mammoth/production-profile exec tsx src/cli.ts start",
+    "profile:status": "pnpm --filter @mammoth/production-profile exec tsx src/cli.ts status",
+    "profile:stop": "pnpm --filter @mammoth/production-profile exec tsx src/cli.ts stop",
+    "profile:kill": "pnpm --filter @mammoth/production-profile exec tsx src/cli.ts kill",
     "test": "pnpm -r --if-present run test",
     "typecheck": "tsc --noEmit && pnpm -r --if-present run typecheck",
     "verify:evidence": "tsx scripts/verify-phase-0.ts",
@@ -25,6 +29,9 @@
     "verify:m4": "pnpm build && tsx scripts/verify-mvp.ts",
     "verify:mvp": "pnpm verify:evidence && pnpm verify:audit && pnpm verify:phase-1 && pnpm verify:phase-2 && pnpm verify:m2 && pnpm verify:m3 && pnpm verify:m4",
     "verify:p2": "tsx scripts/verify-p2.ts",
+    "verify:p2:lifecycle": "pnpm --filter @mammoth/production-profile verify:lifecycle",
+    "verify:p2:backup": "pnpm --filter @mammoth/production-profile verify:backup",
+    "verify:p2:profile": "bash infra/verify-production-profile.sh",
     "eval:offline": "tsx scripts/verify-phase-0.ts"
   },
   "devDependencies": {

@@ -1,0 +1,30 @@
+{
+  "name": "@mammoth/production-profile",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "mammoth-profile": "./src/cli.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "verify:lifecycle": "tsx src/cli.ts verify-lifecycle",
+    "verify:backup": "tsx src/cli.ts verify-backup"
+  },
+  "dependencies": {
+    "@mammoth/postgres-adapter": "workspace:*",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.15.5",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}

@@ -33,6 +33,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Locate PostgreSQL native tools
+        run: pg_config --bindir
+
+      - name: Create ephemeral profile credential
+        run: echo "MAMMOTH_PG_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+
       - name: Check formatting
         run: pnpm format:check
 
@@ -77,3 +83,8 @@ jobs:
 
       - name: Verify MVP checkpoint
         run: pnpm verify:mvp
+
+      - name: Verify P2 production profile lifecycle and backup
+        env:
+          MAMMOTH_PROFILE_ROOT: ${{ runner.temp }}/mammoth-production-profile
+        run: pnpm verify:p2:profile
