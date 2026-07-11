@@ -6,6 +6,7 @@ import {
 } from './receipts.js';
 import type { LocalWorkStateStore } from './local-state.js';
 import type {
+  CancelWork,
   ClaimedWork,
   EnqueueWork,
   WorkItem,
@@ -18,25 +19,26 @@ import type {
  * local transaction can atomically commit with an external system.
  */
 export class DurableWorkRuntime {
-  public readonly queue: InMemoryWorkQueue;
-  public readonly receipts: InMemoryReceiptStore;
   readonly #store: LocalWorkStateStore;
   readonly #now: () => number;
 
   public constructor(store: LocalWorkStateStore, now: () => number = Date.now) {
     this.#store = store;
     this.#now = now;
-    const saved = store.load();
-    this.queue = new InMemoryWorkQueue(now, saved?.queue);
-    this.receipts = new InMemoryReceiptStore(saved?.receipts);
+  }
+
+  public get queue(): InMemoryWorkQueue {
+    return new InMemoryWorkQueue(this.#now, this.#store.load()?.queue);
+  }
+
+  public get receipts(): InMemoryReceiptStore {
+    return new InMemoryReceiptStore(this.#store.load()?.receipts);
   }
 
   public enqueue<TKind extends string, TInput>(
     request: EnqueueWork<TKind, TInput>,
   ): WorkItem<TKind, TInput> {
-    const item = this.queue.enqueue(request);
-    this.#persist();
-    return item;
+    return this.#transition((queue) => queue.enqueue(request));
   }
 
   public claim(
@@ -44,9 +46,9 @@ export class DurableWorkRuntime {
     workerId: string,
     leaseDurationMs: number,
   ): ClaimedWork | undefined {
-    const claimed = this.queue.claim(queue, workerId, leaseDurationMs);
-    if (claimed) this.#persist();
-    return claimed;
+    return this.#transition((state) =>
+      state.claim(queue, workerId, leaseDurationMs),
+    );
   }
 
   public heartbeat(
@@ -54,8 +56,9 @@ export class DurableWorkRuntime {
     leaseToken: string,
     leaseDurationMs: number,
   ): void {
-    this.queue.heartbeat(id, leaseToken, leaseDurationMs);
-    this.#persist();
+    this.#transition((queue) => {
+      queue.heartbeat(id, leaseToken, leaseDurationMs);
+    });
   }
 
   public complete<TOutput>(
@@ -63,9 +66,7 @@ export class DurableWorkRuntime {
     leaseToken: string,
     output: TOutput,
   ): WorkItem<string, unknown, TOutput> {
-    const item = this.queue.complete(id, leaseToken, output);
-    this.#persist();
-    return item;
+    return this.#transition((queue) => queue.complete(id, leaseToken, output));
   }
 
   public fail(
@@ -74,15 +75,16 @@ export class DurableWorkRuntime {
     message: string,
     retryable = true,
   ): WorkItem {
-    const item = this.queue.fail(id, leaseToken, message, retryable);
-    this.#persist();
-    return item;
+    return this.#transition((queue) =>
+      queue.fail(id, leaseToken, message, retryable),
+    );
   }
 
-  public cancel(id: string): WorkItem {
-    const item = this.queue.cancel(id);
-    this.#persist();
-    return item;
+  public cancel<TPartial>(
+    id: string,
+    cancellation: CancelWork<TPartial>,
+  ): WorkItem {
+    return this.#transition((queue) => queue.cancel(id, cancellation));
   }
 
   public async executeExactlyOnce<TResult>(options: {
@@ -93,24 +95,47 @@ export class DurableWorkRuntime {
   }): Promise<SideEffectReceipt<TResult> & { readonly state: 'completed' }> {
     const existing = this.receipts.get<TResult>(options.idempotencyKey);
     if (existing?.state === 'completed') return existing;
-    this.receipts.begin(options.idempotencyKey, this.#now());
-    this.#persist();
+    this.#receiptTransition((receipts) =>
+      receipts.begin(options.idempotencyKey, this.#now()),
+    );
     const external = await options.execute(options.idempotencyKey);
-    const receipt = this.receipts.complete(
-      options.idempotencyKey,
-      external.providerReceiptId,
-      external.result,
-      this.#now(),
+    return this.#receiptTransition((receipts) =>
+      receipts.complete(
+        options.idempotencyKey,
+        external.providerReceiptId,
+        external.result,
+        this.#now(),
+      ),
     ) as SideEffectReceipt<TResult> & { readonly state: 'completed' };
-    this.#persist();
-    return receipt;
   }
 
-  #persist(): void {
-    this.#store.save({
-      version: 1,
-      queue: this.queue.snapshot(),
-      receipts: this.receipts.snapshot(),
+  #transition<T>(operation: (queue: InMemoryWorkQueue) => T): T {
+    return this.#store.update((saved) => {
+      const queue = new InMemoryWorkQueue(this.#now, saved?.queue);
+      const result = operation(queue);
+      return {
+        result,
+        state: {
+          version: 1,
+          queue: queue.snapshot(),
+          receipts: saved?.receipts ?? [],
+        },
+      };
+    });
+  }
+
+  #receiptTransition<T>(operation: (receipts: InMemoryReceiptStore) => T): T {
+    return this.#store.update((saved) => {
+      const receipts = new InMemoryReceiptStore(saved?.receipts);
+      const result = operation(receipts);
+      return {
+        result,
+        state: {
+          version: 1,
+          queue: saved?.queue ?? new InMemoryWorkQueue(this.#now).snapshot(),
+          receipts: receipts.snapshot(),
+        },
+      };
     });
   }
 }

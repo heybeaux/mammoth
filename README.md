@@ -52,6 +52,9 @@ assessment to fresh immutable evidence with an exact locator.
 MVP stores use atomic rename plus file and directory fsync; runtime ports remain
 compatible with a future Temporal and Postgres deployment.
 
+The MVP topology limits and production adapter boundary are recorded in
+[`docs/adr/0001-local-durable-runtime.md`](docs/adr/0001-local-durable-runtime.md).
+
 ## Quickstart
 
 The checked-in example is deterministic and network-free. It deliberately proposes

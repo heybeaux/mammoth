@@ -144,6 +144,97 @@ describe('WorkflowRuntime', () => {
     await runtime.runUntilIdle();
     expect(Object.values((await store.load()).executions)).toHaveLength(2);
   });
+
+  it('keeps old workflow versions available for in-flight executions', async () => {
+    const runtime = new WorkflowRuntime(new MemoryWorkflowStore()).register(
+      definition,
+    );
+    await runtime.start('research', { value: 3 }, 'versioned');
+    await runtime.tick();
+    runtime.register({
+      name: 'research',
+      version: 2,
+      steps: [
+        {
+          id: 'replacement',
+          execute: () => ({ kind: 'complete', output: 99 }),
+        },
+      ],
+    });
+    await runtime.runUntilIdle();
+    expect(await runtime.get('versioned')).toMatchObject({
+      definitionVersion: 1,
+      status: 'completed',
+      output: 6,
+    });
+    expect(
+      (await runtime.start('research', {}, 'new-version')).definitionVersion,
+    ).toBe(2);
+  });
+
+  it('cooperatively aborts an active step and preserves honest partial state', async () => {
+    let started!: () => void;
+    const running = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const runtime = new WorkflowRuntime(new MemoryWorkflowStore()).register({
+      name: 'cancellable',
+      version: 1,
+      steps: [
+        {
+          id: 'long',
+          execute: async ({ signal }) => {
+            started();
+            await new Promise<void>((_resolve, reject) => {
+              signal.addEventListener(
+                'abort',
+                () => {
+                  reject(new Error('aborted'));
+                },
+                { once: true },
+              );
+            });
+            return { kind: 'complete', output: 'impossible' };
+          },
+        },
+      ],
+    });
+    await runtime.start('cancellable', {}, 'cancel-active');
+    const tick = runtime.tick();
+    await running;
+    await runtime.cancel('cancel-active');
+    await tick;
+    expect(await runtime.get('cancel-active')).toMatchObject({
+      status: 'cancelled',
+      cancellation: { partialState: {} },
+    });
+    await expect(runtime.cancel('cancel-active')).resolves.toMatchObject({
+      partialState: {},
+    });
+  });
+
+  it('preserves starts from concurrent runtimes sharing a local store', async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), 'mammoth-workflow-concurrent-'),
+    );
+    directories.push(directory);
+    const path = join(directory, 'state.json');
+    const first = new WorkflowRuntime(new LocalWorkflowStore(path)).register(
+      definition,
+    );
+    const second = new WorkflowRuntime(new LocalWorkflowStore(path)).register(
+      definition,
+    );
+    await Promise.all([
+      first.start('research', { value: 1 }, 'concurrent-1'),
+      second.start('research', { value: 2 }, 'concurrent-2'),
+    ]);
+    const snapshot = await new LocalWorkflowStore(path).load();
+    expect(Object.keys(snapshot.executions).sort()).toEqual([
+      'concurrent-1',
+      'concurrent-2',
+    ]);
+  });
 });
 
 class MutableClock implements Clock {
@@ -172,6 +263,13 @@ class FailOnSaveStore implements WorkflowStore {
     this.#count += 1;
     if (this.#count === this.failAt) throw new Error('simulated process loss');
     await this.delegate.save(snapshot);
+  }
+  public async transact<T>(
+    mutate: (snapshot: WorkflowSnapshot) => T,
+  ): Promise<T> {
+    this.#count += 1;
+    if (this.#count === this.failAt) throw new Error('simulated process loss');
+    return this.delegate.transact(mutate);
   }
 }
 
