@@ -1,4 +1,11 @@
 #!/usr/bin/env node
-import { runCli } from './index.js';
+import { executeCli, nodeDependencies } from './operator.js';
+import { usage } from './parser.js';
 
-process.exitCode = await runCli(process.argv.slice(2));
+const args = process.argv.slice(2);
+if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
+  process.stdout.write(`${usage()}\n`);
+  process.exitCode = 0;
+} else {
+  process.exitCode = await executeCli(args, nodeDependencies());
+}

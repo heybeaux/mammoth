@@ -1,5 +1,6 @@
-import { lstat, mkdir, open, readFile, rename, stat } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { mkdir, open, readFile, realpath, rename } from 'node:fs/promises';
+import { dirname, join, relative, resolve } from 'node:path';
 import {
   canonicalDigest,
   canonicalJson,
@@ -35,60 +36,81 @@ import {
 import {
   RuntimeExecutionError,
   type RuntimeArtifactPaths,
-  type RuntimeCancelOptions,
+  type RuntimeAuditArtifact,
+  type RuntimeAuditEvent,
+  type RuntimeBudgetAmount,
   type RuntimeCharter,
-  type RuntimeInspection,
   type RuntimeOptions,
-  type RuntimePartialReceipt,
-  type RuntimeProgramReference,
-  type RuntimeProgramStatus,
-  type RuntimeProgramStatusResult,
   type RuntimeResult,
-  type RuntimeResumeOptions,
 } from './types.js';
 
 const WORKFLOW_NAME = 'mammoth.local-research-program';
 const WORKFLOW_VERSION = 1;
 const COMPILER_VERSION = '1.0.0';
 const ZERO_USAGE = { costUsd: 0, tokens: 0, durationMs: 0 } as const;
+const DEFAULT_BUDGET = { costUsd: 0, tokens: 0, durationMs: 1_000 } as const;
+type PipelineTarget =
+  | 'snapshot'
+  | 'budget'
+  | 'assessment'
+  | 'ledger'
+  | 'report'
+  | 'receipt';
 
 /** Runs the deterministic local MVP program and returns only after durable output exists. */
 export async function runResearchProgram(
   options: RuntimeOptions,
 ): Promise<RuntimeResult> {
   validateCharter(options.charter);
+  const pinnedUsage = options.retrievalUsage ?? {
+    estimated: ZERO_USAGE,
+    actual: ZERO_USAGE,
+  };
+  validateUsage(pinnedUsage.estimated, 'estimated retrieval usage');
+  validateUsage(pinnedUsage.actual, 'actual retrieval usage');
   const paths = artifactPaths(options.rootDirectory, options.charter.programId);
-  await assertProgramDirectorySafe(paths);
   await mkdir(paths.programDirectory, { recursive: true });
+  await assertContainedDirectory(options.rootDirectory, paths.programDirectory);
   const clock = options.now ?? (() => new Date());
-  const operator = await readJsonIfPresent<OperatorState>(paths.operator);
-  if (operator?.status === 'cancelled') {
-    throw new RuntimeExecutionError(
-      'PROGRAM_CANCELLED',
-      `program ${options.charter.programId} is cancelled`,
-    );
-  }
+  const evaluationTimestamp = await persistCharter(
+    paths.charter,
+    options.charter,
+    clock().toISOString(),
+    pinnedUsage,
+  );
   const workflowStore = new LocalWorkflowStore(paths.workflow);
   const workflow = new WorkflowRuntime(workflowStore, {
     now: clock,
   });
   let result: RuntimeResult | undefined;
+  const stableKey = `${options.charter.programId}:${WORKFLOW_NAME}:v${String(WORKFLOW_VERSION)}`;
+  const pipelineStep = (id: string, target: PipelineTarget) => ({
+    id,
+    execute: async () => {
+      const stageResult = await executePipeline(
+        options,
+        paths,
+        stableKey,
+        target,
+        evaluationTimestamp,
+      );
+      if (stageResult) {
+        result = stageResult;
+        return { kind: 'complete' as const, output: stageResult };
+      }
+      return { kind: 'advance' as const, state: { [id]: 'committed' } };
+    },
+  });
   const definition: WorkflowDefinition<RuntimeCharter, RuntimeResult> = {
     name: WORKFLOW_NAME,
     version: WORKFLOW_VERSION,
     steps: [
-      {
-        id: 'evidence-first-runtime',
-        execute: async ({ executionId }) => {
-          result = await executePipeline(
-            options,
-            paths,
-            executionId,
-            `${options.charter.programId}:${WORKFLOW_NAME}:v${String(WORKFLOW_VERSION)}:evidence-first-runtime`,
-          );
-          return { kind: 'complete', output: result };
-        },
-      },
+      pipelineStep('commit-budget', 'budget'),
+      pipelineStep('snapshot-source', 'snapshot'),
+      pipelineStep('assess-claims', 'assessment'),
+      pipelineStep('persist-ledger', 'ledger'),
+      pipelineStep('compile-report', 'report'),
+      pipelineStep('commit-receipt', 'receipt'),
     ],
   };
   workflow.register(definition);
@@ -101,15 +123,7 @@ export async function runResearchProgram(
     )
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   const alreadyCompleted = prior.find(({ status }) => status === 'completed');
-  if (alreadyCompleted) {
-    await writeOperatorState(paths, {
-      programId: options.charter.programId,
-      executionId: alreadyCompleted.id,
-      status: 'completed',
-      updatedAt: alreadyCompleted.updatedAt,
-    });
-    return alreadyCompleted.output as RuntimeResult;
-  }
+  if (alreadyCompleted) return alreadyCompleted.output as RuntimeResult;
   const latest = prior.at(-1);
   const executionId =
     latest?.status === 'failed'
@@ -117,253 +131,77 @@ export async function runResearchProgram(
       : (latest?.id ?? executionBase);
   if (!latest || latest.status === 'failed')
     await workflow.start(WORKFLOW_NAME, options.charter, executionId);
-  await writeOperatorState(paths, {
-    programId: options.charter.programId,
-    executionId,
-    status: 'running',
-    updatedAt: clock().toISOString(),
-  });
   await workflow.runUntilIdle();
   const completed = await workflow.get(executionId);
   if (completed?.status !== 'completed') {
-    const cancelled = await readJsonIfPresent<OperatorState>(paths.operator);
-    if (cancelled?.status === 'cancelled') {
-      throw new RuntimeExecutionError(
-        'PROGRAM_CANCELLED',
-        `program ${options.charter.programId} is cancelled`,
-      );
-    }
-    await writeOperatorState(paths, {
-      programId: options.charter.programId,
-      executionId,
-      status: 'interrupted',
-      updatedAt: completed?.updatedAt ?? clock().toISOString(),
-      ...(completed?.error ? { error: completed.error } : {}),
-    });
     throw new RuntimeExecutionError(
       'WORKFLOW_FAILED',
       completed?.error ?? 'runtime workflow failed without an error',
     );
   }
-  const runtimeResult = (result ?? completed.output) as RuntimeResult;
-  await writeOperatorState(paths, {
-    programId: options.charter.programId,
-    executionId,
-    status: 'completed',
-    updatedAt: completed.updatedAt,
-  });
-  return runtimeResult;
-}
-
-/** Reads durable state without executing work. Safe to call from a fresh process. */
-export async function getResearchProgramStatus(
-  reference: RuntimeProgramReference,
-): Promise<RuntimeProgramStatusResult> {
-  validateProgramId(reference.programId);
-  const paths = artifactPaths(reference.rootDirectory, reference.programId);
-  await assertProgramDirectorySafe(paths);
-  const operator = await readJsonIfPresent<OperatorState>(paths.operator);
-  const snapshot = await loadWorkflowSnapshot(paths.workflow);
-  const executions = Object.values(snapshot.executions).filter(
-    ({ workflow }) => workflow === WORKFLOW_NAME,
-  );
-  if (!operator && executions.length === 0) {
-    throw new RuntimeExecutionError(
-      'PROGRAM_NOT_FOUND',
-      `program ${reference.programId} was not found`,
-    );
-  }
-  if (operator?.status === 'cancelled') {
-    return {
-      programId: reference.programId,
-      status: 'cancelled',
-      ...(operator.executionId ? { executionId: operator.executionId } : {}),
-      updatedAt: operator.updatedAt,
-      resumable: false,
-      paths,
-    };
-  }
-  const latest = executions
-    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-    .at(-1);
-  const status = latest
-    ? publicStatus(latest.status)
-    : (operator?.status ?? 'interrupted');
-  const updatedAt = latest?.updatedAt ?? operator?.updatedAt;
-  return {
-    programId: reference.programId,
-    status,
-    ...(latest?.id ? { executionId: latest.id } : {}),
-    ...(updatedAt ? { updatedAt } : {}),
-    resumable: status === 'interrupted',
-    paths,
-    ...(latest?.error ? { error: latest.error } : {}),
-  };
-}
-
-/** Resumes a failed/interrupted program using its durably stored charter. */
-export async function resumeResearchProgram(
-  options: RuntimeResumeOptions,
-): Promise<RuntimeResult> {
-  const status = await getResearchProgramStatus(options);
-  if (status.status === 'cancelled') {
-    throw new RuntimeExecutionError(
-      'PROGRAM_CANCELLED',
-      'cancelled programs cannot resume',
-    );
-  }
-  if (!status.resumable) {
-    throw new RuntimeExecutionError(
-      'PROGRAM_NOT_RESUMABLE',
-      `program is ${status.status}, not interrupted`,
-    );
-  }
-  const snapshot = await loadWorkflowSnapshot(status.paths.workflow);
-  const latest = Object.values(snapshot.executions)
-    .filter(({ workflow }) => workflow === WORKFLOW_NAME)
-    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-    .at(-1);
-  if (!latest) {
-    throw new RuntimeExecutionError(
-      'PROGRAM_NOT_FOUND',
-      'stored workflow input is missing',
-    );
-  }
-  const charter = latest.input as RuntimeCharter;
-  validateCharter(charter);
-  return runResearchProgram({
-    rootDirectory: options.rootDirectory,
-    charter,
-    transport: options.transport,
-    ...(options.resolveHost ? { resolveHost: options.resolveHost } : {}),
-    ...(options.now ? { now: options.now } : {}),
-    ...(options.onStage ? { onStage: options.onStage } : {}),
-  });
-}
-
-/** Marks a program terminal and records exactly which artifacts existed at cancellation. */
-export async function cancelResearchProgram(
-  options: RuntimeCancelOptions,
-): Promise<RuntimePartialReceipt> {
-  const status = await getResearchProgramStatus(options);
-  if (status.status === 'cancelled') {
-    const existing = await readJsonIfPresent<RuntimePartialReceipt>(
-      status.paths.receipt,
-    );
-    if (existing?.status === 'cancelled') return existing;
-  }
-  if (status.status === 'completed') {
-    throw new RuntimeExecutionError(
-      'PROGRAM_NOT_RESUMABLE',
-      'completed programs cannot be cancelled',
-    );
-  }
-  const issuedAt = (options.now ?? (() => new Date()))().toISOString();
-  await writeOperatorState(status.paths, {
-    programId: options.programId,
-    ...(status.executionId ? { executionId: status.executionId } : {}),
-    status: 'cancelled',
-    updatedAt: issuedAt,
-  });
-  const completedArtifacts: Record<string, string> = {};
-  const missingArtifacts: string[] = [];
-  for (const name of Object.keys(
-    status.paths,
-  ) as (keyof RuntimeArtifactPaths)[]) {
-    const path = status.paths[name];
-    if (
-      name === 'programDirectory' ||
-      name === 'receipt' ||
-      name === 'operator'
-    )
-      continue;
-    const content = await readFileIfPresent(path);
-    if (content) completedArtifacts[name] = canonicalDigest(content);
-    else missingArtifacts.push(name);
-  }
-  const body = {
-    id: `${options.programId}:receipt:cancelled`,
-    programId: options.programId,
-    ...(status.executionId ? { executionId: status.executionId } : {}),
-    status: 'cancelled' as const,
-    publicationStatus: 'partial' as const,
-    completedArtifacts,
-    missingArtifacts,
-    issuedAt,
-  };
-  const receipt: RuntimePartialReceipt = {
-    ...body,
-    integrityHash: canonicalDigest(body),
-  };
-  await writeJson(status.paths.receipt, receipt);
-  return receipt;
-}
-
-/** Returns a non-authoritative operator projection over all durable artifacts. */
-export async function inspectResearchProgram(
-  reference: RuntimeProgramReference,
-): Promise<RuntimeInspection> {
-  const status = await getResearchProgramStatus(reference);
-  const snapshot = await loadWorkflowSnapshot(status.paths.workflow);
-  const artifacts: RuntimeInspection['artifacts'] = {};
-  for (const name of Object.keys(
-    status.paths,
-  ) as (keyof RuntimeArtifactPaths)[]) {
-    const path = status.paths[name];
-    if (name === 'programDirectory') continue;
-    const info = await statIfPresent(path);
-    artifacts[name] = {
-      path,
-      present: Boolean(info),
-      ...(info ? { byteLength: Number(info.size) } : {}),
-    };
-  }
-  const ledger = await readJsonIfPresent<{
-    claims?: unknown[];
-    evidence?: unknown[];
-    assessments?: unknown[];
-  }>(status.paths.ledger);
-  return {
-    status,
-    artifacts,
-    ...((await readJsonIfPresent(status.paths.receipt))
-      ? { receipt: await readJsonIfPresent(status.paths.receipt) }
-      : {}),
-    executions: Object.values(snapshot.executions)
-      .filter(({ workflow }) => workflow === WORKFLOW_NAME)
-      .map(({ id, status: executionStatus, attempt, updatedAt, error }) => ({
-        id,
-        status: executionStatus,
-        attempt,
-        updatedAt,
-        ...(error ? { error } : {}),
-      })),
-    ...(ledger
-      ? {
-          ledger: {
-            claimCount: ledger.claims?.length ?? 0,
-            evidenceCount: ledger.evidence?.length ?? 0,
-            assessmentCount: ledger.assessments?.length ?? 0,
-          },
-        }
-      : {}),
-  };
+  return (result ?? completed.output) as RuntimeResult;
 }
 
 async function executePipeline(
   options: RuntimeOptions,
   paths: RuntimeArtifactPaths,
-  executionId: string,
   workflowIdempotencyKey: string,
-): Promise<RuntimeResult> {
+  target: PipelineTarget,
+  evaluationTimestamp: string,
+): Promise<RuntimeResult | undefined> {
   const { charter } = options;
-  const now = (options.now ?? (() => new Date()))().toISOString();
+  const logicalExecutionId = `${charter.programId}:runtime:v${String(WORKFLOW_VERSION)}`;
+  const now = evaluationTimestamp;
   const nowMs = Date.parse(now);
+  const usage = options.retrievalUsage ?? {
+    estimated: ZERO_USAGE,
+    actual: ZERO_USAGE,
+  };
+  const workId = `${charter.programId}:retrieve`;
+  const governanceStore = new LocalGovernanceStore(paths.governance);
+  const governance =
+    (await governanceStore.load(() => now)) ??
+    new GovernanceCoordinator(governanceStore, () => now);
+  const accountId = `${charter.programId}:budget`;
+  if (!governance.getBudgetAccount(accountId)) {
+    await governance.createBudgetAccount(
+      {
+        id: accountId,
+        programId: charter.programId,
+        limit: charter.budgetLimit ?? DEFAULT_BUDGET,
+      },
+      'runtime-local',
+    );
+  }
+  const reservationId = `${charter.programId}:budget:runtime`;
+  if (!governance.getBudgetReservation(reservationId)) {
+    await governance.reserveBudget(
+      {
+        id: reservationId,
+        accountId,
+        workItemId: workId,
+        idempotencyKey: `${workflowIdempotencyKey}:budget`,
+        amount: usage.estimated,
+      },
+      'runtime-local',
+    );
+  }
+  await options.onStage?.('budget_committed');
+  if (target === 'budget') {
+    await appendRuntimeAudit(
+      paths.audit,
+      charter.programId,
+      now,
+      'stage.committed',
+      'budget_committed',
+    );
+    return undefined;
+  }
+
   const work = new DurableWorkRuntime(
     new LocalWorkStateStore(paths.queue),
     () => nowMs,
   );
-  const workId = `${charter.programId}:retrieve`;
   const queued = work.enqueue({
     id: workId,
     programId: charter.programId,
@@ -399,41 +237,29 @@ async function executePipeline(
     snapshot = sideEffect.result;
     work.complete(workId, claimed.leaseToken, snapshot);
   }
+  await validateSnapshotIntegrity(snapshot);
+  await writeJson(paths.snapshot, {
+    schemaVersion: 1,
+    kind: 'source_snapshot',
+    programId: charter.programId,
+    snapshot,
+    canonicalDigest: canonicalDigest(snapshot),
+  });
   await options.onStage?.('snapshot_committed');
-  await assertNotCancelled(paths, charter.programId);
+  if (target === 'snapshot') {
+    await appendRuntimeAudit(
+      paths.audit,
+      charter.programId,
+      now,
+      'stage.committed',
+      'snapshot_committed',
+    );
+    return undefined;
+  }
 
-  const governanceStore = new LocalGovernanceStore(paths.governance);
-  const governance =
-    (await governanceStore.load(() => now)) ??
-    new GovernanceCoordinator(governanceStore, () => now);
-  const accountId = `${charter.programId}:budget`;
-  if (!governance.budgets.getAccount(accountId)) {
-    governance.budgets.createAccount(
-      {
-        id: accountId,
-        programId: charter.programId,
-        limit: { costUsd: 0, tokens: 0, durationMs: 1_000 },
-      },
-      'runtime-local',
-    );
+  if (governance.getBudgetReservation(reservationId)?.state === 'reserved') {
+    await governance.commitBudget(reservationId, usage.actual, 'runtime-local');
   }
-  const reservationId = `${charter.programId}:budget:runtime`;
-  if (!governance.budgets.getReservation(reservationId)) {
-    governance.budgets.reserve(
-      {
-        id: reservationId,
-        accountId,
-        workItemId: workId,
-        idempotencyKey: `${workflowIdempotencyKey}:budget`,
-        amount: ZERO_USAGE,
-      },
-      'runtime-local',
-    );
-  }
-  if (governance.budgets.getReservation(reservationId)?.state === 'reserved') {
-    governance.budgets.commit(reservationId, ZERO_USAGE, 'runtime-local');
-  }
-  await governance.checkpoint();
 
   const lineage: SourceLineage = {
     id: `${charter.programId}:lineage:source`,
@@ -447,6 +273,10 @@ async function executePipeline(
     kind: 'web_snapshot',
     sourceUri: snapshot.finalUrl,
     retrievedAt: snapshot.retrievedAt,
+    ...(charter.sourceExpiresAt ? { expiresAt: charter.sourceExpiresAt } : {}),
+    ...(charter.sourceRevalidateAfter
+      ? { revalidateAfter: charter.sourceRevalidateAfter }
+      : {}),
     contentDigest: snapshot.contentDigest,
     storageUri: `cas://${snapshot.contentDigest}`,
     mediaType: snapshot.mediaType,
@@ -459,122 +289,213 @@ async function executePipeline(
     injectionRisk: 'low',
     dataClassification: 'public',
   };
-  const assessed = charter.proposals.map((proposal, index) => {
-    const startOffset = snapshot.parsedArtifact.text.indexOf(
-      proposal.supportingQuote,
-    );
-    const edge: ClaimEvidenceEdge | undefined =
-      startOffset < 0
-        ? undefined
-        : {
-            id: `${proposal.id}:edge:source`,
-            claimId: proposal.id,
-            evidenceId: evidence.id,
-            stance: 'supports',
-            entailment: 'direct',
-            locator: {
-              startOffset,
-              endOffset: startOffset + proposal.supportingQuote.length,
-            },
-            extractedByWorkItemId: `${charter.programId}:locate:${String(index)}`,
-            checkedByWorkItemId: `${charter.programId}:assess:${String(index)}`,
-            extractionDigest: canonicalDigest({
-              quote: proposal.supportingQuote,
-              startOffset,
-              snapshotDigest: snapshot.contentDigest,
-            }),
-          };
-    const verdict = evaluateEvidencePolicy({
-      claimId: proposal.id,
-      artifacts: [
+  let revalidationSchedule;
+  if (charter.sourceRevalidateAfter) {
+    const scheduleId = `${charter.programId}:revalidate:snapshot`;
+    if (!governance.getRevalidation(scheduleId)) {
+      await governance.scheduleRevalidation(
         {
-          id: evidence.id,
-          kind: evidence.kind,
-          retrievedAt: evidence.retrievedAt,
-          contentDigest: evidence.contentDigest,
-          sourceLineageId: evidence.sourceLineageId,
+          id: scheduleId,
+          programId: charter.programId,
+          subjectType: 'evidence',
+          subjectId: evidence.id,
+          dueAt: charter.sourceRevalidateAfter,
         },
-      ],
-      edges: edge
-        ? [
-            {
-              claimId: edge.claimId,
-              evidenceId: edge.evidenceId,
-              stance: edge.stance,
-              entailment: edge.entailment,
+        'runtime-local',
+      );
+    }
+    revalidationSchedule = governance.getRevalidation(scheduleId);
+  }
+  await writeJson(paths.revalidation, {
+    schemaVersion: 1,
+    kind: 'revalidation_schedule',
+    programId: charter.programId,
+    schedules: revalidationSchedule ? [revalidationSchedule] : [],
+  });
+  const assessed = await Promise.all(
+    charter.proposals.map(async (proposal, index) => {
+      const discoveredOffset = snapshot.parsedArtifact.text.indexOf(
+        proposal.supportingQuote,
+      );
+      const startOffset = proposal.locator?.startOffset ?? discoveredOffset;
+      const endOffset =
+        proposal.locator?.endOffset ??
+        startOffset + proposal.supportingQuote.length;
+      if (
+        proposal.locator &&
+        (startOffset < 0 ||
+          endOffset < startOffset ||
+          snapshot.parsedArtifact.text.slice(startOffset, endOffset) !==
+            proposal.supportingQuote)
+      ) {
+        throw new RuntimeExecutionError(
+          'INVALID_LOCATOR',
+          `declared locator does not select supporting quote for ${proposal.id}`,
+        );
+      }
+      const verification =
+        discoveredOffset < 0
+          ? undefined
+          : await options.verifyEntailment({
+              claim: proposal,
+              sourceText: snapshot.parsedArtifact.text,
+              quote: proposal.supportingQuote,
+              locator: { startOffset, endOffset },
+              snapshotDigest: snapshot.contentDigest,
+            });
+      if (
+        verification &&
+        (!verification.receiptId.trim() ||
+          !verification.verifierId.trim() ||
+          !verification.verifierVersion.trim())
+      ) {
+        throw new RuntimeExecutionError(
+          'CLAIM_COMMIT_DENIED',
+          `entailment verification for ${proposal.id} lacks an attributable receipt`,
+        );
+      }
+      const edge: ClaimEvidenceEdge | undefined =
+        discoveredOffset < 0 || !verification?.entails
+          ? undefined
+          : {
+              id: `${proposal.id}:edge:source`,
+              claimId: proposal.id,
+              evidenceId: evidence.id,
+              stance: 'supports',
+              entailment: 'direct',
               locator: {
-                ...(edge.locator.startOffset === undefined
-                  ? {}
-                  : { startOffset: edge.locator.startOffset }),
-                ...(edge.locator.endOffset === undefined
-                  ? {}
-                  : { endOffset: edge.locator.endOffset }),
+                startOffset,
+                endOffset,
               },
-            },
-          ]
-        : [],
-      evaluatedAt: now,
-    });
-    const assessment: ClaimAssessment = {
-      id: `${proposal.id}:assessment`,
-      claimId: proposal.id,
-      policyId: charter.evidencePolicyId,
-      policyVersion: charter.evidencePolicyVersion,
-      verdict: verdict.status,
-      reasonCodes: verdict.reasons,
-      metrics: {
-        evidenceCoverage: verdict.trusted ? 1 : 0,
-        directEntailmentCoverage: verdict.trusted ? 1 : 0,
-        sourceIndependence: verdict.trusted ? 1 : 0,
-        freshness: 1,
-        reproducibility: 1,
-        contradictionWeight: 0,
-        correlatedVerifierRisk: 0,
-      },
-      evidenceIds: verdict.acceptedEvidenceIds,
-      evaluatedAt: now,
-      evaluatorDigest: canonicalDigest({
+              extractedByWorkItemId: `${charter.programId}:locate:${String(index)}`,
+              checkedByWorkItemId: `${charter.programId}:assess:${String(index)}`,
+              extractionDigest: canonicalDigest({
+                quote: proposal.supportingQuote,
+                startOffset,
+                snapshotDigest: snapshot.contentDigest,
+                entailmentVerification: verification,
+              }),
+            };
+      const verdict = evaluateEvidencePolicy({
+        claimId: proposal.id,
+        artifacts: [
+          {
+            id: evidence.id,
+            kind: evidence.kind,
+            retrievedAt: evidence.retrievedAt,
+            contentDigest: evidence.contentDigest,
+            sourceLineageId: evidence.sourceLineageId,
+            ...(evidence.expiresAt ? { expiresAt: evidence.expiresAt } : {}),
+          },
+        ],
+        edges: edge
+          ? [
+              {
+                claimId: edge.claimId,
+                evidenceId: edge.evidenceId,
+                stance: edge.stance,
+                entailment: edge.entailment,
+                locator: {
+                  ...(edge.locator.startOffset === undefined
+                    ? {}
+                    : { startOffset: edge.locator.startOffset }),
+                  ...(edge.locator.endOffset === undefined
+                    ? {}
+                    : { endOffset: edge.locator.endOffset }),
+                },
+              },
+            ]
+          : [],
+        evaluatedAt: now,
+      });
+      const assessment: ClaimAssessment = {
+        id: `${proposal.id}:assessment`,
+        claimId: proposal.id,
         policyId: charter.evidencePolicyId,
         policyVersion: charter.evidencePolicyVersion,
-        verdict,
-      }),
-    };
-    const candidate: Claim = {
-      id: proposal.id,
-      programId: charter.programId,
-      criterionId: charter.criterionId,
-      version: 1,
-      kind: 'external_fact',
-      canonicalText: proposal.canonicalText,
-      subject: proposal.subject,
-      predicate: proposal.predicate,
-      object: proposal.object,
-      status: 'candidate',
-      observedAt: now,
-      recordedAt: now,
-      contradictedByClaimIds: [],
-      canonicalDigest: canonicalDigest({
+        verdict: verdict.status,
+        reasonCodes: verdict.reasons,
+        metrics: {
+          evidenceCoverage: verdict.trusted ? 1 : 0,
+          directEntailmentCoverage: verdict.trusted ? 1 : 0,
+          sourceIndependence: verdict.trusted ? 1 : 0,
+          freshness: verdict.status === 'expired' ? 0 : 1,
+          reproducibility: 1,
+          contradictionWeight: 0,
+          correlatedVerifierRisk: 0,
+        },
+        evidenceIds: verdict.acceptedEvidenceIds,
+        evaluatedAt: now,
+        evaluatorDigest: canonicalDigest({
+          policyId: charter.evidencePolicyId,
+          policyVersion: charter.evidencePolicyVersion,
+          verdict,
+        }),
+      };
+      const candidate: Claim = {
+        id: proposal.id,
+        programId: charter.programId,
+        criterionId: charter.criterionId,
+        version: 1,
+        kind: 'external_fact',
         canonicalText: proposal.canonicalText,
         subject: proposal.subject,
         predicate: proposal.predicate,
         object: proposal.object,
-      }),
-    };
-    const transition = validateClaimTransition(candidate, verdict.status, {
-      authority: 'evidence_policy',
-      assessment,
-    });
-    if (!transition.ok)
-      throw new Error(`CLAIM_COMMIT_DENIED:${transition.code}`);
-    const claim: Claim = {
-      ...candidate,
-      status: verdict.status,
-      assessmentId: assessment.id,
-    };
-    return { claim, assessment, edge };
+        status: 'candidate',
+        observedAt: now,
+        recordedAt: now,
+        contradictedByClaimIds: [],
+        canonicalDigest: canonicalDigest({
+          canonicalText: proposal.canonicalText,
+          subject: proposal.subject,
+          predicate: proposal.predicate,
+          object: proposal.object,
+        }),
+      };
+      const transition = validateClaimTransition(candidate, verdict.status, {
+        authority: 'evidence_policy',
+        assessment,
+      });
+      if (!transition.ok)
+        throw new Error(`CLAIM_COMMIT_DENIED:${transition.code}`);
+      const claim: Claim = {
+        ...candidate,
+        status: verdict.status,
+        assessmentId: assessment.id,
+      };
+      return { claim, assessment, edge, verification };
+    }),
+  );
+  await writeJson(paths.assessments, {
+    schemaVersion: 1,
+    kind: 'claim_assessments',
+    programId: charter.programId,
+    claims: assessed.map(({ claim }) => claim),
+    assessments: assessed.map(({ assessment }) => assessment),
+    edges: assessed.flatMap(({ edge }) => (edge ? [edge] : [])),
+    verifications: assessed.flatMap(({ claim, verification }) =>
+      verification ? [{ claimId: claim.id, ...verification }] : [],
+    ),
+    canonicalDigest: canonicalDigest(
+      assessed.map(({ claim, assessment, edge }) => ({
+        claim,
+        assessment,
+        edge,
+      })),
+    ),
   });
   await options.onStage?.('claims_assessed');
-  await assertNotCancelled(paths, charter.programId);
+  if (target === 'assessment') {
+    await appendRuntimeAudit(
+      paths.audit,
+      charter.programId,
+      now,
+      'stage.committed',
+      'claims_assessed',
+    );
+    return undefined;
+  }
 
   const ledger = new LocalJsonLedger(paths.ledger);
   await ledger.transact((draft) => {
@@ -589,7 +510,16 @@ async function executePipeline(
   });
   const persisted = await ledger.read();
   await options.onStage?.('ledger_committed');
-  await assertNotCancelled(paths, charter.programId);
+  if (target === 'ledger') {
+    await appendRuntimeAudit(
+      paths.audit,
+      charter.programId,
+      now,
+      'stage.committed',
+      'ledger_committed',
+    );
+    return undefined;
+  }
   const supported = assessed.filter(
     ({ claim }) => claim.status === 'supported',
   );
@@ -642,15 +572,37 @@ async function executePipeline(
       compilation.issues.map(({ code }) => code).join(','),
     );
   }
-  await writeDurable(paths.report, `${compilation.report.markdown}\n`);
+  const unresolvedSection = unresolved.length
+    ? [
+        '## Unresolved',
+        '',
+        ...unresolved.map(
+          ({ claim }) =>
+            `- \`${claim.id}\` — unresolved; excluded from supported findings.`,
+        ),
+      ].join('\n')
+    : '';
+  const dossier = [compilation.report.markdown, unresolvedSection]
+    .filter(Boolean)
+    .join('\n\n');
+  await writeDurable(paths.report, `${dossier}\n`);
   await writeJson(paths.manifest, manifest);
   await writeJson(paths.traces, compilation.report.traces);
   await options.onStage?.('report_compiled');
-  await assertNotCancelled(paths, charter.programId);
+  if (target === 'report') {
+    await appendRuntimeAudit(
+      paths.audit,
+      charter.programId,
+      now,
+      'stage.committed',
+      'report_compiled',
+    );
+    return undefined;
+  }
   const receiptBody = {
     id: manifest.receiptId,
     programId: charter.programId,
-    executionId,
+    executionId: logicalExecutionId,
     status: 'completed',
     publicationStatus: 'evidence_complete',
     snapshotDigest: snapshot.contentDigest,
@@ -659,7 +611,7 @@ async function executePipeline(
     artifacts: {
       ledger: canonicalDigest(persisted),
       manifest: canonicalDigest(manifest),
-      report: canonicalDigest(compilation.report.markdown),
+      report: canonicalDigest(dossier),
       traces: canonicalDigest(compilation.report.traces),
     },
     issuedAt: now,
@@ -668,10 +620,24 @@ async function executePipeline(
     ...receiptBody,
     integrityHash: canonicalDigest(receiptBody),
   });
-  await governance.checkpoint();
+  await options.onStage?.('receipt_committed');
+  await appendRuntimeAudit(
+    paths.audit,
+    charter.programId,
+    now,
+    'stage.committed',
+    'receipt_committed',
+  );
+  await appendRuntimeAudit(
+    paths.audit,
+    charter.programId,
+    now,
+    'runtime.completed',
+    'completed',
+  );
   return {
     programId: charter.programId,
-    executionId,
+    executionId: logicalExecutionId,
     status: 'completed',
     publicationStatus: 'evidence_complete',
     supportedClaimIds: receiptBody.supportedClaimIds,
@@ -682,7 +648,6 @@ async function executePipeline(
 }
 
 function validateCharter(charter: RuntimeCharter): void {
-  validateProgramId(charter.programId, 'INVALID_CHARTER');
   const required = [
     charter.programId,
     charter.criterionId,
@@ -697,7 +662,21 @@ function validateCharter(charter: RuntimeCharter): void {
       'INVALID_CHARTER',
       'required charter field missing',
     );
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(charter.programId)) {
+    throw new RuntimeExecutionError(
+      'INVALID_CHARTER',
+      'programId must be a path-safe identifier',
+    );
+  }
   new URL(charter.sourceUrl);
+  if (charter.budgetLimit) validateUsage(charter.budgetLimit, 'budget limit');
+  for (const [label, timestamp] of [
+    ['sourceExpiresAt', charter.sourceExpiresAt],
+    ['sourceRevalidateAfter', charter.sourceRevalidateAfter],
+  ] as const) {
+    if (timestamp !== undefined && !Number.isFinite(Date.parse(timestamp)))
+      throw new RuntimeExecutionError('INVALID_CHARTER', `${label} is invalid`);
+  }
   if (
     new Set(charter.proposals.map(({ id }) => id)).size !==
     charter.proposals.length
@@ -724,27 +703,16 @@ function validateCharter(charter: RuntimeCharter): void {
   }
 }
 
-function validateProgramId(
-  programId: string,
-  code: 'INVALID_PROGRAM_ID' | 'INVALID_CHARTER' = 'INVALID_PROGRAM_ID',
-): void {
-  // Program IDs become directory names. Keep the accepted alphabet deliberately
-  // narrow so platform-specific separators, dot traversal, controls, and
-  // normalization ambiguities cannot escape the configured root.
-  if (
-    !/^[A-Za-z0-9][A-Za-z0-9_:-]{0,127}$/.test(programId) ||
-    programId === '.' ||
-    programId === '..'
-  ) {
+function artifactPaths(root: string, programId: string): RuntimeArtifactPaths {
+  const resolvedRoot = resolve(root);
+  const programDirectory = resolve(resolvedRoot, programId);
+  const location = relative(resolvedRoot, programDirectory);
+  if (location.startsWith('..') || location === '') {
     throw new RuntimeExecutionError(
-      code,
-      'programId must be 1-128 ASCII letters, digits, colons, underscores, or hyphens',
+      'INVALID_CHARTER',
+      'program directory escapes or aliases the runtime root',
     );
   }
-}
-
-function artifactPaths(root: string, programId: string): RuntimeArtifactPaths {
-  const programDirectory = join(root, programId);
   return {
     programDirectory,
     ledger: join(programDirectory, 'ledger.json'),
@@ -755,102 +723,75 @@ function artifactPaths(root: string, programId: string): RuntimeArtifactPaths {
     manifest: join(programDirectory, 'manifest.json'),
     traces: join(programDirectory, 'traces.json'),
     receipt: join(programDirectory, 'receipt.json'),
-    operator: join(programDirectory, 'operator.json'),
+    snapshot: join(programDirectory, 'snapshot.json'),
+    assessments: join(programDirectory, 'assessments.json'),
+    charter: join(programDirectory, 'charter.json'),
+    audit: join(programDirectory, 'audit.json'),
+    revalidation: join(programDirectory, 'revalidation.json'),
   };
 }
 
-async function assertProgramDirectorySafe(
-  paths: RuntimeArtifactPaths,
-): Promise<void> {
+async function persistCharter(
+  path: string,
+  charter: RuntimeCharter,
+  proposedTimestamp: string,
+  retrievalUsage: {
+    estimated: RuntimeBudgetAmount;
+    actual: RuntimeBudgetAmount;
+  },
+): Promise<string> {
+  const digest = canonicalDigest(charter);
+  const runtimeOptionsDigest = canonicalDigest({ retrievalUsage });
   try {
-    if ((await lstat(paths.programDirectory)).isSymbolicLink()) {
+    const existing = JSON.parse(await readFile(path, 'utf8')) as {
+      schemaVersion?: unknown;
+      kind?: unknown;
+      digest?: unknown;
+      charter?: unknown;
+      evaluationTimestamp?: unknown;
+      runtimeOptionsDigest?: unknown;
+    };
+    if (
+      existing.schemaVersion !== 1 ||
+      existing.kind !== 'runtime_charter' ||
+      existing.digest !== digest ||
+      canonicalDigest(existing.charter) !== digest ||
+      existing.runtimeOptionsDigest !== runtimeOptionsDigest ||
+      typeof existing.evaluationTimestamp !== 'string' ||
+      !Number.isFinite(Date.parse(existing.evaluationTimestamp))
+    ) {
       throw new RuntimeExecutionError(
-        'INVALID_PROGRAM_ID',
-        'program directory must not be a symbolic link',
+        'INVALID_CHARTER',
+        'resume charter differs from the pinned durable charter',
       );
     }
+    return existing.evaluationTimestamp;
   } catch (error: unknown) {
-    if (isMissing(error)) return;
-    throw error;
+    if (!isMissing(error)) throw error;
   }
+  await writeJson(path, {
+    schemaVersion: 1,
+    kind: 'runtime_charter',
+    workflow: { name: WORKFLOW_NAME, version: WORKFLOW_VERSION },
+    digest,
+    charter,
+    evaluationTimestamp: proposedTimestamp,
+    runtimeOptionsDigest,
+    retrievalUsage,
+  });
+  return proposedTimestamp;
 }
 
-interface OperatorState {
-  programId: string;
-  executionId?: string;
-  status: RuntimeProgramStatus;
-  updatedAt: string;
-  error?: string;
-}
-
-async function writeOperatorState(
-  paths: RuntimeArtifactPaths,
-  state: OperatorState,
-): Promise<void> {
-  const current = await readJsonIfPresent<OperatorState>(paths.operator);
-  if (current?.status === 'cancelled' && state.status !== 'cancelled') return;
-  await writeJson(paths.operator, state);
-}
-
-async function assertNotCancelled(
-  paths: RuntimeArtifactPaths,
-  programId: string,
-): Promise<void> {
+function validateUsage(value: RuntimeBudgetAmount, label: string) {
   if (
-    (await readJsonIfPresent<OperatorState>(paths.operator))?.status ===
-    'cancelled'
+    !Number.isFinite(value.costUsd) ||
+    value.costUsd < 0 ||
+    !Number.isInteger(value.tokens) ||
+    value.tokens < 0 ||
+    !Number.isInteger(value.durationMs) ||
+    value.durationMs < 0
   ) {
-    throw new RuntimeExecutionError(
-      'PROGRAM_CANCELLED',
-      `program ${programId} is cancelled`,
-    );
-  }
-}
-
-async function loadWorkflowSnapshot(
-  path: string,
-): Promise<Awaited<ReturnType<LocalWorkflowStore['load']>>> {
-  return new LocalWorkflowStore(path).load();
-}
-
-function publicStatus(status: string): RuntimeProgramStatus {
-  if (status === 'failed') return 'interrupted';
-  if (
-    status === 'pending' ||
-    status === 'running' ||
-    status === 'waiting' ||
-    status === 'paused' ||
-    status === 'completed' ||
-    status === 'cancelled'
-  )
-    return status;
-  throw new Error(`unknown workflow status: ${status}`);
-}
-
-async function readJsonIfPresent<T = unknown>(
-  path: string,
-): Promise<T | undefined> {
-  const content = await readFileIfPresent(path);
-  return content ? (JSON.parse(content.toString('utf8')) as T) : undefined;
-}
-
-async function readFileIfPresent(path: string): Promise<Buffer | undefined> {
-  try {
-    return await readFile(path);
-  } catch (error: unknown) {
-    if (isMissing(error)) return undefined;
-    throw error;
-  }
-}
-
-async function statIfPresent(
-  path: string,
-): Promise<Awaited<ReturnType<typeof stat>> | undefined> {
-  try {
-    return await stat(path);
-  } catch (error: unknown) {
-    if (isMissing(error)) return undefined;
-    throw error;
+    throw new RuntimeExecutionError('INVALID_CHARTER', `${label} is invalid`);
   }
 }
 
@@ -861,6 +802,148 @@ function isMissing(error: unknown): boolean {
     'code' in error &&
     error.code === 'ENOENT'
   );
+}
+
+async function assertContainedDirectory(root: string, child: string) {
+  const realRoot = await realpath(root);
+  const realChild = await realpath(child);
+  const location = relative(realRoot, realChild);
+  if (location.startsWith('..') || location === '') {
+    throw new RuntimeExecutionError(
+      'INVALID_CHARTER',
+      'program directory resolves outside the runtime root',
+    );
+  }
+}
+
+async function validateSnapshotIntegrity(
+  snapshot: SourceSnapshot,
+): Promise<void> {
+  const content = await readFile(snapshot.contentObject.path);
+  const parsed = await readFile(snapshot.parsedObject.path);
+  if (
+    canonicalDigestBytes(content) !== snapshot.contentDigest ||
+    canonicalDigestBytes(parsed) !== snapshot.parsedObject.digest
+  ) {
+    throw new RuntimeExecutionError(
+      'ARTIFACT_INTEGRITY_FAILED',
+      'snapshot CAS object failed digest validation',
+    );
+  }
+}
+
+function canonicalDigestBytes(bytes: Uint8Array): string {
+  // FileContentStore performs the authoritative digest check. Reuse its CAS URI
+  // algorithm through a temporary-free canonical byte digest calculation.
+  return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+}
+
+export async function verifyRuntimeAudit(
+  path: string,
+): Promise<RuntimeAuditArtifact> {
+  const input = JSON.parse(await readFile(path, 'utf8')) as unknown;
+  if (
+    !isRecord(input) ||
+    input.schemaVersion !== 1 ||
+    typeof input.streamId !== 'string' ||
+    !Array.isArray(input.events) ||
+    typeof input.eventCount !== 'number' ||
+    typeof input.highWaterSequence !== 'number' ||
+    typeof input.headHash !== 'string'
+  )
+    throw new RuntimeExecutionError(
+      'ARTIFACT_INTEGRITY_FAILED',
+      'invalid runtime audit envelope',
+    );
+  let previousHash = 'GENESIS';
+  for (const [sequence, value] of input.events.entries()) {
+    if (
+      !isRecord(value) ||
+      value.sequence !== sequence ||
+      value.previousHash !== previousHash ||
+      typeof value.eventHash !== 'string'
+    )
+      throw new RuntimeExecutionError(
+        'ARTIFACT_INTEGRITY_FAILED',
+        'runtime audit sequence is invalid',
+      );
+    const body = auditBody(value as unknown as RuntimeAuditEvent);
+    if (canonicalDigest(body) !== value.eventHash)
+      throw new RuntimeExecutionError(
+        'ARTIFACT_INTEGRITY_FAILED',
+        'runtime audit hash is invalid',
+      );
+    previousHash = value.eventHash;
+  }
+  if (
+    input.eventCount !== input.events.length ||
+    input.highWaterSequence !== input.events.length - 1 ||
+    input.headHash !== previousHash
+  )
+    throw new RuntimeExecutionError(
+      'ARTIFACT_INTEGRITY_FAILED',
+      'runtime audit checkpoint is invalid',
+    );
+  return input as unknown as RuntimeAuditArtifact;
+}
+
+async function appendRuntimeAudit(
+  path: string,
+  programId: string,
+  occurredAt: string,
+  kind: RuntimeAuditEvent['kind'],
+  stage: RuntimeAuditEvent['stage'],
+) {
+  let artifact: RuntimeAuditArtifact;
+  try {
+    artifact = await verifyRuntimeAudit(path);
+  } catch (error: unknown) {
+    if (!isMissing(error)) throw error;
+    artifact = {
+      schemaVersion: 1,
+      streamId: `${programId}:runtime-audit`,
+      events: [],
+      eventCount: 0,
+      highWaterSequence: -1,
+      headHash: 'GENESIS',
+    };
+  }
+  const eventId = `${programId}:${kind}:${stage}`;
+  if (artifact.events.some((event) => event.eventId === eventId)) return;
+  const body = {
+    eventId,
+    sequence: artifact.events.length,
+    previousHash: artifact.headHash,
+    kind,
+    stage,
+    programId,
+    occurredAt,
+  };
+  const event: RuntimeAuditEvent = {
+    ...body,
+    eventHash: canonicalDigest(body),
+  };
+  artifact.events.push(event);
+  artifact.eventCount = artifact.events.length;
+  artifact.highWaterSequence = event.sequence;
+  artifact.headHash = event.eventHash;
+  await writeJson(path, artifact);
+}
+
+function auditBody(event: RuntimeAuditEvent) {
+  return {
+    eventId: event.eventId,
+    sequence: event.sequence,
+    previousHash: event.previousHash,
+    kind: event.kind,
+    stage: event.stage,
+    programId: event.programId,
+    occurredAt: event.occurredAt,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 async function writeJson(path: string, value: unknown): Promise<void> {

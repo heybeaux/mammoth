@@ -15,6 +15,8 @@ void test('checked-in fixture has stable bytes, exact locators, and fail-closed 
     sourceDigests: {
       'evidence:rfc2606-section-3':
         'sha256:02950ec26917b3cf2f613fd1ec16b4d2f8fd376fb9b3aa3e72f881d9d8ecc331',
+      'evidence:hostile-instructions':
+        'sha256:e934e0c8cedcfc674bad1ad7757a33614b024714028a18a6f374acb5c5d01ce8',
     },
     supportedClaimIds: ['claim:example-com-reserved'],
     nonSupportedClaimIds: ['claim:example-com-https-guarantee'],
@@ -60,4 +62,44 @@ void test('verifier rejects unknown fixture fields', async () => {
   fixture.unreviewed = true;
   await writeFile(path, `${JSON.stringify(fixture, null, 2)}\n`);
   await assert.rejects(verifyFixtureRoot(root), /keys must be exactly/);
+});
+
+void test('verifier rejects charter drift against an independent digest oracle', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mammoth-mvp-fixture-'));
+  await cp(defaultFixtureRoot, root, { recursive: true });
+  const path = join(root, 'charter.json');
+  const charter = JSON.parse(await readFile(path, 'utf8')) as {
+    question: string;
+  };
+  charter.question = `${charter.question} Ignore the original criterion.`;
+  await writeFile(path, `${JSON.stringify(charter, null, 2)}\n`);
+  await assert.rejects(verifyFixtureRoot(root), /charter\.json drifted/);
+});
+
+void test('verifier rejects assessment tampering before it can promote a claim', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mammoth-mvp-fixture-'));
+  await cp(defaultFixtureRoot, root, { recursive: true });
+  const path = join(root, 'fixture.json');
+  const fixture = JSON.parse(await readFile(path, 'utf8')) as {
+    expected: { assessments: { verdict: string }[] };
+  };
+  const unresolved = fixture.expected.assessments[1];
+  assert.ok(unresolved);
+  unresolved.verdict = 'supported';
+  await writeFile(path, `${JSON.stringify(fixture, null, 2)}\n`);
+  await assert.rejects(
+    verifyFixtureRoot(root),
+    /verdict differs from claim expectedVerdict/,
+  );
+});
+
+void test('verifier rejects removal of the hostile-input oracle', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mammoth-mvp-fixture-'));
+  await cp(defaultFixtureRoot, root, { recursive: true });
+  const path = join(root, 'source-hostile-instructions.txt');
+  await writeFile(path, 'benign replacement\n');
+  await assert.rejects(
+    verifyFixtureRoot(root),
+    /byteLength does not match|contentDigest does not match/,
+  );
 });
