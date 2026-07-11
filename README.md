@@ -2,7 +2,10 @@
 
 Local-first, hybrid, long-horizon epistemic engine.
 
-The active delivery contract is documented in [MVP_PLAN.md](MVP_PLAN.md).
+The completed MVP contract is documented in [MVP_PLAN.md](MVP_PLAN.md). Active
+post-MVP delivery is sequenced in
+[POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md): production adapters first, then
+broader research-cell orchestration.
 Autonomous workers follow [AGENTS.md](AGENTS.md) and [LOOP.md](LOOP.md).
 
 ## Development
