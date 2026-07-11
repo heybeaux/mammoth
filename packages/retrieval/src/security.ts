@@ -9,20 +9,40 @@ const PRIVATE_V4 = [
   /^0\./,
 ];
 
+function mappedIpv4(address: string): string | undefined {
+  const normalized = address.toLowerCase();
+  if (!normalized.startsWith('::ffff:')) return undefined;
+  const suffix = normalized.slice('::ffff:'.length);
+  if (isIP(suffix) === 4) return suffix;
+  const words = suffix.split(':');
+  if (words.length !== 2) return undefined;
+  const high = Number.parseInt(words[0] ?? '', 16);
+  const low = Number.parseInt(words[1] ?? '', 16);
+  if (
+    !Number.isInteger(high) ||
+    !Number.isInteger(low) ||
+    high < 0 ||
+    high > 0xffff ||
+    low < 0 ||
+    low > 0xffff
+  )
+    return undefined;
+  return `${String(high >>> 8)}.${String(high & 0xff)}.${String(low >>> 8)}.${String(low & 0xff)}`;
+}
+
 export function isPrivateAddress(address: string): boolean {
   if (isIP(address) === 4)
     return PRIVATE_V4.some((range) => range.test(address));
   if (isIP(address) === 6) {
     const normalized = address.toLowerCase();
+    const mapped = mappedIpv4(normalized);
     return (
       normalized === '::' ||
       normalized === '::1' ||
       normalized.startsWith('fc') ||
       normalized.startsWith('fd') ||
       /^fe[89ab]/.test(normalized) ||
-      normalized.startsWith('::ffff:127.') ||
-      normalized.startsWith('::ffff:10.') ||
-      normalized.startsWith('::ffff:192.168.')
+      (mapped !== undefined && isPrivateAddress(mapped))
     );
   }
   return true;
