@@ -1,6 +1,6 @@
 # Mammoth Initial MVP Plan
 
-> Status: active
+> Status: initial MVP complete
 >
 > Checkpoint: `v0.1.0-mvp`
 >

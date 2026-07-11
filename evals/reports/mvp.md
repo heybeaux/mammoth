@@ -1,11 +1,11 @@
 # Initial MVP evaluation receipt
 
-> Status: clean-checkout gate passed; pending merge and default-branch CI
+> Status: accepted on the default branch
 >
 > Checkpoint: `v0.1.0-mvp`
 >
-> The complete ladder passed from a detached clean checkout of revision
-> `26a5a6e`. Default-branch completion remains an external merge/CI gate.
+> The complete ladder passed from clean checkouts and on default-branch revision
+> `2c39082` in GitHub Actions run `29135142717`.
 
 ## Criterion
 
@@ -49,20 +49,20 @@ pnpm verify:mvp
 
 Record results:
 
-| Gate                           | Result  | Evidence                                            |
-| ------------------------------ | ------- | --------------------------------------------------- |
-| Frozen install                 | pass    | pnpm 8.15.6; lockfile SHA-256 `b3243286…c898`       |
-| Formatting                     | pass    | `pnpm format:check`                                 |
-| Lint                           | pass    | `pnpm lint`                                         |
-| Typecheck                      | pass    | `pnpm typecheck` across 13 workspace projects       |
-| Unit/integration tests         | pass    | 116 tests across package and acceptance suites      |
-| Build                          | pass    | `pnpm build`; bundled Node 22 CLI produced          |
-| Phase 0 evidence/audit/offline | pass    | cases=4, checks=7                                   |
-| Phase 1                        | pass    | 21 tests                                            |
-| Phase 2                        | pass    | 31 tests plus 10 repeated workflow-concurrency runs |
-| Fixture oracle                 | pass    | pinned RFC and hostile-source digests verified      |
-| Black-box MVP                  | pass    | 14 fresh-process, security, and integrity checks    |
-| Default-branch CI              | pending | merge revision and workflow URL                     |
+| Gate                           | Result | Evidence                                            |
+| ------------------------------ | ------ | --------------------------------------------------- |
+| Frozen install                 | pass   | pnpm 8.15.6; lockfile SHA-256 `b3243286…c898`       |
+| Formatting                     | pass   | `pnpm format:check`                                 |
+| Lint                           | pass   | `pnpm lint`                                         |
+| Typecheck                      | pass   | `pnpm typecheck` across 13 workspace projects       |
+| Unit/integration tests         | pass   | 118 tests across package and acceptance suites      |
+| Build                          | pass   | `pnpm build`; bundled Node 22 CLI produced          |
+| Phase 0 evidence/audit/offline | pass   | cases=4, checks=7                                   |
+| Phase 1                        | pass   | 21 tests                                            |
+| Phase 2                        | pass   | 31 tests plus 10 repeated workflow-concurrency runs |
+| Fixture oracle                 | pass   | pinned RFC and hostile-source digests verified      |
+| Black-box MVP                  | pass   | 14 fresh-process, security, and integrity checks    |
+| Default-branch CI              | pass   | run `29135142717` on revision `2c39082`             |
 
 ## Black-box evidence required
 
@@ -87,7 +87,7 @@ for every operator command and independently verify:
   the trusted deterministic verifier contract;
 - artifacts remain readable by a later process.
 
-## Current limitations and pending evidence
+## Current limitations
 
 The current working-tree black-box verifier proves built-CLI run/pause/resume,
 artifact traces, raw and parsed CAS digests, completion and cancellation receipt
@@ -95,21 +95,16 @@ integrity, sequenced audit projection, idempotent rerun, budget exhaustion befor
 transport, durable revalidation, verifier-authority spoof rejection, and explicit
 tamper rejection.
 
-The complete clean-checkout ladder and root verifier now pass. Final acceptance
-remains pending only until this integration branch is merged and its
-default-branch CI run is green.
-
-Do not record `v0.1.0-mvp`, tag a release, or report the checkpoint complete while
-any row or limitation above remains pending.
+The initial checkpoint is accepted. Deferred product scope remains listed below;
+none of it is represented as part of this MVP.
 
 ## Final checkpoint metadata
 
-Fill only after all gates pass:
-
 ```text
-revision: 26a5a6e5eb793bfa5b30715eba9623a308720a55
-pull requests: #1-#9 merged; final hardening PR pending
-verified at: 2026-07-10 18:28 America/Vancouver
+revision: 2c3908276d4c8349179bb6e7cd9b82d63b0d8c0c
+pull requests: #1-#9, #11, and #12 merged
+default-branch CI: https://github.com/heybeaux/mammoth/actions/runs/29135142717
+verified at: 2026-07-10 18:46 America/Vancouver
 node: v22.22.2
 pnpm: 8.15.6
 lockfile digest: b3243286d7838fdc85a80741691f0fb1c2230151c6a7654f3b9de58d77a0c898
