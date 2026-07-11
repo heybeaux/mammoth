@@ -442,8 +442,8 @@ async function executePipeline(
     (await governanceStore.load(() => now)) ??
     new GovernanceCoordinator(governanceStore, () => now);
   const accountId = `${charter.programId}:budget`;
-  if (!governance.budgets.getAccount(accountId)) {
-    governance.budgets.createAccount(
+  if (!governance.getBudgetAccount(accountId)) {
+    await governance.createBudgetAccount(
       {
         id: accountId,
         programId: charter.programId,
@@ -453,8 +453,8 @@ async function executePipeline(
     );
   }
   const reservationId = `${charter.programId}:budget:runtime`;
-  if (!governance.budgets.getReservation(reservationId)) {
-    governance.budgets.reserve(
+  if (!governance.getBudgetReservation(reservationId)) {
+    await governance.reserveBudget(
       {
         id: reservationId,
         accountId,
@@ -465,8 +465,8 @@ async function executePipeline(
       'runtime-local',
     );
   }
-  if (governance.budgets.getReservation(reservationId)?.state === 'reserved') {
-    governance.budgets.commit(reservationId, ZERO_USAGE, 'runtime-local');
+  if (governance.getBudgetReservation(reservationId)?.state === 'reserved') {
+    await governance.commitBudget(reservationId, ZERO_USAGE, 'runtime-local');
   }
   await governance.checkpoint();
 
@@ -495,8 +495,8 @@ async function executePipeline(
     dataClassification: 'public',
   };
   const revalidationId = `${charter.programId}:revalidate:${evidence.id}`;
-  if (!governance.revalidation.get(revalidationId)) {
-    governance.revalidation.schedule(
+  if (!governance.getRevalidation(revalidationId)) {
+    await governance.scheduleRevalidation(
       {
         id: revalidationId,
         programId: charter.programId,

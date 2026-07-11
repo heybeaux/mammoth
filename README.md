@@ -64,9 +64,9 @@ result is visible.
 ```sh
 pnpm install --frozen-lockfile
 pnpm --filter @mammoth/cli build
-pnpm mammoth run ./examples/quickstart/charter.json --root ./.mammoth --json
-pnpm mammoth status quickstart-example-domains --root ./.mammoth --json
-pnpm mammoth inspect quickstart-example-domains --root ./.mammoth --json
+pnpm --silent mammoth run ./examples/quickstart/charter.json --root ./.mammoth --json
+pnpm --silent mammoth status quickstart-example-domains --root ./.mammoth --json
+pnpm --silent mammoth inspect quickstart-example-domains --root ./.mammoth --json
 ```
 
 Interrupted programs can be continued with `mammoth resume`; `mammoth cancel`
