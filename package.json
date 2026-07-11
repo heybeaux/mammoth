@@ -22,7 +22,7 @@
     "verify:m2": "pnpm --filter @mammoth/mvp-fixture test && pnpm --filter @mammoth/runtime test",
     "verify:m3": "pnpm --filter @mammoth/cli test",
     "verify:m4": "tsx scripts/verify-mvp.ts",
-    "verify:mvp": "pnpm verify:evidence && pnpm verify:audit && pnpm verify:phase-1 && pnpm verify:phase-2 && pnpm verify:m2 && pnpm verify:m3 && pnpm verify:m4",
+    "verify:mvp": "pnpm install --frozen-lockfile && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:evidence && pnpm verify:audit && pnpm verify:phase-1 && pnpm verify:phase-2 && pnpm verify:m2 && pnpm verify:m3 && pnpm verify:m4 && pnpm --filter @mammoth/mvp-acceptance verify",
     "eval:offline": "tsx scripts/verify-phase-0.ts"
   },
   "devDependencies": {

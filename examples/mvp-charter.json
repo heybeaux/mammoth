@@ -1,0 +1,28 @@
+{
+  "programId": "mvp-example-domains",
+  "criterionId": "criterion:mvp-example-domains:v1",
+  "title": "Reserved example domains",
+  "question": "What does RFC 2606 establish about example.com?",
+  "sourceUrl": "https://www.rfc-editor.org/rfc/rfc2606.txt",
+  "sourcePath": "../evals/fixtures/mvp/source-rfc2606.txt",
+  "evidencePolicyId": "policy:public-direct-locator-v1",
+  "evidencePolicyVersion": "1.0.0",
+  "proposals": [
+    {
+      "id": "claim:example-com-reserved",
+      "canonicalText": "IANA reserves example.com for use as an example.",
+      "subject": "IANA",
+      "predicate": "reserves for use as an example",
+      "object": "example.com",
+      "supportingQuote": "The Internet Assigned Numbers Authority (IANA) also currently has the\nfollowing second level domain names reserved which can be used as examples.\n\nexample.com"
+    },
+    {
+      "id": "claim:example-com-https-guarantee",
+      "canonicalText": "IANA guarantees that example.com remains reachable over HTTPS.",
+      "subject": "IANA",
+      "predicate": "guarantees HTTPS reachability",
+      "object": "example.com",
+      "supportingQuote": "No exact source passage supports this proposed claim."
+    }
+  ]
+}

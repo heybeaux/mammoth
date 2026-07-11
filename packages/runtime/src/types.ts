@@ -35,7 +35,8 @@ export type RuntimeStage =
   | 'snapshot_committed'
   | 'claims_assessed'
   | 'ledger_committed'
-  | 'report_compiled';
+  | 'report_compiled'
+  | 'receipt_committed';
 
 export interface RuntimeArtifactPaths {
   programDirectory: string;
@@ -110,6 +111,10 @@ export interface RuntimePartialReceipt {
 
 export interface RuntimeInspection {
   status: RuntimeProgramStatusResult;
+  integrity: {
+    status: 'verified';
+    checks: string[];
+  };
   artifacts: Record<
     string,
     { path: string; present: boolean; byteLength?: number }
@@ -138,7 +143,9 @@ export type RuntimeErrorCode =
   | 'PROGRAM_NOT_FOUND'
   | 'INVALID_PROGRAM_ID'
   | 'PROGRAM_CANCELLED'
-  | 'PROGRAM_NOT_RESUMABLE';
+  | 'PROGRAM_NOT_RESUMABLE'
+  | 'PROGRAM_ACTIVE'
+  | 'INTEGRITY_FAILED';
 
 export class RuntimeExecutionError extends Error {
   public constructor(

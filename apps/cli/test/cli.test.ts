@@ -388,4 +388,70 @@ describe('mammoth operator CLI spawned-process behavior', () => {
     });
     expect(missing.stderr).toContain('PROGRAM_NOT_FOUND');
   });
+
+  it('rejects hostile charter encodings, duplicate keys, unknown fields, and symlinks', async () => {
+    const cases: { name: string; content: string | Buffer }[] = [
+      {
+        name: 'duplicate',
+        content: JSON.stringify(charter('duplicate-charter')).replace(
+          '"title":',
+          '"title":"shadowed","title":',
+        ),
+      },
+      {
+        name: 'unknown',
+        content: JSON.stringify({
+          ...charter('unknown-charter'),
+          surprise: true,
+        }),
+      },
+      {
+        name: 'invalid-utf8',
+        content: Buffer.from([0x7b, 0x22, 0x78, 0x22, 0x3a, 0xff, 0x7d]),
+      },
+    ];
+    for (const hostile of cases) {
+      const path = join(workspace, `${hostile.name}.json`);
+      await writeFile(path, hostile.content);
+      const result = await invoke(
+        workspace,
+        'run',
+        path,
+        '--root',
+        root,
+        '--json',
+      );
+      expect(result.status, hostile.name).toBe(2);
+    }
+
+    const target = join(workspace, 'real-charter.json');
+    const link = join(workspace, 'linked-charter.json');
+    await writeFile(target, JSON.stringify(charter('linked-charter')));
+    await symlink(target, link);
+    const linked = await invoke(
+      workspace,
+      'run',
+      link,
+      '--root',
+      root,
+      '--json',
+    );
+    expect(linked.status).toBe(2);
+    expect(json(linked).error?.code).toBe('CHARTER_READ_FAILED');
+  });
+
+  it('rejects an oversized charter before allocating a program', async () => {
+    const path = join(workspace, 'oversized-charter.json');
+    await writeFile(path, ' '.repeat(1024 * 1024 + 1));
+    const result = await invoke(
+      workspace,
+      'run',
+      path,
+      '--root',
+      root,
+      '--json',
+    );
+    expect(result.status).toBe(2);
+    expect(json(result).error?.code).toBe('CHARTER_TOO_LARGE');
+  });
 });
