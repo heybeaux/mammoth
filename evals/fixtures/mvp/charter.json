@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "program:mvp-example-domains",
+  "title": "Reserved example domains",
+  "question": "Which example domain is reserved by IANA, and does the source establish an HTTPS availability guarantee?",
+  "criterion": {
+    "id": "criterion:mvp-example-domains:v1",
+    "version": 1,
+    "standard": "Accept only atomic claims directly entailed by an exact locator in the checked-in RFC 2606 snapshot.",
+    "admissibleEvidence": ["checked-in public standards snapshot"],
+    "prohibitedEvidence": ["model agreement", "uncaptured web snippets"],
+    "tiePolicy": "unresolved"
+  },
+  "evidencePolicyId": "policy:public-direct-locator-v1",
+  "budget": {
+    "maxCostUsd": 0,
+    "maxTokens": 0,
+    "maxDurationSeconds": 60
+  },
+  "stopConditions": ["fixture_processed", "budget_exhausted", "human_cancelled"]
+}

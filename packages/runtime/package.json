@@ -1,0 +1,29 @@
+{
+  "name": "@mammoth/runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mammoth/domain": "workspace:*",
+    "@mammoth/evidence": "workspace:*",
+    "@mammoth/governance": "workspace:*",
+    "@mammoth/persistence": "workspace:*",
+    "@mammoth/report-compiler": "workspace:*",
+    "@mammoth/retrieval": "workspace:*",
+    "@mammoth/work-queue": "workspace:*",
+    "@mammoth/workflow": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}

@@ -1,0 +1,9 @@
+RFC 2606 — Reserved Top Level DNS Names
+Section 3: Reserved Example Second Level Domain Names
+
+The Internet Assigned Numbers Authority (IANA) also currently has the
+following second level domain names reserved which can be used as examples.
+
+example.com
+example.net
+example.org

@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "1.0.0",
+  "fixtureId": "mvp-public-rfc2606-v1",
+  "clock": "2026-01-01T00:00:00.000Z",
+  "charterPath": "charter.json",
+  "sources": [
+    {
+      "id": "evidence:rfc2606-section-3",
+      "sourceUri": "https://www.rfc-editor.org/rfc/rfc2606.txt",
+      "publisher": "RFC Editor",
+      "mediaType": "text/plain",
+      "snapshotPath": "source-rfc2606.txt",
+      "retrievedAt": "2026-01-01T00:00:00.000Z",
+      "contentDigest": "sha256:02950ec26917b3cf2f613fd1ec16b4d2f8fd376fb9b3aa3e72f881d9d8ecc331",
+      "byteLength": 280,
+      "parsedTextDigest": "sha256:02950ec26917b3cf2f613fd1ec16b4d2f8fd376fb9b3aa3e72f881d9d8ecc331"
+    }
+  ],
+  "claims": [
+    {
+      "id": "claim:example-com-reserved",
+      "canonicalText": "IANA reserves example.com for use as an example.",
+      "subject": "IANA",
+      "predicate": "reserves for use as an example",
+      "object": "example.com",
+      "expectedVerdict": "supported"
+    },
+    {
+      "id": "claim:example-com-https-guarantee",
+      "canonicalText": "IANA guarantees that example.com remains reachable over HTTPS.",
+      "subject": "IANA",
+      "predicate": "guarantees HTTPS reachability",
+      "object": "example.com",
+      "expectedVerdict": "unresolved"
+    }
+  ],
+  "expected": {
+    "locators": [
+      {
+        "claimId": "claim:example-com-reserved",
+        "sourceId": "evidence:rfc2606-section-3",
+        "lineStart": 4,
+        "lineEnd": 7,
+        "startOffset": 95,
+        "endOffset": 253,
+        "exactText": "The Internet Assigned Numbers Authority (IANA) also currently has the\nfollowing second level domain names reserved which can be used as examples.\n\nexample.com",
+        "stance": "supports",
+        "entailment": "direct"
+      }
+    ],
+    "assessments": [
+      {
+        "claimId": "claim:example-com-reserved",
+        "policyId": "policy:public-direct-locator-v1",
+        "policyVersion": "1.0.0",
+        "verdict": "supported",
+        "reasonCodes": ["DIRECT_FRESH_SUPPORT"],
+        "evidenceIds": ["evidence:rfc2606-section-3"]
+      },
+      {
+        "claimId": "claim:example-com-https-guarantee",
+        "policyId": "policy:public-direct-locator-v1",
+        "policyVersion": "1.0.0",
+        "verdict": "unresolved",
+        "reasonCodes": ["NO_SUPPORTING_EDGE"],
+        "evidenceIds": []
+      }
+    ],
+    "renderedClaimIds": ["claim:example-com-reserved"],
+    "excludedClaimIds": ["claim:example-com-https-guarantee"]
+  }
+}
