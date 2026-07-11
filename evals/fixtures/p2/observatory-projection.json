@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-10T20:00:00.000Z",
+  "sourceRevision": "12",
+  "program": {
+    "id": "program-p2",
+    "title": "P2 production data",
+    "question": "Can production data remain inspectable?",
+    "status": "completed",
+    "criterionId": "criterion-1",
+    "criterionVersion": 1,
+    "evidencePolicyId": "policy-1",
+    "updatedAt": "2026-07-10T20:00:00.000Z"
+  },
+  "nodes": [
+    {
+      "kind": "claim",
+      "id": "claim-contradicted",
+      "canonicalText": "The projection may omit contradicted claims.",
+      "status": "contradicted",
+      "assessmentId": "assessment-contradicted",
+      "assessmentVerdict": "contradicted",
+      "policyId": "policy-1",
+      "policyVersion": "1.0.0",
+      "reasonCodes": ["direct_contradiction"]
+    },
+    {
+      "kind": "claim",
+      "id": "claim-supported",
+      "canonicalText": "The projection retains provenance.",
+      "status": "supported",
+      "assessmentId": "assessment-supported",
+      "assessmentVerdict": "supported",
+      "policyId": "policy-1",
+      "policyVersion": "1.0.0",
+      "reasonCodes": ["direct_fresh_support"]
+    },
+    {
+      "kind": "claim",
+      "id": "claim-unresolved",
+      "canonicalText": "Every future renderer will preserve provenance.",
+      "status": "unresolved",
+      "assessmentId": "assessment-unresolved",
+      "assessmentVerdict": "unresolved",
+      "policyId": "policy-1",
+      "policyVersion": "1.0.0",
+      "reasonCodes": ["insufficient_evidence"]
+    },
+    {
+      "kind": "evidence",
+      "id": "evidence-contradiction",
+      "evidenceKind": "test_output",
+      "contentDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "storageUri": "cas://sha256/2222222222222222222222222222222222222222222222222222222222222222",
+      "sourceLineageId": "lineage-1",
+      "retrievedAt": "2026-07-10T18:41:00.000Z"
+    },
+    {
+      "kind": "evidence",
+      "id": "evidence-support",
+      "evidenceKind": "test_output",
+      "contentDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "storageUri": "cas://sha256/1111111111111111111111111111111111111111111111111111111111111111",
+      "sourceLineageId": "lineage-1",
+      "retrievedAt": "2026-07-10T18:40:00.000Z"
+    }
+  ],
+  "edges": [
+    {
+      "id": "dependency-1",
+      "from": "claim-unresolved",
+      "to": "claim-supported",
+      "kind": "depends_on",
+      "status": "unresolved",
+      "dependencyKind": "requires"
+    },
+    {
+      "id": "edge-contradiction",
+      "from": "evidence-contradiction",
+      "to": "claim-contradicted",
+      "kind": "contradicts",
+      "status": "rejected",
+      "locator": {
+        "lineStart": 7,
+        "lineEnd": 7
+      }
+    },
+    {
+      "id": "edge-support",
+      "from": "evidence-support",
+      "to": "claim-supported",
+      "kind": "supports",
+      "status": "active",
+      "locator": {
+        "lineStart": 4,
+        "lineEnd": 4
+      }
+    }
+  ],
+  "timeline": [
+    {
+      "id": "audit-1",
+      "sequence": 1,
+      "occurredAt": "2026-07-10T18:00:00.000Z",
+      "kind": "program_created",
+      "summary": "Program created",
+      "claimIds": [],
+      "evidenceIds": [],
+      "eventHash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+      "previousHash": "GENESIS"
+    },
+    {
+      "id": "audit-2",
+      "sequence": 2,
+      "occurredAt": "2026-07-10T20:00:00.000Z",
+      "kind": "report_published",
+      "summary": "Dossier published",
+      "claimIds": ["claim-supported"],
+      "evidenceIds": ["evidence-support"],
+      "receiptId": "receipt-report",
+      "eventHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "previousHash": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+    }
+  ],
+  "dossier": {
+    "manifestId": "manifest-1",
+    "artifactId": "report-artifact-1",
+    "sentences": [
+      {
+        "factNodeId": "fact-1",
+        "sectionId": "section-1",
+        "sentence": "The projection retains provenance.",
+        "bindings": [
+          {
+            "claimId": "claim-supported",
+            "assessmentId": "assessment-supported",
+            "policyId": "policy-1",
+            "policyVersion": "1.0.0",
+            "evidenceId": "evidence-support",
+            "snapshotDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "locator": {
+              "lineStart": 4,
+              "lineEnd": 4
+            }
+          }
+        ]
+      }
+    ],
+    "excludedClaims": [
+      {
+        "claimId": "claim-contradicted",
+        "reason": "contradicted claim excluded by this dossier manifest"
+      },
+      {
+        "claimId": "claim-unresolved",
+        "reason": "unresolved claims are not rendered as factual sentences"
+      }
+    ]
+  },
+  "integrity": {
+    "canonicalDigest": "sha256:e882fbee57130952997e3913643c37933fc29f5ff8b19fb8da67cffe70fde33f",
+    "authoritativeRevision": 12,
+    "auditHeadHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "complete": true,
+    "omissions": []
+  }
+}

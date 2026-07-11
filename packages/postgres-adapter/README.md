@@ -36,3 +36,13 @@ and backup/restore coverage belongs to the later production-like profile gate.
 The D1 lifecycle descriptor deliberately does not advertise transactional-ledger
 or fencing capabilities. Those capabilities become eligible only after D2 lands
 and passes the frozen adapter conformance requirements.
+
+## Transactional epistemic ledger
+
+Migration v2 installs a single authoritative ledger row, immutable revision
+history, audit log, and publisher-facing outbox. `PostgresEpistemicLedger`
+commits all four in one injected-driver transaction. `transactAtRevision()`
+classifies stale compare-and-swap writers as retryable; invalid references and
+graph cycles are non-retryable. Rejected or rolled-back mutations produce no
+revision, audit record, or outbox event. Publication remains outside the
+authoritative transaction and consumes only committed outbox rows.

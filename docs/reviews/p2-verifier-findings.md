@@ -3,9 +3,9 @@
 ## Current verdict
 
 `v0.2.0-production-data` is **not verified**. The acceptance harness exists and
-the P1 contract-freeze plus D1 injected migration gates pass. D2 through D6 still
-lack required executable production evidence. The verifier intentionally exits
-non-zero and reports each absent target as `missing`.
+P1, D1, D2, D3, and D6 package gates pass. D4 durable work/effects/outbox and both
+D5 production-profile gates still lack executable evidence. The verifier
+intentionally exits non-zero and reports each absent target as `missing`.
 
 ## Verifier contract
 

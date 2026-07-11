@@ -1,0 +1,289 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-10T20:00:00.000Z",
+  "authoritativeRevision": 12,
+  "auditHeadHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "complete": true,
+  "omissions": [],
+  "program": {
+    "id": "program-p2",
+    "schemaVersion": "1.0.0",
+    "title": "P2 production data",
+    "question": "Can production data remain inspectable?",
+    "criterionId": "criterion-1",
+    "evidencePolicyId": "policy-1",
+    "humanApprovalPolicyId": "human-policy-1",
+    "riskClass": "moderate",
+    "budget": {
+      "maxCostUsd": 10,
+      "maxTokens": 1000,
+      "maxDurationSeconds": 3600
+    },
+    "stopConditions": [
+      {
+        "kind": "criterion_satisfied",
+        "description": "Projection is provenance-complete"
+      }
+    ],
+    "falsifiers": ["A rendered sentence lacks a claim ID"],
+    "status": "completed",
+    "createdAt": "2026-07-10T18:00:00.000Z",
+    "updatedAt": "2026-07-10T20:00:00.000Z",
+    "completedAt": "2026-07-10T20:00:00.000Z"
+  },
+  "criterion": {
+    "id": "criterion-1",
+    "programId": "program-p2",
+    "version": 1,
+    "question": "Can production data remain inspectable?",
+    "standard": "All rendered facts retain exact provenance",
+    "admissibleEvidence": ["immutable snapshot"],
+    "prohibitedEvidence": ["model agreement"],
+    "tiePolicy": "unresolved",
+    "canonicalDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "createdAt": "2026-07-10T18:00:00.000Z"
+  },
+  "claims": [
+    {
+      "id": "claim-supported",
+      "programId": "program-p2",
+      "criterionId": "criterion-1",
+      "version": 1,
+      "kind": "external_fact",
+      "canonicalText": "The projection retains provenance.",
+      "subject": "projection",
+      "predicate": "retains",
+      "object": "provenance",
+      "status": "supported",
+      "observedAt": "2026-07-10T18:30:00.000Z",
+      "recordedAt": "2026-07-10T18:31:00.000Z",
+      "contradictedByClaimIds": [],
+      "assessmentId": "assessment-supported",
+      "canonicalDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    {
+      "id": "claim-unresolved",
+      "programId": "program-p2",
+      "criterionId": "criterion-1",
+      "version": 1,
+      "kind": "hypothesis",
+      "canonicalText": "Every future renderer will preserve provenance.",
+      "subject": "renderer",
+      "predicate": "will preserve",
+      "object": "provenance",
+      "status": "unresolved",
+      "observedAt": "2026-07-10T18:32:00.000Z",
+      "recordedAt": "2026-07-10T18:33:00.000Z",
+      "contradictedByClaimIds": [],
+      "assessmentId": "assessment-unresolved",
+      "canonicalDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    {
+      "id": "claim-contradicted",
+      "programId": "program-p2",
+      "criterionId": "criterion-1",
+      "version": 1,
+      "kind": "external_fact",
+      "canonicalText": "The projection may omit contradicted claims.",
+      "subject": "projection",
+      "predicate": "may omit",
+      "object": "contradicted claims",
+      "status": "contradicted",
+      "observedAt": "2026-07-10T18:34:00.000Z",
+      "recordedAt": "2026-07-10T18:35:00.000Z",
+      "contradictedByClaimIds": ["claim-supported"],
+      "assessmentId": "assessment-contradicted",
+      "canonicalDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  ],
+  "assessments": [
+    {
+      "id": "assessment-supported",
+      "claimId": "claim-supported",
+      "policyId": "policy-1",
+      "policyVersion": "1.0.0",
+      "verdict": "supported",
+      "reasonCodes": ["direct_fresh_support"],
+      "metrics": {
+        "evidenceCoverage": 1,
+        "directEntailmentCoverage": 1,
+        "sourceIndependence": 1,
+        "freshness": 1,
+        "reproducibility": 1,
+        "contradictionWeight": 0,
+        "correlatedVerifierRisk": 0
+      },
+      "evidenceIds": ["evidence-support"],
+      "evaluatedAt": "2026-07-10T19:00:00.000Z",
+      "evaluatorDigest": "sha256:1212121212121212121212121212121212121212121212121212121212121212"
+    },
+    {
+      "id": "assessment-unresolved",
+      "claimId": "claim-unresolved",
+      "policyId": "policy-1",
+      "policyVersion": "1.0.0",
+      "verdict": "unresolved",
+      "reasonCodes": ["insufficient_evidence"],
+      "metrics": {
+        "evidenceCoverage": 0,
+        "directEntailmentCoverage": 0,
+        "sourceIndependence": 0,
+        "freshness": 0,
+        "reproducibility": 0,
+        "contradictionWeight": 0,
+        "correlatedVerifierRisk": 0
+      },
+      "evidenceIds": [],
+      "evaluatedAt": "2026-07-10T19:00:00.000Z",
+      "evaluatorDigest": "sha256:1313131313131313131313131313131313131313131313131313131313131313"
+    },
+    {
+      "id": "assessment-contradicted",
+      "claimId": "claim-contradicted",
+      "policyId": "policy-1",
+      "policyVersion": "1.0.0",
+      "verdict": "contradicted",
+      "reasonCodes": ["direct_contradiction"],
+      "metrics": {
+        "evidenceCoverage": 1,
+        "directEntailmentCoverage": 1,
+        "sourceIndependence": 1,
+        "freshness": 1,
+        "reproducibility": 1,
+        "contradictionWeight": 1,
+        "correlatedVerifierRisk": 0
+      },
+      "evidenceIds": ["evidence-contradiction"],
+      "evaluatedAt": "2026-07-10T19:00:00.000Z",
+      "evaluatorDigest": "sha256:1414141414141414141414141414141414141414141414141414141414141414"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "evidence-support",
+      "programId": "program-p2",
+      "kind": "test_output",
+      "retrievedAt": "2026-07-10T18:40:00.000Z",
+      "contentDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "storageUri": "cas://sha256/1111111111111111111111111111111111111111111111111111111111111111",
+      "mediaType": "text/plain",
+      "byteLength": 42,
+      "sourceLineageId": "lineage-1",
+      "upstreamEvidenceIds": [],
+      "injectionRisk": "low",
+      "dataClassification": "public"
+    },
+    {
+      "id": "evidence-contradiction",
+      "programId": "program-p2",
+      "kind": "test_output",
+      "retrievedAt": "2026-07-10T18:41:00.000Z",
+      "contentDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "storageUri": "cas://sha256/2222222222222222222222222222222222222222222222222222222222222222",
+      "mediaType": "text/plain",
+      "byteLength": 41,
+      "sourceLineageId": "lineage-1",
+      "upstreamEvidenceIds": [],
+      "injectionRisk": "low",
+      "dataClassification": "public"
+    }
+  ],
+  "claimEvidenceEdges": [
+    {
+      "id": "edge-support",
+      "claimId": "claim-supported",
+      "evidenceId": "evidence-support",
+      "stance": "supports",
+      "entailment": "direct",
+      "locator": { "lineStart": 4, "lineEnd": 4 },
+      "extractedByWorkItemId": "work-1",
+      "checkedByWorkItemId": "work-2",
+      "extractionDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "id": "edge-contradiction",
+      "claimId": "claim-contradicted",
+      "evidenceId": "evidence-contradiction",
+      "stance": "contradicts",
+      "entailment": "direct",
+      "locator": { "lineStart": 7, "lineEnd": 7 },
+      "extractedByWorkItemId": "work-1",
+      "checkedByWorkItemId": "work-2",
+      "extractionDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  ],
+  "claimDependencies": [
+    {
+      "id": "dependency-1",
+      "claimId": "claim-unresolved",
+      "dependsOnClaimId": "claim-supported",
+      "kind": "requires",
+      "rationale": "The forecast assumes the current contract"
+    }
+  ],
+  "sourceLineages": [
+    {
+      "id": "lineage-1",
+      "lineageType": "primary",
+      "parentLineageIds": [],
+      "independenceScore": 1
+    }
+  ],
+  "auditEvents": [
+    {
+      "id": "audit-1",
+      "sequence": 1,
+      "occurredAt": "2026-07-10T18:00:00.000Z",
+      "kind": "program_created",
+      "summary": "Program created",
+      "claimIds": [],
+      "evidenceIds": [],
+      "eventHash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+      "previousHash": "GENESIS"
+    },
+    {
+      "id": "audit-2",
+      "sequence": 2,
+      "occurredAt": "2026-07-10T20:00:00.000Z",
+      "kind": "report_published",
+      "summary": "Dossier published",
+      "claimIds": ["claim-supported"],
+      "evidenceIds": ["evidence-support"],
+      "receiptId": "receipt-report",
+      "eventHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "previousHash": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+    }
+  ],
+  "dossier": {
+    "manifestId": "manifest-1",
+    "artifactId": "report-artifact-1",
+    "traces": [
+      {
+        "factNodeId": "fact-1",
+        "sectionId": "section-1",
+        "sentence": "The projection retains provenance.",
+        "bindings": [
+          {
+            "claimId": "claim-supported",
+            "assessmentId": "assessment-supported",
+            "policyId": "policy-1",
+            "policyVersion": "1.0.0",
+            "evidenceId": "evidence-support",
+            "snapshotDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "locator": { "lineStart": 4, "lineEnd": 4 }
+          }
+        ]
+      }
+    ],
+    "excludedClaims": [
+      {
+        "claimId": "claim-unresolved",
+        "reason": "unresolved claims are not rendered as factual sentences"
+      },
+      {
+        "claimId": "claim-contradicted",
+        "reason": "contradicted claim excluded by this dossier manifest"
+      }
+    ]
+  }
+}

@@ -1,26 +1,22 @@
 {
-  "name": "@mammoth/postgres-adapter",
+  "name": "@mammoth/observatory-projection",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "import": "./dist/index.js"
-    }
+    ".": "./src/index.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
-    "test:ledger": "vitest run test/ledger.test.ts",
-    "test:migrations": "vitest run test/lifecycle.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mammoth/persistence": "workspace:*"
+    "@mammoth/domain": "workspace:*",
+    "@mammoth/report-compiler": "workspace:*",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
     "typescript": "^5.8.0",
     "vitest": "^3.2.0"
   }
