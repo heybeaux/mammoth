@@ -156,21 +156,30 @@ describe('evidence-bound report compilation', () => {
     });
   });
 
-  it('rejects candidate claims from factual sections', () => {
-    const input = fixture();
-    const claim = input.claims[0];
-    if (!claim) throw new Error('fixture claim missing');
-    claim.status = 'candidate';
-    const result = compileReport(input);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.issues).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ code: 'INELIGIBLE_CLAIM_STATUS' }),
-        ]),
-      );
-    }
-  });
+  it.each(['candidate', 'unresolved', 'contradicted', 'expired'] as const)(
+    'rejects %s claims from supported factual sections',
+    (status) => {
+      const input = fixture();
+      const claim = input.claims[0];
+      if (!claim) throw new Error('fixture claim missing');
+      claim.status = status;
+
+      const result = compileReport(input);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              code: 'INELIGIBLE_CLAIM_STATUS',
+              claimId: 'claim-1',
+              factNodeId: 'fact-1',
+            }),
+          ]),
+        );
+      }
+    },
+  );
 
   it('rejects stale snapshots', () => {
     const input = fixture();

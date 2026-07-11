@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, symlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -108,13 +108,13 @@ describe('local evidence-first runtime', () => {
         charter,
         transport,
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_PROGRAM_ID' });
+    ).rejects.toMatchObject({ code: 'INTEGRITY_FAILED' });
     await expect(
       getResearchProgramStatus({
         rootDirectory: directory,
         programId: charter.programId,
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_PROGRAM_ID' });
+    ).rejects.toMatchObject({ code: 'INTEGRITY_FAILED' });
   });
 
   it('runs the checked-in RFC 2606 MVP fixture end to end', async () => {
@@ -271,6 +271,53 @@ describe('local evidence-first runtime', () => {
     expect(queueSnapshot.receipts).toHaveLength(1);
     expect(queueSnapshot.receipts[0]?.state).toBe('completed');
     expect(queueSnapshot.receipts[0]?.idempotencyKey).toContain(':snapshot');
+    const governance = JSON.parse(
+      await readFile(result.paths.governance, 'utf8'),
+    ) as {
+      revalidation: {
+        schedules: {
+          programId: string;
+          subjectType: string;
+          subjectId: string;
+          dueAt: string;
+        }[];
+      };
+    };
+    expect(governance.revalidation.schedules).toEqual([
+      expect.objectContaining({
+        programId: charter.programId,
+        subjectType: 'evidence',
+        subjectId: `${charter.programId}:evidence:snapshot`,
+        dueAt: '2026-07-11T20:00:00.000Z',
+      }),
+    ]);
+  });
+
+  it('fails closed on completed artifact tampering without repairing bytes', async () => {
+    const directory = await root();
+    const result = await runResearchProgram({
+      rootDirectory: directory,
+      charter,
+      transport,
+      resolveHost: () => Promise.resolve(['203.0.113.10']),
+      now: () => now,
+    });
+    const tampered = '{"claims":[]}\n';
+    await writeFile(result.paths.ledger, tampered);
+
+    await expect(
+      getResearchProgramStatus({
+        rootDirectory: directory,
+        programId: charter.programId,
+      }),
+    ).rejects.toMatchObject({ code: 'INTEGRITY_FAILED' });
+    await expect(
+      inspectResearchProgram({
+        rootDirectory: directory,
+        programId: charter.programId,
+      }),
+    ).rejects.toMatchObject({ code: 'INTEGRITY_FAILED' });
+    expect(await readFile(result.paths.ledger, 'utf8')).toBe(tampered);
   });
 
   it('resumes after a durable-boundary interruption without duplicate effects', async () => {
@@ -334,6 +381,82 @@ describe('local evidence-first runtime', () => {
       assessmentCount: 2,
     });
     expect(inspection.artifacts.report).toMatchObject({ present: true });
+  });
+
+  it('replays from a durable receipt byte-identically under a different wall clock', async () => {
+    const directory = await root();
+    await expect(
+      runResearchProgram({
+        rootDirectory: directory,
+        charter,
+        transport,
+        resolveHost: () => Promise.resolve(['203.0.113.10']),
+        now: () => now,
+        onStage: (stage) => {
+          if (stage === 'receipt_committed')
+            throw new Error('crash after durable receipt');
+        },
+      }),
+    ).rejects.toThrow('crash after durable receipt');
+
+    const names = [
+      'ledger',
+      'manifest',
+      'report',
+      'traces',
+      'receipt',
+    ] as const;
+    const paths = Object.fromEntries(
+      names.map((name) => [
+        name,
+        join(
+          directory,
+          charter.programId,
+          {
+            ledger: 'ledger.json',
+            manifest: 'manifest.json',
+            report: 'dossier.md',
+            traces: 'traces.json',
+            receipt: 'receipt.json',
+          }[name],
+        ),
+      ]),
+    ) as Record<(typeof names)[number], string>;
+    const before = Object.fromEntries(
+      await Promise.all(
+        names.map(async (name) => [name, await readFile(paths[name])]),
+      ),
+    ) as Record<(typeof names)[number], Buffer>;
+
+    await resumeResearchProgram({
+      rootDirectory: directory,
+      programId: charter.programId,
+      transport,
+      resolveHost: () => Promise.resolve(['203.0.113.10']),
+      now: () => new Date('2030-01-01T00:00:00.000Z'),
+    });
+    for (const name of names)
+      expect(await readFile(paths[name])).toEqual(before[name]);
+  });
+
+  it('reclaims a runtime lock left by a dead process', async () => {
+    const directory = await root();
+    const programDirectory = join(directory, charter.programId);
+    await mkdir(programDirectory, { recursive: true });
+    await writeFile(join(programDirectory, '.runtime.lock'), '99999999\n');
+
+    const result = await runResearchProgram({
+      rootDirectory: directory,
+      charter,
+      transport,
+      resolveHost: () => Promise.resolve(['203.0.113.10']),
+      now: () => now,
+    });
+
+    expect(result.status).toBe('completed');
+    await expect(
+      readFile(join(programDirectory, '.runtime.lock'), 'utf8'),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('cancels terminally, preserves completed artifacts, and emits an honest partial receipt', async () => {

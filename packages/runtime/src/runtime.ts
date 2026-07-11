@@ -1,4 +1,14 @@
-import { lstat, mkdir, open, readFile, rename, stat } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+} from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   canonicalDigest,
@@ -51,6 +61,7 @@ const WORKFLOW_NAME = 'mammoth.local-research-program';
 const WORKFLOW_VERSION = 1;
 const COMPILER_VERSION = '1.0.0';
 const ZERO_USAGE = { costUsd: 0, tokens: 0, durationMs: 0 } as const;
+const REVALIDATION_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 
 /** Runs the deterministic local MVP program and returns only after durable output exists. */
 export async function runResearchProgram(
@@ -60,6 +71,18 @@ export async function runResearchProgram(
   const paths = artifactPaths(options.rootDirectory, options.charter.programId);
   await assertProgramDirectorySafe(paths);
   await mkdir(paths.programDirectory, { recursive: true });
+  const releaseLock = await acquireProgramLock(paths);
+  try {
+    return await runResearchProgramLocked(options, paths);
+  } finally {
+    await releaseLock();
+  }
+}
+
+async function runResearchProgramLocked(
+  options: RuntimeOptions,
+  paths: RuntimeArtifactPaths,
+): Promise<RuntimeResult> {
   const clock = options.now ?? (() => new Date());
   const operator = await readJsonIfPresent<OperatorState>(paths.operator);
   if (operator?.status === 'cancelled') {
@@ -79,11 +102,10 @@ export async function runResearchProgram(
     steps: [
       {
         id: 'evidence-first-runtime',
-        execute: async ({ executionId }) => {
+        execute: async () => {
           result = await executePipeline(
             options,
             paths,
-            executionId,
             `${options.charter.programId}:${WORKFLOW_NAME}:v${String(WORKFLOW_VERSION)}:evidence-first-runtime`,
           );
           return { kind: 'complete', output: result };
@@ -102,6 +124,7 @@ export async function runResearchProgram(
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   const alreadyCompleted = prior.find(({ status }) => status === 'completed');
   if (alreadyCompleted) {
+    await verifyCompletedIntegrity(paths, options.charter.programId);
     await writeOperatorState(paths, {
       programId: options.charter.programId,
       executionId: alreadyCompleted.id,
@@ -174,6 +197,7 @@ export async function getResearchProgramStatus(
     );
   }
   if (operator?.status === 'cancelled') {
+    await verifyProgramIntegrity(paths, 'cancelled');
     return {
       programId: reference.programId,
       status: 'cancelled',
@@ -186,6 +210,8 @@ export async function getResearchProgramStatus(
   const latest = executions
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
     .at(-1);
+  if (latest?.status === 'completed')
+    await verifyCompletedIntegrity(paths, reference.programId);
   const status = latest
     ? publicStatus(latest.status)
     : (operator?.status ?? 'interrupted');
@@ -325,6 +351,10 @@ export async function inspectResearchProgram(
   }>(status.paths.ledger);
   return {
     status,
+    integrity: {
+      status: 'verified',
+      checks: await verifyProgramIntegrity(status.paths, status.status),
+    },
     artifacts,
     ...((await readJsonIfPresent(status.paths.receipt))
       ? { receipt: await readJsonIfPresent(status.paths.receipt) }
@@ -353,12 +383,12 @@ export async function inspectResearchProgram(
 async function executePipeline(
   options: RuntimeOptions,
   paths: RuntimeArtifactPaths,
-  executionId: string,
   workflowIdempotencyKey: string,
 ): Promise<RuntimeResult> {
   const { charter } = options;
-  const now = (options.now ?? (() => new Date()))().toISOString();
-  const nowMs = Date.parse(now);
+  const stableExecutionId = `${charter.programId}:runtime:v${String(WORKFLOW_VERSION)}`;
+  let now = (options.now ?? (() => new Date()))().toISOString();
+  let nowMs = Date.parse(now);
   const work = new DurableWorkRuntime(
     new LocalWorkStateStore(paths.queue),
     () => nowMs,
@@ -401,6 +431,11 @@ async function executePipeline(
   }
   await options.onStage?.('snapshot_committed');
   await assertNotCancelled(paths, charter.programId);
+  // The immutable snapshot timestamp is the pipeline's authoritative time.
+  // Replays may happen under a different wall clock, but must reproduce the
+  // exact same assessments, manifest, schedules, and terminal receipt.
+  now = snapshot.retrievedAt;
+  nowMs = Date.parse(now);
 
   const governanceStore = new LocalGovernanceStore(paths.governance);
   const governance =
@@ -459,6 +494,20 @@ async function executePipeline(
     injectionRisk: 'low',
     dataClassification: 'public',
   };
+  const revalidationId = `${charter.programId}:revalidate:${evidence.id}`;
+  if (!governance.revalidation.get(revalidationId)) {
+    governance.revalidation.schedule(
+      {
+        id: revalidationId,
+        programId: charter.programId,
+        subjectType: 'evidence',
+        subjectId: evidence.id,
+        dueAt: new Date(nowMs + REVALIDATION_INTERVAL_MS).toISOString(),
+      },
+      'runtime-local',
+    );
+    await governance.checkpoint();
+  }
   const assessed = charter.proposals.map((proposal, index) => {
     const startOffset = snapshot.parsedArtifact.text.indexOf(
       proposal.supportingQuote,
@@ -577,16 +626,18 @@ async function executePipeline(
   await assertNotCancelled(paths, charter.programId);
 
   const ledger = new LocalJsonLedger(paths.ledger);
-  await ledger.transact((draft) => {
-    if (draft.evidence.some(({ id }) => id === evidence.id)) return;
-    draft.sourceLineages.push(lineage);
-    draft.evidence.push(evidence);
-    draft.claims.push(...assessed.map(({ claim }) => claim));
-    draft.assessments.push(...assessed.map(({ assessment }) => assessment));
-    draft.claimEvidenceEdges.push(
-      ...assessed.flatMap(({ edge }) => (edge ? [edge] : [])),
-    );
-  });
+  const existingLedger = await ledger.read();
+  if (!existingLedger.evidence.some(({ id }) => id === evidence.id)) {
+    await ledger.transact((draft) => {
+      draft.sourceLineages.push(lineage);
+      draft.evidence.push(evidence);
+      draft.claims.push(...assessed.map(({ claim }) => claim));
+      draft.assessments.push(...assessed.map(({ assessment }) => assessment));
+      draft.claimEvidenceEdges.push(
+        ...assessed.flatMap(({ edge }) => (edge ? [edge] : [])),
+      );
+    });
+  }
   const persisted = await ledger.read();
   await options.onStage?.('ledger_committed');
   await assertNotCancelled(paths, charter.programId);
@@ -650,7 +701,7 @@ async function executePipeline(
   const receiptBody = {
     id: manifest.receiptId,
     programId: charter.programId,
-    executionId,
+    executionId: stableExecutionId,
     status: 'completed',
     publicationStatus: 'evidence_complete',
     snapshotDigest: snapshot.contentDigest,
@@ -668,10 +719,12 @@ async function executePipeline(
     ...receiptBody,
     integrityHash: canonicalDigest(receiptBody),
   });
+  await options.onStage?.('receipt_committed');
+  await assertNotCancelled(paths, charter.programId);
   await governance.checkpoint();
   return {
     programId: charter.programId,
-    executionId,
+    executionId: stableExecutionId,
     status: 'completed',
     publicationStatus: 'evidence_complete',
     supportedClaimIds: receiptBody.supportedClaimIds,
@@ -762,17 +815,208 @@ function artifactPaths(root: string, programId: string): RuntimeArtifactPaths {
 async function assertProgramDirectorySafe(
   paths: RuntimeArtifactPaths,
 ): Promise<void> {
+  const root = dirname(paths.programDirectory);
   try {
-    if ((await lstat(paths.programDirectory)).isSymbolicLink()) {
-      throw new RuntimeExecutionError(
-        'INVALID_PROGRAM_ID',
-        'program directory must not be a symbolic link',
-      );
-    }
+    const rootInfo = await lstat(root);
+    if (rootInfo.isSymbolicLink() || !rootInfo.isDirectory())
+      throw integrityFailure('runtime root must be a real directory');
+  } catch (error: unknown) {
+    if (!isMissing(error)) throw error;
+  }
+  try {
+    const info = await lstat(paths.programDirectory);
+    if (info.isSymbolicLink() || !info.isDirectory())
+      throw integrityFailure('program directory must be a real directory');
+    await assertTreeHasNoSymlinks(paths.programDirectory);
   } catch (error: unknown) {
     if (isMissing(error)) return;
     throw error;
   }
+}
+
+async function acquireProgramLock(
+  paths: RuntimeArtifactPaths,
+): Promise<() => Promise<void>> {
+  const lockPath = join(paths.programDirectory, '.runtime.lock');
+  let handle: Awaited<ReturnType<typeof open>>;
+  try {
+    handle = await open(lockPath, 'wx', 0o600);
+  } catch (error: unknown) {
+    if (isErrorCode(error, 'EEXIST')) {
+      const observedLock = await readFile(lockPath, 'utf8');
+      const owner = Number.parseInt(observedLock, 10);
+      if (!Number.isSafeInteger(owner) || owner <= 0)
+        throw integrityFailure('runtime lock has an invalid owner');
+      if (isProcessAlive(owner))
+        throw new RuntimeExecutionError(
+          'PROGRAM_ACTIVE',
+          'another process is already executing this program',
+        );
+      if ((await readFile(lockPath, 'utf8')) !== observedLock)
+        return acquireProgramLock(paths);
+      await rm(lockPath);
+      return acquireProgramLock(paths);
+    }
+    throw error;
+  }
+  await handle.writeFile(`${String(process.pid)}\n`, 'utf8');
+  await handle.sync();
+  await handle.close();
+  return async () => {
+    await rm(lockPath, { force: true });
+  };
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error: unknown) {
+    if (isErrorCode(error, 'ESRCH')) return false;
+    if (isErrorCode(error, 'EPERM')) return true;
+    throw error;
+  }
+}
+
+async function verifyCompletedIntegrity(
+  paths: RuntimeArtifactPaths,
+  programId: string,
+): Promise<void> {
+  const checks = await verifyProgramIntegrity(paths, 'completed');
+  if (!checks.includes('completed-receipt'))
+    throw integrityFailure(`program ${programId} has no completed receipt`);
+}
+
+async function verifyProgramIntegrity(
+  paths: RuntimeArtifactPaths,
+  status: RuntimeProgramStatus,
+): Promise<string[]> {
+  const checks = ['no-symlink-artifacts'];
+  await assertTreeHasNoSymlinks(paths.programDirectory);
+  for (const [name, path] of Object.entries(paths) as [string, string][]) {
+    if (name === 'programDirectory') continue;
+    try {
+      const info = await lstat(path);
+      if (info.isSymbolicLink() || !info.isFile())
+        throw integrityFailure(`${name} is not a regular file`);
+    } catch (error: unknown) {
+      if (!isMissing(error)) throw error;
+    }
+  }
+  const receipt = await readJsonIfPresent<Record<string, unknown>>(
+    paths.receipt,
+  );
+  if (!receipt) {
+    if (status === 'completed' || status === 'cancelled')
+      throw integrityFailure(`terminal program is missing receipt.json`);
+    return checks;
+  }
+  const { integrityHash, ...body } = receipt;
+  if (
+    typeof integrityHash !== 'string' ||
+    canonicalDigest(body) !== integrityHash
+  )
+    throw integrityFailure('receipt integrity hash mismatch');
+  checks.push('receipt-integrity');
+  if (receipt.programId !== basenameOf(paths.programDirectory))
+    throw integrityFailure('receipt program ID mismatch');
+  checks.push('receipt-program-id');
+  if (
+    (status === 'completed' || status === 'cancelled') &&
+    receipt.status !== status
+  )
+    throw integrityFailure('receipt lifecycle status mismatch');
+  if (receipt.status === 'completed') {
+    const artifacts = receipt.artifacts;
+    if (!isRecord(artifacts))
+      throw integrityFailure('completed receipt artifacts missing');
+    await verifyJsonDigest(paths.ledger, artifacts.ledger, 'ledger');
+    await verifyJsonDigest(paths.manifest, artifacts.manifest, 'manifest');
+    await verifyJsonDigest(paths.traces, artifacts.traces, 'traces');
+    const report = await requiredFile(paths.report, 'report');
+    if (
+      typeof artifacts.report !== 'string' ||
+      canonicalDigest(report.toString('utf8').replace(/\n$/, '')) !==
+        artifacts.report
+    )
+      throw integrityFailure('report digest mismatch');
+    checks.push('completed-receipt', 'artifact-digests');
+  } else if (receipt.status === 'cancelled') {
+    if (!isRecord(receipt.completedArtifacts))
+      throw integrityFailure('cancelled receipt artifact inventory missing');
+    for (const [name, expected] of Object.entries(receipt.completedArtifacts)) {
+      // Cancellation can be requested from inside an executing workflow step;
+      // the workflow store then durably records that thrown cancellation. Its
+      // receipt-time digest is therefore intentionally historical.
+      if (name === 'workflow') continue;
+      if (name === 'programDirectory' || !(name in paths))
+        throw integrityFailure(
+          `cancelled receipt names unknown artifact ${name}`,
+        );
+      const content = await requiredFile(
+        paths[name as keyof RuntimeArtifactPaths],
+        name,
+      );
+      if (typeof expected !== 'string' || canonicalDigest(content) !== expected)
+        throw integrityFailure(`${name} digest mismatch`);
+    }
+    checks.push('cancelled-receipt', 'artifact-digests');
+  }
+  return checks;
+}
+
+async function assertTreeHasNoSymlinks(directory: string): Promise<void> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error: unknown) {
+    if (isMissing(error)) return;
+    throw error;
+  }
+  for (const entry of entries) {
+    const path = join(directory, entry.name);
+    if (entry.isSymbolicLink())
+      throw integrityFailure(`symbolic link is forbidden: ${entry.name}`);
+    if (entry.isDirectory()) await assertTreeHasNoSymlinks(path);
+  }
+}
+
+async function verifyJsonDigest(
+  path: string,
+  expected: unknown,
+  label: string,
+): Promise<void> {
+  const content = await requiredFile(path, label);
+  let value: unknown;
+  try {
+    value = JSON.parse(content.toString('utf8'));
+  } catch {
+    throw integrityFailure(`${label} contains invalid JSON`);
+  }
+  if (typeof expected !== 'string' || canonicalDigest(value) !== expected)
+    throw integrityFailure(`${label} digest mismatch`);
+}
+
+async function requiredFile(path: string, label: string): Promise<Buffer> {
+  const content = await readFileIfPresent(path);
+  if (!content) throw integrityFailure(`${label} is missing`);
+  return content;
+}
+
+function integrityFailure(message: string): RuntimeExecutionError {
+  return new RuntimeExecutionError('INTEGRITY_FAILED', message);
+}
+
+function basenameOf(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isErrorCode(error: unknown, code: string): boolean {
+  return isRecord(error) && error.code === code;
 }
 
 interface OperatorState {

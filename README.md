@@ -21,6 +21,7 @@ pnpm verify:phase-1
 pnpm verify:phase-2
 pnpm verify:m2
 pnpm verify:m3
+pnpm verify:mvp
 pnpm eval:offline
 ```
 
@@ -58,7 +59,7 @@ one claim supported by the source and one unsupported claim so the fail-closed
 result is visible.
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
 pnpm --filter @mammoth/cli build
 pnpm mammoth run ./examples/quickstart/charter.json --root ./.mammoth --json
 pnpm mammoth status quickstart-example-domains --root ./.mammoth --json
@@ -86,3 +87,8 @@ stable envelope to stdout; diagnostics also go to stderr.
   production Temporal and Postgres adapters remain future work behind runtime ports.
 - A completed run may honestly contain unresolved claims. Only supported claims
   with a named policy assessment and exact immutable locator render as report facts.
+- Source parsing supports bounded plain text, HTML, and JSON; PDF and browser
+  rendering are deferred.
+- `inspect` verifies terminal receipts and declared artifact digests but is not a
+  repair command. Tampered state fails closed.
+- The dossier remains `evidence_complete`; Mammoth never assigns human approval.
