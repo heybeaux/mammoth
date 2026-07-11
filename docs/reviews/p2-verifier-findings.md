@@ -2,10 +2,10 @@
 
 ## Current verdict
 
-`v0.2.0-production-data` is **not verified**. The acceptance harness exists and
-P1, D1, D2, D3, and D6 package gates pass. D4 durable work/effects/outbox and both
-D5 production-profile gates still lack executable evidence. The verifier
-intentionally exits non-zero and reports each absent target as `missing`.
+`v0.2.0-production-data` is **verified**. All eight executable gates pass,
+including real PostgreSQL lifecycle and backup/restore checks. The verifier
+continues to fail closed when a capability, executable script, or required path
+is missing.
 
 ## Verifier contract
 
@@ -33,13 +33,12 @@ commands fail closed. Capability registration is restricted to `pnpm` commands.
    completeness and omissions, contradicted/unresolved retention, and dossier
    provenance.
 
-## Remaining adversarial risks
+## Residual risks and deferred work
 
-- A package-local test may be too weak even when its command is green; independent
-  production-profile fixtures still need to exercise real Postgres and artifact
-  processes.
-- The final receipt must record command output, service versions, migration
-  checksums, injected boundaries, duration, and default-branch commit. This
-  skeleton deliberately does not fabricate those values.
-- Capability paths for CAS, the production-like profile, and Observatory remain
-  coordinator-owned and therefore stay `missing` until registered.
+- The production profile uses a native PostgreSQL process and filesystem CAS; a
+  managed database and object-store deployment adapter remain production rollout
+  work.
+- Provider effects remain at-least-once at the dispatcher boundary and depend on
+  stable provider idempotency keys, as the contract explicitly states.
+- Temporal orchestration and research-cell fan-out remain P3+ work and must consume
+  the frozen adapter contracts rather than bypassing them.

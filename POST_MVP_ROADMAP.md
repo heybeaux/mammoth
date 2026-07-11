@@ -6,7 +6,9 @@
 >
 > Direction: production adapters first, then broader research-cell orchestration.
 >
-> Active checkpoint: [`P2_PLAN.md`](P2_PLAN.md)
+> Completed checkpoint: [`P2_PLAN.md`](P2_PLAN.md)
+>
+> Next checkpoint: P3 — Temporal workflow adapter
 
 ## Outcome
 

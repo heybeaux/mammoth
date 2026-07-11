@@ -1,6 +1,6 @@
 # Mammoth P2 Production Data Checkpoint
 
-> Status: active
+> Status: complete
 >
 > Baseline: `v0.1.0-mvp`
 >
