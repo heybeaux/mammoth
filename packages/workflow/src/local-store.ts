@@ -69,7 +69,12 @@ export class LocalWorkflowStore implements WorkflowStore {
       } catch (error: unknown) {
         if (!hasCode(error, 'EEXIST')) throw error;
         // A dead process must not permanently strand the MVP store.
-        const age = Date.now() - (await stat(lock)).mtimeMs;
+        const lockStat = await stat(lock).catch((statError: unknown) => {
+          if (hasCode(statError, 'ENOENT')) return undefined;
+          throw statError;
+        });
+        if (!lockStat) continue;
+        const age = Date.now() - lockStat.mtimeMs;
         if (age > 30_000) {
           await rm(lock, { recursive: true }).catch(() => undefined);
           continue;
