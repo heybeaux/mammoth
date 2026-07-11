@@ -1,4 +1,12 @@
-import { lstat, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import {
+  lstat,
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  writeFile,
+} from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import {
   cancelResearchProgram,
@@ -13,6 +21,26 @@ import {
 
 const PROGRAM_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const OPERATOR_CHARTER = 'operator-charter.json';
+const MAX_CHARTER_BYTES = 1024 * 1024;
+const CHARTER_FIELDS = new Set([
+  'programId',
+  'criterionId',
+  'title',
+  'question',
+  'sourceUrl',
+  'sourcePath',
+  'evidencePolicyId',
+  'evidencePolicyVersion',
+  'proposals',
+]);
+const PROPOSAL_FIELDS = new Set([
+  'id',
+  'canonicalText',
+  'subject',
+  'predicate',
+  'object',
+  'supportingQuote',
+]);
 
 export const ExitCode = {
   success: 0,
@@ -192,15 +220,17 @@ function parseArguments(argv: readonly string[], io: CliIo): ParsedArguments {
 async function readOperatorCharter(path: string): Promise<OperatorCharter> {
   let value: unknown;
   try {
-    value = JSON.parse(await readFile(path, 'utf8'));
+    const content = await readBoundedRegularFile(path);
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(content);
+    rejectDuplicateJsonKeys(text);
+    value = JSON.parse(text);
   } catch (error: unknown) {
-    throw new CliInputError(
-      'CHARTER_READ_FAILED',
-      `${path}: ${messageOf(error)}`,
-    );
+    if (error instanceof CliInputError) throw error;
+    throw new CliInputError('CHARTER_READ_FAILED', messageOf(error));
   }
   if (!isRecord(value))
     throw new CliInputError('INVALID_CHARTER', 'charter must be a JSON object');
+  rejectUnknownFields(value, CHARTER_FIELDS, 'charter');
   const proposals = value.proposals;
   const required = [
     'programId',
@@ -223,6 +253,48 @@ async function readOperatorCharter(path: string): Promise<OperatorCharter> {
       'INVALID_CHARTER',
       'charter.proposals must be a non-empty array',
     );
+  for (const [index, proposal] of proposals.entries()) {
+    if (!isRecord(proposal))
+      throw new CliInputError(
+        'INVALID_CHARTER',
+        `charter.proposals[${String(index)}] must be an object`,
+      );
+    rejectUnknownFields(
+      proposal,
+      PROPOSAL_FIELDS,
+      `charter.proposals[${String(index)}]`,
+    );
+    for (const field of PROPOSAL_FIELDS) {
+      if (typeof proposal[field] !== 'string' || proposal[field].trim() === '')
+        throw new CliInputError(
+          'INVALID_CHARTER',
+          `charter.proposals[${String(index)}].${field} must be a non-empty string`,
+        );
+    }
+    if (/[.!?]\s+\S/.test(String(proposal.canonicalText).trim()))
+      throw new CliInputError(
+        'INVALID_CHARTER',
+        `charter.proposals[${String(index)}] must contain one atomic statement`,
+      );
+  }
+  const proposalIds = proposals.map((proposal) =>
+    isRecord(proposal) ? proposal.id : undefined,
+  );
+  if (new Set(proposalIds).size !== proposalIds.length)
+    throw new CliInputError(
+      'INVALID_CHARTER',
+      'charter contains duplicate proposal IDs',
+    );
+  try {
+    const sourceUrl = new URL(String(value.sourceUrl));
+    if (sourceUrl.protocol !== 'https:' && sourceUrl.protocol !== 'http:')
+      throw new Error('unsupported URL scheme');
+  } catch {
+    throw new CliInputError(
+      'INVALID_CHARTER',
+      'charter.sourceUrl must be a valid HTTP(S) URL',
+    );
+  }
   if (value.sourcePath !== undefined && typeof value.sourcePath !== 'string')
     throw new CliInputError(
       'INVALID_CHARTER',
@@ -235,6 +307,116 @@ async function readOperatorCharter(path: string): Promise<OperatorCharter> {
       ? { sourcePath: resolve(dirname(path), charter.sourcePath) }
       : {}),
   };
+}
+
+async function readBoundedRegularFile(path: string): Promise<Buffer> {
+  let handle: Awaited<ReturnType<typeof open>>;
+  try {
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error: unknown) {
+    if (isErrorCode(error, 'ELOOP'))
+      throw new CliInputError(
+        'CHARTER_READ_FAILED',
+        'charter must not be a symbolic link',
+      );
+    throw error;
+  }
+  try {
+    const info = await handle.stat();
+    if (!info.isFile())
+      throw new CliInputError(
+        'CHARTER_READ_FAILED',
+        'charter must be a regular file',
+      );
+    if (info.size > MAX_CHARTER_BYTES)
+      throw new CliInputError(
+        'CHARTER_TOO_LARGE',
+        `charter exceeds ${String(MAX_CHARTER_BYTES)} bytes`,
+      );
+    return await handle.readFile();
+  } finally {
+    await handle.close();
+  }
+}
+
+function rejectUnknownFields(
+  value: Record<string, unknown>,
+  allowed: ReadonlySet<string>,
+  label: string,
+): void {
+  const unknown = Object.keys(value).find((field) => !allowed.has(field));
+  if (unknown)
+    throw new CliInputError(
+      'INVALID_CHARTER',
+      `${label} contains unknown field ${unknown}`,
+    );
+}
+
+/** Reject duplicate object keys before JSON.parse can silently discard them. */
+function rejectDuplicateJsonKeys(text: string): void {
+  const stack: (
+    | { kind: 'object'; keys: Set<string>; expectKey: boolean }
+    | { kind: 'array' }
+  )[] = [];
+  let index = 0;
+  while (index < text.length) {
+    const character = text[index];
+    if (/\s/.test(character ?? '')) {
+      index += 1;
+      continue;
+    }
+    if (character === '{') {
+      stack.push({ kind: 'object', keys: new Set(), expectKey: true });
+      index += 1;
+      continue;
+    }
+    if (character === '[') {
+      stack.push({ kind: 'array' });
+      index += 1;
+      continue;
+    }
+    if (character === '}' || character === ']') {
+      stack.pop();
+      index += 1;
+      continue;
+    }
+    if (character === ',') {
+      const parent = stack.at(-1);
+      if (parent?.kind === 'object') parent.expectKey = true;
+      index += 1;
+      continue;
+    }
+    if (character === '"') {
+      const start = index;
+      index += 1;
+      while (index < text.length) {
+        if (text[index] === '\\') index += 2;
+        else if (text[index] === '"') {
+          index += 1;
+          break;
+        } else index += 1;
+      }
+      const parent = stack.at(-1);
+      let cursor = index;
+      while (/\s/.test(text[cursor] ?? '')) cursor += 1;
+      if (
+        parent?.kind === 'object' &&
+        parent.expectKey &&
+        text[cursor] === ':'
+      ) {
+        const key = JSON.parse(text.slice(start, index)) as string;
+        if (parent.keys.has(key))
+          throw new CliInputError(
+            'INVALID_CHARTER',
+            `charter contains duplicate JSON key ${key}`,
+          );
+        parent.keys.add(key);
+        parent.expectKey = false;
+      }
+      continue;
+    }
+    index += 1;
+  }
 }
 
 async function persistOperatorCharter(
@@ -454,12 +636,15 @@ function classifyError(error: unknown): {
   if (error instanceof RuntimeExecutionError)
     return {
       exitCode:
-        error.code === 'PROGRAM_NOT_FOUND'
-          ? ExitCode.notFound
-          : error.code === 'PROGRAM_CANCELLED' ||
-              error.code === 'PROGRAM_NOT_RESUMABLE'
-            ? ExitCode.conflict
-            : ExitCode.execution,
+        error.code === 'INVALID_CHARTER' || error.code === 'INVALID_PROGRAM_ID'
+          ? ExitCode.input
+          : error.code === 'PROGRAM_NOT_FOUND'
+            ? ExitCode.notFound
+            : error.code === 'PROGRAM_CANCELLED' ||
+                error.code === 'PROGRAM_NOT_RESUMABLE' ||
+                error.code === 'PROGRAM_ACTIVE'
+              ? ExitCode.conflict
+              : ExitCode.execution,
       code: error.code,
       message: error.message,
     };

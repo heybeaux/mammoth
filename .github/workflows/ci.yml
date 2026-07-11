@@ -54,5 +54,20 @@ jobs:
       - name: Verify audit integrity
         run: pnpm verify:audit
 
+      - name: Verify Phase 1
+        run: pnpm verify:phase-1
+
+      - name: Verify Phase 2
+        run: pnpm verify:phase-2
+
+      - name: Verify runtime composition
+        run: pnpm verify:m2
+
+      - name: Verify operator CLI
+        run: pnpm verify:m3
+
+      - name: Verify MVP acceptance
+        run: pnpm --filter @mammoth/mvp-acceptance verify
+
       - name: Run offline evaluations
         run: pnpm eval:offline

@@ -21,6 +21,7 @@ pnpm verify:phase-1
 pnpm verify:phase-2
 pnpm verify:m2
 pnpm verify:m3
+pnpm verify:mvp
 pnpm eval:offline
 ```
 
@@ -53,17 +54,31 @@ compatible with a future Temporal and Postgres deployment.
 
 ## Local operator CLI
 
-Build and run Mammoth with a charter that includes a checked-in `sourcePath` for
-offline operation:
+Run the checked-in offline example from the repository root:
 
 ```sh
-pnpm --filter @mammoth/cli build
-pnpm mammoth run ./charter.json --root ./.mammoth --json
-pnpm mammoth status <program-id> --root ./.mammoth --json
-pnpm mammoth inspect <program-id> --root ./.mammoth --json
+pnpm install --frozen-lockfile
+pnpm mammoth run examples/mvp-charter.json --root .mammoth --json
+pnpm mammoth status mvp-example-domains --root .mammoth --json
+pnpm mammoth inspect mvp-example-domains --root .mammoth --json
 ```
 
 Interrupted programs can be continued with `mammoth resume`; `mammoth cancel`
 commits a terminal partial receipt while preserving already completed artifacts.
 The durable program directory contains workflow, queue, governance, ledger, CAS,
 report, manifest, traces, operator state, and terminal receipt artifacts.
+
+## MVP limitations
+
+- The local JSON/CAS adapters support one host and are not distributed stores.
+- Workflow execution is local; the production Temporal and Postgres adapters are
+  deferred.
+- The MVP uses deterministic charter proposals and evidence policy. It does not
+  invoke models, Parliament, cloud providers, or the wider heybeaux agent stack.
+- Source parsing supports bounded plain text, HTML, and JSON; PDF and browser
+  rendering are deferred.
+- `inspect` verifies terminal receipts and declared artifact digests but is not a
+  repair command. Tampered state fails closed.
+- The dossier remains `evidence_complete`; Mammoth never assigns human approval.
+- Desktop UI, hosted API, experiments, novelty archives, and pipeline SDKs are
+  explicitly post-MVP work.
