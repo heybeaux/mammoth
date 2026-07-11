@@ -34,7 +34,7 @@ export async function verifyMvp(): Promise<void> {
   assert.equal(receipt.ok, true);
   assert.equal(receipt.verifier, 'mammoth-mvp-blackbox-v1');
   assert.ok(Array.isArray(receipt.checks));
-  assert.equal(receipt.checks.length, 13);
+  assert.equal(receipt.checks.length, 14);
 }
 
 if (

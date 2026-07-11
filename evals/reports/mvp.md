@@ -61,7 +61,7 @@ Record results:
 | Phase 1                        | pass    | 21 tests                                            |
 | Phase 2                        | pass    | 31 tests plus 10 repeated workflow-concurrency runs |
 | Fixture oracle                 | pass    | pinned RFC and hostile-source digests verified      |
-| Black-box MVP                  | pass    | 13 fresh-process and integrity checks               |
+| Black-box MVP                  | pass    | 14 fresh-process, security, and integrity checks    |
 | Default-branch CI              | pending | merge revision and workflow URL                     |
 
 ## Black-box evidence required

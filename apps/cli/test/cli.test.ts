@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { RuntimeResult } from '@mammoth/runtime';
@@ -250,7 +250,7 @@ describe('operator commands', () => {
         ],
         fixture.dependencies,
       ),
-    ).toBe(1);
+    ).toBe(5);
     expect(lastJson(fixture.stderr)).toMatchObject({
       error: 'COMMAND_FAILED',
       message: 'run-to-idle only',
@@ -302,7 +302,7 @@ describe('operator commands', () => {
         ['run', fixture.charterPath, '--root', join(fixture.cwd, 'other')],
         fixture.dependencies,
       ),
-    ).toBe(1);
+    ).toBe(2);
     expect(lastJson(fixture.stderr)).toMatchObject({
       error: 'INVALID_CHARTER',
       message: 'invalid retrievalUsage actual costUsd',
@@ -428,13 +428,74 @@ describe('operator commands', () => {
         ['run', fixture.charterPath, '--root', fixture.root, '--json'],
         fixture.dependencies,
       ),
-    ).toBe(1);
+    ).toBe(5);
     const failure = lastJson(fixture.stderr) as {
       error?: unknown;
       message?: unknown;
     };
     expect(failure.error).toBe('COMMAND_FAILED');
     expect(failure.message).toContain('UNTRUSTED_ENTAILMENT');
+  });
+
+  it('rejects symlinked, oversized, duplicate-key, and invalid UTF-8 charters', async () => {
+    const cases: { content: string | Uint8Array }[] = [
+      { content: Buffer.alloc(1024 * 1024 + 1, 0x20) },
+      { content: '{"schemaVersion":1,"schemaVersion":1}' },
+      { content: new Uint8Array([0xff]) },
+    ];
+    for (const input of cases) {
+      const fixture = await setup();
+      await writeFile(fixture.charterPath, input.content);
+      expect(
+        await executeCli(
+          ['run', fixture.charterPath, '--root', fixture.root, '--json'],
+          fixture.dependencies,
+        ),
+      ).toBe(2);
+      const failure = lastJson(fixture.stderr) as { error?: unknown };
+      expect(failure.error).toBeTypeOf('string');
+      expect(String(failure.error)).toMatch(/CHARTER|INVALID/);
+      expect(fixture.calls).toHaveLength(0);
+    }
+
+    const fixture = await setup();
+    const linked = join(fixture.cwd, 'linked-charter.json');
+    await symlink(fixture.charterPath, linked);
+    expect(
+      await executeCli(
+        ['run', linked, '--root', fixture.root, '--json'],
+        fixture.dependencies,
+      ),
+    ).toBe(2);
+    expect(lastJson(fixture.stderr)).toMatchObject({
+      error: 'CHARTER_READ_FAILED',
+    });
+  });
+
+  it('rejects symlinked program directories and preserves documented exit codes', async () => {
+    const fixture = await setup();
+    const outside = join(fixture.cwd, 'outside');
+    await mkdir(outside);
+    await mkdir(fixture.root, { recursive: true });
+    await symlink(outside, join(fixture.root, 'program-1'));
+    expect(
+      await executeCli(
+        ['status', 'program-1', '--root', fixture.root, '--json'],
+        fixture.dependencies,
+      ),
+    ).toBe(2);
+    expect(lastJson(fixture.stderr)).toMatchObject({ error: 'UNSAFE_PATH' });
+
+    const missingFixture = await setup();
+    expect(
+      await executeCli(
+        ['status', 'missing', '--root', missingFixture.root, '--json'],
+        missingFixture.dependencies,
+      ),
+    ).toBe(3);
+    expect(lastJson(missingFixture.stderr)).toMatchObject({
+      error: 'PROGRAM_NOT_FOUND',
+    });
   });
 });
 

@@ -1,6 +1,15 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { cp, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -228,6 +237,55 @@ async function main(): Promise<void> {
     );
     await verifySpoofFailedClosed(join(root, 'mvp-blackbox-spoof'));
 
+    const duplicateInput = join(temporary, 'duplicate-charter.json');
+    await writeFile(duplicateInput, '{"schemaVersion":1,"schemaVersion":1}');
+    assertEqual(
+      (
+        await failedCommand(
+          ['run', duplicateInput, '--root', root, '--json'],
+          2,
+        )
+      ).error,
+      'INVALID_CHARTER',
+      'duplicate charter key error',
+    );
+    const oversizedInput = join(temporary, 'oversized-charter.json');
+    await writeFile(oversizedInput, Buffer.alloc(1024 * 1024 + 1, 0x20));
+    assertEqual(
+      (
+        await failedCommand(
+          ['run', oversizedInput, '--root', root, '--json'],
+          2,
+        )
+      ).error,
+      'CHARTER_TOO_LARGE',
+      'oversized charter error',
+    );
+    const invalidUtf8Input = join(temporary, 'invalid-utf8-charter.json');
+    await writeFile(invalidUtf8Input, new Uint8Array([0xff]));
+    await failedCommand(['run', invalidUtf8Input, '--root', root, '--json'], 2);
+    const linkedInput = join(temporary, 'linked-charter.json');
+    await symlink(completeInput, linkedInput);
+    assertEqual(
+      (await failedCommand(['run', linkedInput, '--root', root, '--json'], 2))
+        .error,
+      'CHARTER_READ_FAILED',
+      'symlinked charter error',
+    );
+    const outside = join(temporary, 'outside-program');
+    await mkdir(outside);
+    await symlink(outside, join(root, 'mvp-symlink'));
+    assertEqual(
+      (
+        await failedCommand(
+          ['status', 'mvp-symlink', '--root', root, '--json'],
+          2,
+        )
+      ).error,
+      'UNSAFE_PATH',
+      'symlinked program error',
+    );
+
     const tamperedRoot = join(temporary, 'tampered');
     await cp(programDirectory, tamperedRoot, { recursive: true });
     const receiptPath = join(tamperedRoot, 'receipt.json');
@@ -284,6 +342,7 @@ async function main(): Promise<void> {
           'budget-denial-before-transport',
           'durable-revalidation-schedule',
           'verifier-authority-spoof-rejection',
+          'bounded-strict-input-and-symlink-rejection',
           'idempotent-rerun',
           'durable-honest-partial-cancellation',
           'tamper-rejection',
@@ -582,6 +641,7 @@ async function rawCommand(args: readonly string[]): Promise<CommandResult> {
 
 async function failedCommand(
   args: readonly string[],
+  expectedExit?: number,
 ): Promise<Record<string, unknown>> {
   try {
     await rawCommand(args);
@@ -591,6 +651,8 @@ async function failedCommand(
       stderr?: unknown;
       code?: unknown;
     };
+    if (expectedExit !== undefined)
+      assertEqual(failure.code, expectedExit, 'failed command exit code');
     assertEqual(failure.stdout ?? '', '', 'failed command stdout');
     assert(
       typeof failure.stderr === 'string' && failure.stderr.trim().length > 0,

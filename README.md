@@ -67,9 +67,9 @@ result is visible.
 ```sh
 pnpm install --frozen-lockfile
 pnpm --filter @mammoth/cli build
-pnpm mammoth run ./examples/quickstart/charter.json --root ./.mammoth --json
-pnpm mammoth status quickstart-example-domains --root ./.mammoth --json
-pnpm mammoth inspect quickstart-example-domains --root ./.mammoth --json
+pnpm --silent mammoth run ./examples/quickstart/charter.json --root ./.mammoth --json
+pnpm --silent mammoth status quickstart-example-domains --root ./.mammoth --json
+pnpm --silent mammoth inspect quickstart-example-domains --root ./.mammoth --json
 ```
 
 Interrupted programs can be continued with `mammoth resume`; `mammoth cancel`
@@ -80,7 +80,8 @@ report, manifest, traces, operator state, and terminal receipt artifacts.
 Run `pnpm mammoth --help` for all commands and options. The CLI exits with `0` on
 success, `2` for invalid input, `3` when a program is absent, `4` for state
 conflicts, and `5` for execution or integrity failures. `--json` always writes its
-stable envelope to stdout; diagnostics also go to stderr.
+stable envelope to stdout when the built CLI or `pnpm --silent mammoth` is used;
+diagnostics also go to stderr.
 
 ## MVP limitations
 

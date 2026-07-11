@@ -1,4 +1,13 @@
-import { mkdir, open, readFile, realpath, rename } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import {
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+} from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import {
   runResearchProgram,
@@ -26,6 +35,8 @@ interface OperatorDocument {
     actual: RuntimeBudgetAmount;
   };
 }
+
+const MAX_CHARTER_BYTES = 1024 * 1024;
 
 const PINNED_MVP_ORACLE = {
   sourceUrl: 'https://www.rfc-editor.org/rfc/rfc2606.txt',
@@ -124,7 +135,13 @@ export async function executeCli(
       message: error instanceof Error ? error.message : String(error),
     };
     dependencies.io.stderr(JSON.stringify(body));
-    return error instanceof CliError && error.code === 'USAGE' ? 2 : 1;
+    if (!(error instanceof CliError)) return 5;
+    if (error.code === 'PROGRAM_NOT_FOUND') return 3;
+    if (
+      ['NOT_RESUMABLE', 'CHARTER_CONFLICT', 'PAUSE_FAILED'].includes(error.code)
+    )
+      return 4;
+    return 2;
   }
 }
 
@@ -217,8 +234,12 @@ export function nodeRuntimeFactory(): RuntimeFactory {
 async function readOperatorInput(path: string): Promise<OperatorDocument> {
   let input: unknown;
   try {
-    input = JSON.parse(await readFile(path, 'utf8'));
+    const content = await readBoundedRegularFile(path);
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(content);
+    rejectDuplicateJsonKeys(text);
+    input = JSON.parse(text);
   } catch (error: unknown) {
+    if (error instanceof CliError) throw error;
     throw new CliError(
       'INVALID_CHARTER',
       `cannot read charter: ${error instanceof Error ? error.message : String(error)}`,
@@ -503,7 +524,13 @@ async function safeProgramDirectory(root: string, id: string, create: boolean) {
   assertProgramId(id);
   const resolvedRoot = resolve(root);
   const directory = resolve(resolvedRoot, id);
-  if (create) await mkdir(directory, { recursive: true });
+  await mkdir(resolvedRoot, { recursive: true });
+  await requireDirectory(resolvedRoot, 'Mammoth root');
+  if (create) {
+    await mkdir(directory).catch((error: unknown) => {
+      if (!hasCode(error, 'EEXIST')) throw error;
+    });
+  }
   try {
     const [realRoot, realDirectory] = await Promise.all([
       realpath(resolvedRoot),
@@ -512,12 +539,123 @@ async function safeProgramDirectory(root: string, id: string, create: boolean) {
     const location = relative(realRoot, realDirectory);
     if (!location || location.startsWith('..'))
       throw new CliError('UNSAFE_PATH', 'program path escapes root');
+    await requireDirectory(directory, 'program directory');
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (entry.isSymbolicLink())
+        throw new CliError(
+          'UNSAFE_PATH',
+          `program artifact must not be a symbolic link: ${entry.name}`,
+        );
+    }
   } catch (error: unknown) {
     if (missing(error))
       throw new CliError('PROGRAM_NOT_FOUND', `program not found: ${id}`);
     throw error;
   }
   return directory;
+}
+
+async function requireDirectory(path: string, label: string): Promise<void> {
+  const info = await lstat(path);
+  if (info.isSymbolicLink() || !info.isDirectory())
+    throw new CliError('UNSAFE_PATH', `${label} must be a real directory`);
+}
+
+async function readBoundedRegularFile(path: string): Promise<Buffer> {
+  let handle: Awaited<ReturnType<typeof open>>;
+  try {
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error: unknown) {
+    if (hasCode(error, 'ELOOP'))
+      throw new CliError(
+        'CHARTER_READ_FAILED',
+        'charter must not be a symbolic link',
+      );
+    throw error;
+  }
+  try {
+    const info = await handle.stat();
+    if (!info.isFile())
+      throw new CliError(
+        'CHARTER_READ_FAILED',
+        'charter must be a regular file',
+      );
+    if (info.size > MAX_CHARTER_BYTES)
+      throw new CliError(
+        'CHARTER_TOO_LARGE',
+        `charter exceeds ${String(MAX_CHARTER_BYTES)} bytes`,
+      );
+    return await handle.readFile();
+  } finally {
+    await handle.close();
+  }
+}
+
+/** Reject duplicate object keys before JSON.parse can silently discard them. */
+function rejectDuplicateJsonKeys(text: string): void {
+  const stack: (
+    | { kind: 'object'; keys: Set<string>; expectKey: boolean }
+    | { kind: 'array' }
+  )[] = [];
+  let index = 0;
+  while (index < text.length) {
+    const character = text[index];
+    if (/\s/.test(character ?? '')) {
+      index += 1;
+      continue;
+    }
+    if (character === '{') {
+      stack.push({ kind: 'object', keys: new Set(), expectKey: true });
+      index += 1;
+      continue;
+    }
+    if (character === '[') {
+      stack.push({ kind: 'array' });
+      index += 1;
+      continue;
+    }
+    if (character === '}' || character === ']') {
+      stack.pop();
+      index += 1;
+      continue;
+    }
+    if (character === ',') {
+      const parent = stack.at(-1);
+      if (parent?.kind === 'object') parent.expectKey = true;
+      index += 1;
+      continue;
+    }
+    if (character === '"') {
+      const start = index;
+      index += 1;
+      while (index < text.length) {
+        if (text[index] === '\\') index += 2;
+        else if (text[index] === '"') {
+          index += 1;
+          break;
+        } else index += 1;
+      }
+      const parent = stack.at(-1);
+      let cursor = index;
+      while (/\s/.test(text[cursor] ?? '')) cursor += 1;
+      if (
+        parent?.kind === 'object' &&
+        parent.expectKey &&
+        text[cursor] === ':'
+      ) {
+        const key = JSON.parse(text.slice(start, index)) as string;
+        if (parent.keys.has(key))
+          throw new CliError(
+            'INVALID_CHARTER',
+            `charter contains duplicate JSON key ${key}`,
+          );
+        parent.keys.add(key);
+        parent.expectKey = false;
+      }
+      continue;
+    }
+    index += 1;
+  }
 }
 
 async function artifactPresence(directory: string) {
@@ -633,6 +771,9 @@ function missing(error: unknown) {
     'code' in error &&
     error.code === 'ENOENT'
   );
+}
+function hasCode(error: unknown, code: string): boolean {
+  return isRecord(error) && error.code === code;
 }
 function renderHuman(value: unknown) {
   return JSON.stringify(value, null, 2);
