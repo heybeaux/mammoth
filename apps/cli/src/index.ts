@@ -163,7 +163,9 @@ function parseArguments(argv: readonly string[], io: CliIo): ParsedArguments {
   const positional: string[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === '--json') {
+    if (argument === '--help' || argument === '-h') {
+      positional.push('help');
+    } else if (argument === '--json') {
       json = true;
     } else if (argument === '--root') {
       const value = argv[index + 1];
@@ -179,6 +181,16 @@ function parseArguments(argv: readonly string[], io: CliIo): ParsedArguments {
     } else if (argument !== undefined) {
       positional.push(argument);
     }
+  }
+  if (positional.includes('help')) {
+    if (positional.length > 1)
+      throw new Error('--help cannot be combined with a command');
+    return {
+      command: 'help',
+      operand: undefined,
+      rootDirectory: resolve(io.cwd, root),
+      json,
+    };
   }
   if (positional.length > 2) throw new Error('too many positional arguments');
   return {
@@ -513,5 +525,10 @@ function usage(): string {
     '  mammoth resume <program> [--root <directory>] [--json]',
     '  mammoth cancel <program> [--root <directory>] [--json]',
     '  mammoth inspect <program> [--root <directory>] [--json]',
+    '',
+    'Options:',
+    '  --root <directory>  Store programs here (default: $MAMMOTH_HOME or ./.mammoth)',
+    '  --json              Emit a stable machine-readable envelope',
+    '  -h, --help          Show this help',
   ].join('\n');
 }

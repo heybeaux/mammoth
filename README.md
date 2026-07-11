@@ -51,19 +51,38 @@ assessment to fresh immutable evidence with an exact locator.
 MVP stores use atomic rename plus file and directory fsync; runtime ports remain
 compatible with a future Temporal and Postgres deployment.
 
-## Local operator CLI
+## Quickstart
 
-Build and run Mammoth with a charter that includes a checked-in `sourcePath` for
-offline operation:
+The checked-in example is deterministic and network-free. It deliberately proposes
+one claim supported by the source and one unsupported claim so the fail-closed
+result is visible.
 
 ```sh
+pnpm install
 pnpm --filter @mammoth/cli build
-pnpm mammoth run ./charter.json --root ./.mammoth --json
-pnpm mammoth status <program-id> --root ./.mammoth --json
-pnpm mammoth inspect <program-id> --root ./.mammoth --json
+pnpm mammoth run ./examples/quickstart/charter.json --root ./.mammoth --json
+pnpm mammoth status quickstart-example-domains --root ./.mammoth --json
+pnpm mammoth inspect quickstart-example-domains --root ./.mammoth --json
 ```
 
 Interrupted programs can be continued with `mammoth resume`; `mammoth cancel`
 commits a terminal partial receipt while preserving already completed artifacts.
 The durable program directory contains workflow, queue, governance, ledger, CAS,
 report, manifest, traces, operator state, and terminal receipt artifacts.
+
+Run `pnpm mammoth --help` for all commands and options. The CLI exits with `0` on
+success, `2` for invalid input, `3` when a program is absent, `4` for state
+conflicts, and `5` for execution or integrity failures. `--json` always writes its
+stable envelope to stdout; diagnostics also go to stderr.
+
+## MVP limitations
+
+- This checkpoint provides a local CLI, not the deferred desktop UI or hosted API.
+- The quickstart uses an immutable checked-in source. Live HTTP retrieval is
+  available, but offline fixtures are the reproducible release evidence.
+- Parliament model cells, cloud providers, novelty search, experiment runners,
+  external stack adapters, and `mammoth-pipelines` are deferred beyond MVP.
+- Local JSON and content-addressed files are the MVP durability implementation;
+  production Temporal and Postgres adapters remain future work behind runtime ports.
+- A completed run may honestly contain unresolved claims. Only supported claims
+  with a named policy assessment and exact immutable locator render as report facts.
