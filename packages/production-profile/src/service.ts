@@ -8,11 +8,13 @@ export class NativePostgresService {
   readonly #data: string;
   readonly #log: string;
   readonly #passwordFile: string;
+  readonly #socket: string;
 
   constructor(readonly config: ProfileConfig) {
     this.#data = join(config.root, 'postgres');
     this.#log = join(config.root, 'postgres.log');
     this.#passwordFile = join(config.root, '.pg-password');
+    this.#socket = join(config.root, 'socket');
   }
 
   async initialize(): Promise<void> {
@@ -52,6 +54,7 @@ export class NativePostgresService {
 
   async start(): Promise<void> {
     await this.initialize();
+    await mkdir(this.#socket, { recursive: true, mode: 0o700 });
     if (await this.ready()) return;
     const pgCtl = await postgresTool('pg_ctl');
     try {
@@ -66,7 +69,7 @@ export class NativePostgresService {
           '-t',
           String(Math.ceil(this.config.startupTimeoutMs / 1000)),
           '-o',
-          `-h ${this.config.host} -p ${String(this.config.port)}`,
+          `-h ${this.config.host} -p ${String(this.config.port)} -k ${this.#socket}`,
           'start',
         ],
         { timeoutMs: this.config.startupTimeoutMs + 5_000 },
