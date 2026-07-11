@@ -244,7 +244,7 @@ async function tamperMustBeDetected(): Promise<void> {
   const receipt = JSON.parse(receiptOriginal.toString('utf8')) as {
     integrityHash: string;
   };
-  receipt.integrityHash = receipt.integrityHash.replace(/.$/, '0');
+  receipt.integrityHash = `${receipt.integrityHash.slice(0, -1)}${receipt.integrityHash.endsWith('0') ? '1' : '0'}`;
   await writeFile(receiptPath, `${canonicalJson(receipt)}\n`);
   await assert.rejects(
     verifyCompletedProgram(directory),
