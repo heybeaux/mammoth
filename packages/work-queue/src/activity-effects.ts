@@ -51,22 +51,6 @@ export const activityOperationKindsByType = Object.freeze({
   Record<ActivityTypeV1, readonly ActivityOperationKindV1[]>
 >);
 
-export const activityOperationKindsByType = Object.freeze({
-  retrieval: ['retrieval.fetch', 'artifact.cas-put.raw'],
-  snapshot: ['snapshot.metadata-commit'],
-  parsing: ['parser.execute', 'artifact.cas-put.parsed'],
-  'claim-proposal-admission': ['claim.proposal-admit'],
-  assessment: ['claim.assess'],
-  'ledger-mutation': ['ledger.mutate'],
-  'report-compilation': ['report.compile', 'artifact.cas-put.report'],
-  'artifact-commit': ['artifact.metadata-commit'],
-  'outbox-publication': ['outbox.publish'],
-  revalidation: ['revalidation.complete'],
-  'human-gate-handoff': ['human-gate.open', 'human-gate.notify'],
-} as const satisfies Readonly<
-  Record<ActivityTypeV1, readonly ActivityOperationKindV1[]>
->);
-
 export interface EffectIdentityV1 {
   readonly schemaVersion: 1;
   readonly programId: string;
@@ -428,7 +412,12 @@ export interface EffectProvider<TResult> {
   >;
   execute(
     idempotencyKey: Digest,
+    context: ActivityEffectExecutionContext,
   ): Promise<{ readonly receipt: unknown; readonly result: TResult }>;
+}
+
+export interface ActivityEffectExecutionContext {
+  readonly heartbeat: (progress: HeartbeatProgressV1) => Promise<void>;
 }
 
 export interface ExecuteActivityEffectOptions<TInput, TResult> {
@@ -442,6 +431,7 @@ export interface ExecuteActivityEffectOptions<TInput, TResult> {
   readonly validateResult: (value: unknown) => TResult;
   readonly now: () => string;
   readonly id: () => string;
+  readonly reportHeartbeat?: (progress: HeartbeatProgressV1) => void;
   readonly advanceWork?: (input: {
     readonly invocation: ActivityInvocationV1<TInput>;
     readonly provider: string;
@@ -530,7 +520,13 @@ export async function executeActivityEffect<TInput, TResult>(
     throw failure;
   }
   try {
-    const external = await options.provider.execute(idempotencyKey);
+    const external = await options.provider.execute(idempotencyKey, {
+      heartbeat: async (progress) => {
+        const validated = validateHeartbeat(progress);
+        await options.store.heartbeat(attempt, validated);
+        options.reportHeartbeat?.(validated);
+      },
+    });
     return await persistAndMap(identity, attempt, external, options, startedAt);
   } catch (error) {
     const failure =
@@ -730,13 +726,10 @@ function validateInvocation(invocation: ActivityInvocationV1): void {
     (invocation as { readonly schemaVersion: unknown }).schemaVersion !== 1 ||
     !activityTypes.includes(invocation.activityType) ||
     !activityOperationKinds.includes(invocation.operationKind) ||
-    !(activityOperationKindsByType[
-      invocation.activityType
-    ] as readonly ActivityOperationKindV1[]).includes(
-      invocation.operationKind,
-    ) ||
     !(
-      activityOperationKindsByType[invocation.activityType] as readonly string[]
+      activityOperationKindsByType[
+        invocation.activityType
+      ] as readonly ActivityOperationKindV1[]
     ).includes(invocation.operationKind) ||
     !nonEmpty(invocation.contractVersion) ||
     !nonEmpty(invocation.programId) ||
@@ -821,18 +814,20 @@ function policy(
 }
 
 function normalize(value: unknown): unknown {
-  if (value === undefined) return undefined;
+  if (value === undefined)
+    throw new TypeError('Canonical JSON does not permit undefined values');
   if (value === null || typeof value !== 'object') {
     if (typeof value === 'number' && !Number.isFinite(value))
       throw new TypeError('Canonical JSON does not permit non-finite numbers');
     return value;
   }
   if (Array.isArray(value)) return value.map(normalize);
+  if (Object.getPrototypeOf(value) !== Object.prototype)
+    throw new TypeError('Canonical JSON permits only arrays and plain objects');
   const record = value as Record<string, unknown>;
   return Object.fromEntries(
     Object.keys(record)
       .sort()
-      .filter((key) => record[key] !== undefined)
       .map((key) => [key, normalize(record[key])]),
   );
 }

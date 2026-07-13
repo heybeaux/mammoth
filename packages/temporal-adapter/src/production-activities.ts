@@ -134,6 +134,11 @@ function createActivity(
         resolveWork: dependencies.resolveWork,
         resultSchema: binding.resultSchema,
         validateResult: binding.validateResult,
+        reportHeartbeat:
+          dependencies.reportHeartbeat ??
+          ((progress) => {
+            reportActivityHeartbeat(progress);
+          }),
         now: dependencies.now ?? (() => new Date().toISOString()),
         id:
           dependencies.id ??

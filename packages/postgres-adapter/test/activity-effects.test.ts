@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalDigest } from '@mammoth/work-queue';
+import { canonicalDigest, type CompletedEffectV1 } from '@mammoth/work-queue';
 import type {
   PostgresConnection,
   QueryResult,
@@ -61,16 +61,18 @@ describe('Activity-effect v2 migration', () => {
   });
 
   it('advertises only the explicit major-2 Activity-effect capabilities', () => {
-    expect(activityEffectAdapterDescriptor).toMatchObject({
+    const descriptor = activityEffectAdapterDescriptor({
+      health: 'healthy',
+      checkedAt: now,
+    });
+    expect(descriptor).toMatchObject({
       kind: 'activity-effect',
       contractVersion: '2.0.0',
+      health: 'healthy',
+      checkedAt: now,
     });
-    expect(activityEffectAdapterDescriptor.capabilities).toContain(
-      'completed-effect-lookup',
-    );
-    expect(activityEffectAdapterDescriptor.capabilities).toContain(
-      'delivery-independent-replay',
-    );
+    expect(descriptor.capabilities).toContain('completed-effect-lookup');
+    expect(descriptor.capabilities).toContain('delivery-independent-replay');
   });
 });
 
@@ -119,6 +121,17 @@ describe('Postgres Activity effects', () => {
 
   it('records each Temporal delivery attempt with workflow, worker, lease, and fence attribution', async () => {
     const database = new RecordingDatabase();
+    database.handler = (sql) =>
+      sql.includes('from mammoth_activity_attempts')
+        ? result({
+            work_id: 'work-1',
+            idempotency_key: key,
+            task_queue: 'retrieval',
+            worker_id: 'worker-b',
+            lease_owner: 'lease-b',
+            fencing_token: 9,
+          })
+        : empty(1);
     await new PostgresActivityEffectStore(database, options).appendAttempt({
       idempotencyKey: key,
       invocation: {
@@ -157,6 +170,27 @@ describe('Postgres Activity effects', () => {
     );
   });
 
+  it('rejects a duplicate delivery tuple with conflicting durable attribution', async () => {
+    const database = new RecordingDatabase();
+    database.handler = (sql) =>
+      sql.includes('from mammoth_activity_attempts')
+        ? result({
+            work_id: 'other-work',
+            idempotency_key: key,
+            task_queue: 'retrieval',
+            worker_id: 'worker-b',
+            lease_owner: 'lease-b',
+            fencing_token: 9,
+          })
+        : empty(1);
+    await expect(
+      new PostgresActivityEffectStore(database, options).appendAttempt({
+        idempotencyKey: key,
+        invocation: attemptInvocation(),
+      }),
+    ).rejects.toMatchObject({ code: 'attribution_mismatch', retryable: false });
+  });
+
   it('advances work only under the current fence after durable effect completion', async () => {
     const database = new RecordingDatabase();
     database.handler = (sql) =>
@@ -192,6 +226,41 @@ describe('Postgres Activity effects', () => {
     expect(update?.sql).toContain('lease_owner = $2 and fencing_token = $3');
     expect(update?.parameters).toEqual(['work-1', 'worker-current', 9, now]);
   });
+
+  it('rejects a conflicting provider receipt instead of replacing completion', async () => {
+    const database = new RecordingDatabase();
+    database.handler = (sql) =>
+      sql.startsWith('select * from mammoth_activity_effects')
+        ? result(effectRow())
+        : empty(0);
+    const stored = effectRow();
+    const candidate: CompletedEffectV1 = {
+      schemaVersion: 1,
+      id: 'effect-new',
+      provider: stored.provider as string,
+      idempotencyKey: key,
+      state: 'completed',
+      programId: stored.program_id as string,
+      workItemId: stored.work_id as string,
+      operationKind: 'retrieval.fetch',
+      contractVersion: stored.contract_version as string,
+      inputDigest,
+      originalAttribution:
+        stored.original_attribution as CompletedEffectV1['originalAttribution'],
+      providerReceipt: { providerId: 'conflicting-external-effect' },
+      resultSchema: stored.result_schema as string,
+      resultDigest: stored.result_digest as CompletedEffectV1['resultDigest'],
+      result: stored.result,
+      startedAt: now,
+      completedAt: now,
+    };
+    await expect(
+      new PostgresActivityEffectStore(database, options).complete(candidate),
+    ).rejects.toMatchObject({
+      code: 'effect_identity_conflict',
+      retryable: false,
+    });
+  });
 });
 
 function workRow(): Row {
@@ -202,6 +271,27 @@ function workRow(): Row {
     contract_version: '2.0.0',
     input_digest: inputDigest,
     status: 'leased',
+  };
+}
+function attemptInvocation() {
+  return {
+    schemaVersion: 1 as const,
+    activityType: 'retrieval' as const,
+    operationKind: 'retrieval.fetch' as const,
+    contractVersion: '2.0.0',
+    programId: 'program-1',
+    workItemId: 'work-1',
+    input: {},
+    inputDigest,
+    workflow: {
+      workflowId: 'workflow-1',
+      runId: 'run-2',
+      activityId: 'activity-1',
+      attempt: 4,
+      taskQueue: 'retrieval',
+      workerId: 'worker-b',
+    },
+    lease: { owner: 'lease-b', fencingToken: 9 },
   };
 }
 function effectRow(): Row {

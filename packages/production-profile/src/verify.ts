@@ -2,11 +2,18 @@ import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   PostgresEpistemicLedger,
+  PostgresActivityEffectStore,
   PostgresLifecycle,
   PostgresWorkState,
   foundationMigrations,
   type PostgresConnection,
 } from '@mammoth/postgres-adapter';
+import {
+  canonicalDigest,
+  effectIdempotencyKey,
+  type ActivityInvocationV1,
+  type CompletedEffectV1,
+} from '@mammoth/work-queue';
 import type { ProfileConfig } from './config.js';
 import { run } from './commands.js';
 import { NodePostgresDriver } from './driver.js';
@@ -51,6 +58,7 @@ export async function verifyLifecycle(
     if ((await ledger.read()).revision === 0)
       await ledger.transact(() => undefined);
     await seedCompletedEffect(active.connection);
+    const activityFixture = await seedActivityEffect(active.connection);
     await writeArtifact(
       config.root,
       new TextEncoder().encode('mammoth-production-profile-fixture-v1'),
@@ -63,11 +71,152 @@ export async function verifyLifecycle(
       throw new Error('forced-kill gate failed: Postgres remained ready');
     await service.start();
     active = await connect(service);
+    await verifyActivityEffect(active.connection, activityFixture);
     verifyManifest(before, await buildManifest(active.connection, config.root));
     return before;
   } finally {
     if (active) await active.lifecycle.shutdown().catch(() => undefined);
     await service.stop().catch(() => undefined);
+  }
+}
+
+async function seedActivityEffect(connection: PostgresConnection): Promise<{
+  readonly provider: string;
+  readonly idempotencyKey: CompletedEffectV1['idempotencyKey'];
+  readonly resultDigest: CompletedEffectV1['resultDigest'];
+}> {
+  const workId = 'p3-profile-activity-effect-v2';
+  const provider = 'p3-profile-idempotent-provider';
+  const semanticInput = {
+    governedTarget: 'https://example.test/p3-fixture',
+    policyVersion: 'fixture-policy-v1',
+  };
+  const inputDigest = canonicalDigest(semanticInput);
+  const identity = {
+    schemaVersion: 1 as const,
+    programId: 'p3-profile-program',
+    workItemId: workId,
+    contractVersion: '2.0.0',
+    inputDigest,
+    operationKind: 'retrieval.fetch' as const,
+  };
+  const idempotencyKey = effectIdempotencyKey(identity);
+  const result = { artifactDigest: canonicalDigest('p3-profile-artifact') };
+  const resultDigest = canonicalDigest(result);
+  const existing = await connection.query(
+    `select result_digest from mammoth_activity_effects
+     where provider = $1 and idempotency_key = $2 and state = 'completed'`,
+    [provider, idempotencyKey],
+  );
+  if (existing.rowCount === 1)
+    return { provider, idempotencyKey, resultDigest };
+
+  let sequence = 0;
+  const common = {
+    transaction: { statementTimeoutMs: 10_000, transactionTimeoutMs: 15_000 },
+    now: () => '2026-07-13T00:00:00.000Z',
+    id: () => `p3-profile-${String(++sequence)}`,
+  };
+  const work = new PostgresWorkState(connection, common);
+  await work.enqueue({
+    id: workId,
+    payload: { activityType: 'retrieval', inputDigest },
+    maxAttempts: 5,
+    authoritativeRevision: 1,
+  });
+  const claimed = await work.claim({
+    owner: 'p3-profile-worker',
+    now: common.now(),
+    leaseExpiresAt: '2026-07-13T00:05:00.000Z',
+  });
+  if (!claimed) throw new Error('P3 Activity fixture was not claimable');
+  const invocation: ActivityInvocationV1<typeof semanticInput> = {
+    schemaVersion: 1,
+    activityType: 'retrieval',
+    operationKind: identity.operationKind,
+    contractVersion: identity.contractVersion,
+    programId: identity.programId,
+    workItemId: identity.workItemId,
+    input: semanticInput,
+    inputDigest,
+    workflow: {
+      workflowId: 'p3-profile-workflow',
+      runId: 'p3-profile-run',
+      activityId: 'p3-profile-activity',
+      attempt: 1,
+      taskQueue: 'retrieval',
+      workerId: 'p3-profile-worker',
+    },
+    lease: {
+      owner: 'p3-profile-worker',
+      fencingToken: claimed.fencingToken,
+    },
+  };
+  const effects = new PostgresActivityEffectStore(connection, common);
+  await effects.registerWork({
+    id: workId,
+    programId: identity.programId,
+    activityType: 'retrieval',
+    contractVersion: identity.contractVersion,
+    inputDigest,
+    state: 'leased',
+  });
+  await effects.appendAttempt({ invocation, idempotencyKey });
+  await effects.begin({
+    invocation,
+    idempotencyKey,
+    provider,
+    identity,
+    startedAt: common.now(),
+  });
+  await effects.complete({
+    ...identity,
+    id: 'p3-profile-effect',
+    provider,
+    idempotencyKey,
+    state: 'completed',
+    originalAttribution: {
+      ...invocation.workflow,
+      leaseOwner: 'p3-profile-worker',
+      fencingToken: claimed.fencingToken,
+    },
+    providerReceipt: { providerOperationId: 'p3-profile-operation' },
+    resultSchema: 'retrieval-result@1',
+    resultDigest,
+    result,
+    startedAt: common.now(),
+    completedAt: common.now(),
+  });
+  await effects.completeWorkFromEffect({
+    invocation,
+    provider,
+    idempotencyKey,
+  });
+  return { provider, idempotencyKey, resultDigest };
+}
+
+async function verifyActivityEffect(
+  connection: PostgresConnection,
+  fixture: {
+    readonly provider: string;
+    readonly idempotencyKey: CompletedEffectV1['idempotencyKey'];
+    readonly resultDigest: CompletedEffectV1['resultDigest'];
+  },
+): Promise<void> {
+  const effects = new PostgresActivityEffectStore(connection, {
+    transaction: { statementTimeoutMs: 10_000, transactionTimeoutMs: 15_000 },
+    now: () => '2026-07-13T00:00:00.000Z',
+    id: () => 'unused-after-restart',
+  });
+  const completed = await effects.lookup(
+    fixture.provider,
+    fixture.idempotencyKey,
+  );
+  if (
+    completed?.state !== 'completed' ||
+    completed.resultDigest !== fixture.resultDigest
+  ) {
+    throw new Error('P3 completed Activity effect did not survive restart');
   }
 }
 

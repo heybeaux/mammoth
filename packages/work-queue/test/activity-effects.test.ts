@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ActivityFailure,
   activityOperationKinds,
+  activityOperationKindsByType,
   activityPolicies,
   activityTypes,
   canonicalDigest,
@@ -12,6 +13,7 @@ import {
   validateHeartbeat,
   type ActivityAttemptInput,
   type ActivityEffectStore,
+  type ActivityEffectExecutionContext,
   type ActivityFailureCode,
   type ActivityInvocationV1,
   type AttributableWorkItemV1,
@@ -27,6 +29,9 @@ describe('P3 Activity catalog and policy', () => {
     expect(activityTypes).toHaveLength(11);
     expect(activityOperationKinds).toHaveLength(15);
     expect(Object.keys(activityPolicies).sort()).toEqual(
+      [...activityTypes].sort(),
+    );
+    expect(Object.keys(activityOperationKindsByType).sort()).toEqual(
       [...activityTypes].sort(),
     );
     expect(activityPolicies.retrieval).toMatchObject({
@@ -73,6 +78,15 @@ describe('P3 Activity catalog and policy', () => {
     expect(() =>
       validateHeartbeat({ partialCasDigest: 'sha256:nope' as Digest }),
     ).toThrowError(ActivityFailure);
+  });
+
+  it('rejects non-JSON semantic inputs before they can collide under a digest', () => {
+    expect(() => canonicalDigest({ missing: undefined })).toThrow(
+      /does not permit undefined/,
+    );
+    expect(() => canonicalDigest(new Date('2026-07-13T00:00:00.000Z'))).toThrow(
+      /plain objects/,
+    );
   });
 });
 
@@ -166,8 +180,54 @@ describe('major-2 Activity effect execution', () => {
     await expect(
       executeActivityEffect(options(badDigest, store, provider)),
     ).rejects.toMatchObject({ code: 'digest_mismatch', retryable: false });
+    await expect(
+      executeActivityEffect(
+        options(
+          invocation({ operationKind: 'ledger.mutate' }),
+          store,
+          provider,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'invalid_input', retryable: false });
     expect(calls).toBe(0);
     expect(store.attempts).toHaveLength(0);
+  });
+
+  it('does not call the provider when another delivery wins the begin race', async () => {
+    const input = invocation();
+    const identity = {
+      schemaVersion: 1 as const,
+      programId: input.programId,
+      workItemId: input.workItemId,
+      contractVersion: input.contractVersion,
+      inputDigest: input.inputDigest,
+      operationKind: input.operationKind,
+    };
+    const store = new BeginRaceStore();
+    const idempotencyKey = effectIdempotencyKey(identity);
+    store.effects.set(keyOf('fixture-provider', idempotencyKey), {
+      ...identity,
+      provider: 'fixture-provider',
+      idempotencyKey,
+      state: 'started',
+    });
+    let calls = 0;
+    await expect(
+      executeActivityEffect(
+        options(input, store, {
+          name: 'fixture-provider',
+          execute: async () => {
+            await Promise.resolve();
+            calls += 1;
+            return { receipt: {}, result: { artifactId: 'must-not-exist' } };
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'provider_result_ambiguous',
+      retryable: true,
+    });
+    expect(calls).toBe(0);
   });
 
   it('fails closed on completed-result tampering without calling the provider', async () => {
@@ -249,6 +309,24 @@ describe('major-2 Activity effect execution', () => {
       ),
     ).rejects.toMatchObject({ code: 'provider_result_ambiguous' });
   });
+
+  it('persists validated heartbeat progress before reporting it to the worker', async () => {
+    const store = new MemoryStore();
+    const reported: HeartbeatProgressV1[] = [];
+    const configured = options(invocation(), store, {
+      name: 'fixture-provider',
+      execute: async (_key, context) => {
+        await context.heartbeat({ chunk: 3 });
+        return { receipt: {}, result: { artifactId: 'artifact-1' } };
+      },
+    });
+    await executeActivityEffect({
+      ...configured,
+      reportHeartbeat: (progress) => reported.push(progress),
+    });
+    expect(store.heartbeats).toEqual([{ chunk: 3 }]);
+    expect(reported).toEqual([{ chunk: 3 }]);
+  });
 });
 
 interface Result {
@@ -288,7 +366,10 @@ function options(
   store: MemoryStore,
   provider: {
     name: string;
-    execute(key: Digest): Promise<{ receipt: unknown; result: Result }>;
+    execute(
+      key: Digest,
+      context: ActivityEffectExecutionContext,
+    ): Promise<{ receipt: unknown; result: Result }>;
     reconcile?(
       key: Digest,
     ): Promise<{ receipt: unknown; result: Result } | undefined>;
@@ -324,6 +405,7 @@ function options(
 
 class MemoryStore implements ActivityEffectStore {
   readonly attempts: ActivityAttemptInput[] = [];
+  readonly heartbeats: HeartbeatProgressV1[] = [];
   readonly effects = new Map<string, CompletedEffectV1 | PendingEffectV1>();
   async appendAttempt(input: ActivityAttemptInput): Promise<void> {
     await Promise.resolve();
@@ -372,7 +454,7 @@ class MemoryStore implements ActivityEffectStore {
     progress: HeartbeatProgressV1,
   ): Promise<void> {
     await Promise.resolve();
-    validateHeartbeat(progress);
+    this.heartbeats.push(validateHeartbeat(progress));
   }
   async failAttempt(
     input: ActivityAttemptInput,
@@ -381,6 +463,18 @@ class MemoryStore implements ActivityEffectStore {
     await Promise.resolve();
     void input;
     void failure;
+  }
+}
+class BeginRaceStore extends MemoryStore {
+  private firstLookup = true;
+
+  override async lookup(provider: string, key: Digest) {
+    await Promise.resolve();
+    if (this.firstLookup) {
+      this.firstLookup = false;
+      return undefined;
+    }
+    return super.lookup(provider, key);
   }
 }
 function keyOf(provider: string, key: Digest): string {
