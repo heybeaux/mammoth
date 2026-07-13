@@ -418,6 +418,7 @@ export interface EffectProvider<TResult> {
 
 export interface ActivityEffectExecutionContext {
   readonly heartbeat: (progress: HeartbeatProgressV1) => Promise<void>;
+  readonly cancellationSignal?: AbortSignal;
 }
 
 export interface ExecuteActivityEffectOptions<TInput, TResult> {
@@ -432,6 +433,7 @@ export interface ExecuteActivityEffectOptions<TInput, TResult> {
   readonly now: () => string;
   readonly id: () => string;
   readonly reportHeartbeat?: (progress: HeartbeatProgressV1) => void;
+  readonly cancellationSignal?: AbortSignal;
   readonly advanceWork?: (input: {
     readonly invocation: ActivityInvocationV1<TInput>;
     readonly provider: string;
@@ -535,9 +537,13 @@ export async function executeActivityEffect<TInput, TResult>(
       return result;
     }
     if (options.provider.reconcile) {
-      const reconciled = await options.provider.reconcile(idempotencyKey);
-      if (reconciled) {
-        return persistAndMap(identity, attempt, reconciled, options);
+      try {
+        const reconciled = await options.provider.reconcile(idempotencyKey);
+        if (reconciled) {
+          return await persistAndMap(identity, attempt, reconciled, options);
+        }
+      } catch (error) {
+        throw await recordProviderFailure(options, attempt, error);
       }
     }
     const failure = new ActivityFailure(
@@ -554,6 +560,9 @@ export async function executeActivityEffect<TInput, TResult>(
         await options.store.heartbeat(attempt, validated);
         options.reportHeartbeat?.(validated);
       },
+      ...(options.cancellationSignal === undefined
+        ? {}
+        : { cancellationSignal: options.cancellationSignal }),
     });
     return await persistAndMap(identity, attempt, external, options, startedAt);
   } catch (error) {

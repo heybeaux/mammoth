@@ -1,4 +1,8 @@
-import { activityInfo, heartbeat } from '@temporalio/activity';
+import {
+  activityInfo,
+  cancellationSignal as temporalCancellationSignal,
+  heartbeat,
+} from '@temporalio/activity';
 import { ApplicationFailure } from '@temporalio/common';
 import {
   ActivityFailure,
@@ -34,6 +38,7 @@ export interface ProductionActivityDependencies {
   readonly now?: () => string;
   readonly id?: () => string;
   readonly reportHeartbeat?: (progress: HeartbeatProgressV1) => void;
+  readonly cancellationSignal?: () => AbortSignal;
   readonly advanceWork?: (input: {
     readonly invocation: ActivityInvocationV1;
     readonly provider: string;
@@ -127,6 +132,7 @@ function createActivity(
         );
       }
       const binding = dependencies.binding(activityType, invocation);
+      const cancellationSignal = currentCancellationSignal(dependencies);
       return await executeActivityEffect({
         invocation,
         provider: binding.provider,
@@ -139,6 +145,7 @@ function createActivity(
           ((progress) => {
             reportActivityHeartbeat(progress);
           }),
+        ...(cancellationSignal === undefined ? {} : { cancellationSignal }),
         now: dependencies.now ?? (() => new Date().toISOString()),
         id:
           dependencies.id ??
@@ -167,4 +174,16 @@ function createActivity(
       });
     }
   };
+}
+
+function currentCancellationSignal(
+  dependencies: ProductionActivityDependencies,
+): AbortSignal | undefined {
+  if (dependencies.cancellationSignal) return dependencies.cancellationSignal();
+  try {
+    return temporalCancellationSignal();
+  } catch {
+    // Direct contract tests execute Activities without a Temporal async context.
+    return undefined;
+  }
 }

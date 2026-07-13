@@ -133,4 +133,46 @@ describe('production Activity catalog', () => {
       });
     }).toThrow(/non-negative safe integers/);
   });
+
+  it('passes the Activity cancellation signal to provider implementations', async () => {
+    const controller = new AbortController();
+    let observed = false;
+    const effects = new InMemoryActivityEffectStore();
+    const activities = createProductionActivities({
+      effects,
+      resolveWork: () =>
+        Promise.resolve({
+          id: 'work-retrieval',
+          programId: 'program-1',
+          activityType: 'retrieval',
+          contractVersion: '2.0.0',
+          inputDigest: canonicalDigest({
+            activityType: 'retrieval',
+            stable: true,
+          }),
+          state: 'leased',
+        }),
+      binding: () => ({
+        provider: {
+          name: 'cancellation-provider',
+          execute: (_key, context) => {
+            observed = context.cancellationSignal === controller.signal;
+            return Promise.resolve({
+              receipt: {},
+              result: { activityType: 'retrieval' },
+            });
+          },
+        },
+        resultSchema: 'retrieval-result@1',
+        validateResult: (value) => value,
+      }),
+      cancellationSignal: () => controller.signal,
+      now: () => '2026-07-13T00:00:00.000Z',
+      id: () => 'cancellation-effect',
+    });
+    await expect(
+      activities.retrieval(invocation('retrieval')),
+    ).resolves.toEqual({ activityType: 'retrieval' });
+    expect(observed).toBe(true);
+  });
 });
