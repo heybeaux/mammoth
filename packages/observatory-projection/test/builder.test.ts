@@ -18,6 +18,12 @@ const projectionPath = fileURLToPath(
     import.meta.url,
   ),
 );
+const temporalLinkPath = fileURLToPath(
+  new URL(
+    '../../../evals/fixtures/p3/temporal-observatory-link.json',
+    import.meta.url,
+  ),
+);
 
 async function fixture(): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(fixturePath, 'utf8')) as Record<
@@ -116,5 +122,82 @@ describe('ObservatoryProjectionV1', () => {
         })),
       }),
     ).toThrow(/unknown lineage/);
+  });
+
+  it('links deterministic Temporal operations without making history authoritative', async () => {
+    const input = await fixture();
+    const temporalExecution = JSON.parse(
+      await readFile(temporalLinkPath, 'utf8'),
+    ) as Record<string, unknown>;
+    const projection = buildObservatoryProjectionV1({
+      ...input,
+      temporalExecution,
+    });
+
+    expect(projection.temporalExecution).toMatchObject({
+      workflowId: 'mammoth:program-p2:main',
+      taskQueue: 'mammoth-research-control-v1',
+      metrics: {
+        retryCount: 1,
+        duplicateEffectsPrevented: 1,
+      },
+    });
+    expect(
+      projection.timeline
+        .filter((event) => 'source' in event)
+        .map(({ kind }) => kind),
+    ).toEqual([
+      'workflow_started',
+      'continue_as_new',
+      'timer',
+      'signal',
+      'human_gate',
+      'cancellation',
+      'retry',
+      'terminal',
+    ]);
+    expect(projection.integrity.canonicalDigest).toBe(
+      'sha256:c0fe3c69951f2ad3c3e87064ad9dc023ae66a5c9a48d3c6374338209591ff4e1',
+    );
+
+    const reordered = {
+      ...input,
+      temporalExecution: {
+        ...temporalExecution,
+        events: [
+          ...(temporalExecution.events as Record<string, unknown>[]),
+        ].reverse(),
+        logs: [
+          ...(temporalExecution.logs as Record<string, unknown>[]),
+        ].reverse(),
+      },
+    };
+    expect(buildObservatoryProjectionV1(reordered)).toEqual(projection);
+  });
+
+  it('fails closed on Temporal links to another run or future authority', async () => {
+    const input = await fixture();
+    const temporalExecution = JSON.parse(
+      await readFile(temporalLinkPath, 'utf8'),
+    ) as Record<string, unknown>;
+    const events = temporalExecution.events as Record<string, unknown>[];
+    expect(() =>
+      buildObservatoryProjectionV1({
+        ...input,
+        temporalExecution: {
+          ...temporalExecution,
+          events: [{ ...events[0], runId: 'another-run' }],
+        },
+      }),
+    ).toThrow(/another run/);
+    expect(() =>
+      buildObservatoryProjectionV1({
+        ...input,
+        temporalExecution: {
+          ...temporalExecution,
+          events: [{ ...events[0], authoritativeRevision: 13 }],
+        },
+      }),
+    ).toThrow(/future authoritative revision/);
   });
 });

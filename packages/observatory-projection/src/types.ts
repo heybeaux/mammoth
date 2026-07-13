@@ -50,6 +50,73 @@ export const DossierSnapshotSchema = z
   })
   .strict();
 
+export const TemporalOperationEventKindSchema = z.enum([
+  'workflow_started',
+  'durable_step',
+  'signal',
+  'timer',
+  'retry',
+  'cancellation',
+  'human_gate',
+  'continue_as_new',
+  'terminal',
+]);
+
+export const TemporalOperationEventSchema = z
+  .object({
+    source: z.literal('temporal'),
+    id: EntityIdSchema,
+    occurredAt: TimestampSchema,
+    kind: TemporalOperationEventKindSchema,
+    workflowId: NonEmptyStringSchema,
+    runId: NonEmptyStringSchema,
+    durableStep: NonEmptyStringSchema,
+    attempt: z.number().int().positive(),
+    summary: NonEmptyStringSchema,
+    receiptRefs: z.array(EntityIdSchema),
+    admittedAuditEventId: EntityIdSchema.optional(),
+    authoritativeRevision: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const TemporalOperationMetricsSchema = z
+  .object({
+    workflowLatencyMs: z.number().int().nonnegative(),
+    activityLatencyMs: z.number().int().nonnegative(),
+    retryCount: z.number().int().nonnegative(),
+    duplicateEffectsPrevented: z.number().int().nonnegative(),
+    failClosedStartupCount: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const TemporalOperationLogSchema = z
+  .object({
+    occurredAt: TimestampSchema,
+    level: z.enum(['info', 'warn', 'error']),
+    event: NonEmptyStringSchema,
+    workflowId: NonEmptyStringSchema,
+    runId: NonEmptyStringSchema,
+    durableStep: NonEmptyStringSchema.optional(),
+    attempt: z.number().int().positive().optional(),
+    message: NonEmptyStringSchema,
+  })
+  .strict();
+
+export const TemporalExecutionLinkSchema = z
+  .object({
+    workflowId: NonEmptyStringSchema,
+    runId: NonEmptyStringSchema,
+    workflowType: NonEmptyStringSchema,
+    taskQueue: NonEmptyStringSchema,
+    contractVersion: NonEmptyStringSchema,
+    currentDurableStep: NonEmptyStringSchema,
+    attempt: z.number().int().positive(),
+    events: z.array(TemporalOperationEventSchema),
+    metrics: TemporalOperationMetricsSchema,
+    logs: z.array(TemporalOperationLogSchema),
+  })
+  .strict();
+
 export const ObservatoryProjectionInputV1Schema = z
   .object({
     schemaVersion: z.literal(1),
@@ -67,6 +134,7 @@ export const ObservatoryProjectionInputV1Schema = z
     claimDependencies: z.array(ClaimDependencySchema),
     sourceLineages: z.array(SourceLineageSchema),
     auditEvents: z.array(AuthoritativeAuditEventSchema),
+    temporalExecution: TemporalExecutionLinkSchema.optional(),
     dossier: DossierSnapshotSchema,
   })
   .strict()
@@ -149,7 +217,10 @@ export const ObservatoryEdgeSchema = z
   })
   .strict();
 
-export const TimelineEventProjectionSchema = AuthoritativeAuditEventSchema;
+export const TimelineEventProjectionSchema = z.union([
+  AuthoritativeAuditEventSchema,
+  TemporalOperationEventSchema,
+]);
 
 export const DossierProjectionSchema = z
   .object({
@@ -179,6 +250,7 @@ export const ObservatoryProjectionV1Schema = z
     nodes: z.array(ObservatoryNodeSchema),
     edges: z.array(ObservatoryEdgeSchema),
     timeline: z.array(TimelineEventProjectionSchema),
+    temporalExecution: TemporalExecutionLinkSchema.optional(),
     dossier: DossierProjectionSchema,
     integrity: ProjectionIntegritySchema,
   })

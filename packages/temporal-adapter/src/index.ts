@@ -5,6 +5,8 @@ export * from './live-probe.js';
 export * from './live-probe-types.js';
 export * from './readiness.js';
 export * from './production-activities.js';
+export * from './recovery-probe.js';
+export * from './recovery-probe-types.js';
 export * from './research-client.js';
 export * from './research-cli.js';
 export * from './research-workflow-types.js';

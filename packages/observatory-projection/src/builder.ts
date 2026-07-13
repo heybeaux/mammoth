@@ -88,6 +88,13 @@ export function buildObservatoryProjectionV1(
       dependencyKind: edge.kind,
     }));
 
+  const temporalExecution = source.temporalExecution
+    ? {
+        ...source.temporalExecution,
+        events: [...source.temporalExecution.events].sort(compareTimeline),
+        logs: [...source.temporalExecution.logs].sort(compareLog),
+      }
+    : undefined;
   const withoutDigest = {
     schemaVersion: 1 as const,
     generatedAt: source.generatedAt,
@@ -104,9 +111,11 @@ export function buildObservatoryProjectionV1(
     },
     nodes,
     edges: [...evidenceEdges, ...dependencyEdges].sort(compareId),
-    timeline: [...source.auditEvents].sort(
-      (left, right) => left.sequence - right.sequence,
-    ),
+    timeline: [
+      ...source.auditEvents,
+      ...(temporalExecution?.events ?? []),
+    ].sort(compareTimeline),
+    ...(temporalExecution ? { temporalExecution } : {}),
     dossier: {
       manifestId: source.dossier.manifestId,
       artifactId: source.dossier.artifactId,
@@ -247,6 +256,55 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
   const finalEvent = orderedEvents.at(-1);
   if (finalEvent && finalEvent.eventHash !== source.auditHeadHash)
     throw new Error('audit head does not match the final projected event');
+  if (source.temporalExecution) {
+    const execution = source.temporalExecution;
+    assertUnique(execution.events, 'Temporal operation event');
+    const auditIds = new Set(source.auditEvents.map(({ id }) => id));
+    for (const event of execution.events) {
+      if (
+        event.workflowId !== execution.workflowId ||
+        event.runId !== execution.runId
+      )
+        throw new Error(`Temporal event ${event.id} belongs to another run`);
+      if (event.authoritativeRevision > source.authoritativeRevision)
+        throw new Error(
+          `Temporal event ${event.id} references a future authoritative revision`,
+        );
+      if (
+        event.admittedAuditEventId &&
+        !auditIds.has(event.admittedAuditEventId)
+      )
+        throw new Error(
+          `Temporal event ${event.id} references unknown admitted audit event`,
+        );
+    }
+    for (const log of execution.logs)
+      if (
+        log.workflowId !== execution.workflowId ||
+        log.runId !== execution.runId
+      )
+        throw new Error('Temporal operation log belongs to another run');
+  }
+}
+
+function compareTimeline(
+  left: { occurredAt: string; id: string },
+  right: { occurredAt: string; id: string },
+): number {
+  return (
+    left.occurredAt.localeCompare(right.occurredAt) ||
+    left.id.localeCompare(right.id)
+  );
+}
+
+function compareLog(
+  left: { occurredAt: string; event: string },
+  right: { occurredAt: string; event: string },
+): number {
+  return (
+    left.occurredAt.localeCompare(right.occurredAt) ||
+    left.event.localeCompare(right.event)
+  );
 }
 
 function assertUnique(records: readonly { id: string }[], kind: string): void {
