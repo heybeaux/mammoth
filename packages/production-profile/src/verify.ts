@@ -308,7 +308,7 @@ async function seedResearchCell(
     branchId: criterionRef.branchId,
     role: 'lateralist',
     inputDigest,
-    outputContractVersion: 'position@1',
+    outputContractVersion: RESEARCH_CELL_CONTRACT_VERSION,
     status: 'planned',
     revision: 0,
     fencingToken: 0,
@@ -353,8 +353,17 @@ async function seedResearchCell(
     ...positionBase,
     canonicalDigest: researchPositionDigest(positionBase as ResearchPosition),
   };
+  const admissionPolicyVersion = 'admission@1';
   await repositories.cells.recordPosition({
     contract: positionContract,
+    admission: {
+      decision: 'admitted',
+      policyVersion: admissionPolicyVersion,
+      policyDigest: canonicalDigest({ policy: admissionPolicyVersion }),
+      subjectDigest: positionContract.canonicalDigest,
+      reasonCodes: ['admitted'],
+      decidedAt: p4Fixture.now,
+    },
     id: p4Fixture.positionId,
     cellPlanId: p4Fixture.cellPlanId,
     programId: p4Fixture.programId,
@@ -364,19 +373,16 @@ async function seedResearchCell(
     modelProfileId: p4Fixture.modelProfileId,
     modelProfileVersionId: p4Fixture.modelProfileVersionId,
     inputDigest,
-    outputSchemaVersion: 'position@1',
+    outputSchemaVersion: positionContract.outputSchemaVersion,
     positionDigest: positionContract.canonicalDigest,
     claimIds: positionContract.claimIds,
     evidenceIds: positionContract.evidenceIds,
     hypothesisIds: positionContract.hypothesisIds,
-    proposalRefs: ['p4-profile-claim'],
+    proposalRefs: positionContract.proposalRefs,
     usage: positionContract.usage,
-    uncertaintyCode: null,
-    failureCode: null,
-    body: {
-      answer: positionContract.answer,
-      canonicalDigest: positionContract.canonicalDigest,
-    },
+    uncertaintyCodes: positionContract.uncertaintyCodes,
+    failureCodes: positionContract.failureCodes,
+    body: positionContract,
     recordedAt: p4Fixture.now,
   });
 
@@ -386,11 +392,14 @@ async function seedResearchCell(
   };
   await repositories.cells.recordRejectedResidue({
     id: p4Fixture.rejectedResidueId,
+    decision: 'rejected',
     programId: p4Fixture.programId,
     subjectType: 'position',
     subjectId: p4Fixture.positionId,
     reasonCode: 'p4-profile-fixture-rejection',
-    policyVersion: 'admission@1',
+    policyVersion: admissionPolicyVersion,
+    policyDigest: canonicalDigest({ policy: admissionPolicyVersion }),
+    reasonCodes: ['p4-profile-fixture-rejection'],
     payloadDigest: canonicalDigest(rejectedPayload),
     payload: rejectedPayload,
     recordedAt: p4Fixture.now,
