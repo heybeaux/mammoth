@@ -1,20 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import {
   MODEL_LINEAGE_POLICY_VERSION,
+  REVIEW_ASSIGNMENT_POLICY_VERSION,
   RESEARCH_CELL_CONTRACT_VERSION,
+  SANITIZED_REVIEW_CONTEXT_VERSION,
   CorrelationAssessmentSchema,
   DissentReportSchema,
+  ISOLATION_PROTOCOL_VERSION,
   ResearchPositionSchema,
   admitCorrelationAssessment,
   admitResearchPosition,
   admitResearchReview,
+  admitReviewAssignment,
+  admitSanitizedReviewContext,
   admitSynthesis,
   assessModelCorrelation,
+  authorizePeerReveal,
+  buildSanitizedReviewContext,
   cellInputDigest,
+  commitPositionForReveal,
   correlationAssessmentDigest,
   dissentReportDigest,
+  isolationCommitDigest,
   evaluatePositionProposals,
   modelProfileVersionDigest,
+  reviewAssignmentPolicyDigest,
+  reviewResidueDigest,
   researchPositionDigest,
   researchReviewDigest,
   synthesisArtifactDigest,
@@ -23,10 +34,13 @@ import {
   type CorrelationAssessment,
   type CriterionReference,
   type DissentReport,
+  type AssignmentPolicyInput,
+  type IsolationCommit,
   type ModelProfileVersion,
   type ReferenceUniverse,
   type ResearchPosition,
   type ResearchReview,
+  type ReviewResidue,
   type ReviewAssignment,
   type SynthesisArtifact,
 } from '../src/index.js';
@@ -179,6 +193,18 @@ const universe: ReferenceUniverse = {
   artifactIds: new Set(['artifact-1']),
   receiptRefs: new Map(),
   modelVersions,
+};
+
+const receipt = {
+  receiptId: 'receipt-1',
+  kind: 'model_invocation' as const,
+  artifactDigest: digestB,
+  receivedAt: now,
+};
+
+const receiptUniverse: ReferenceUniverse = {
+  ...universe,
+  receiptRefs: new Map([[receipt.receiptId, receipt]]),
 };
 
 function position(overrides: Partial<ResearchPosition> = {}): ResearchPosition {
@@ -337,6 +363,66 @@ function correlationAssessment(
     ...base,
     canonicalDigest: correlationAssessmentDigest(base),
   };
+}
+
+function isolationCommit(
+  overrides: Partial<IsolationCommit> = {},
+): IsolationCommit {
+  const pos = position({ receiptRefs: [receipt] });
+  const base: IsolationCommit = {
+    id: 'commit-1',
+    protocolVersion: ISOLATION_PROTOCOL_VERSION,
+    programId: pos.programId,
+    cellPlanId: pos.cellPlanId,
+    workItemId: pos.workItemId,
+    positionId: pos.id,
+    authorAgentId: pos.authorAgentId,
+    role: pos.role,
+    criterionRef: pos.criterionRef,
+    modelProfileVersionId: pos.modelProfileVersionId,
+    inputDigest: pos.inputDigest,
+    outputDigest: researchPositionDigest(pos),
+    outputSchemaVersion: pos.outputSchemaVersion,
+    receiptRefs: [receipt],
+    auditSequence: 10,
+    committedAt: now,
+    canonicalDigest: digestA,
+    ...overrides,
+  };
+  return { ...base, canonicalDigest: isolationCommitDigest(base) };
+}
+
+function assignmentPolicyInput(
+  overrides: Partial<AssignmentPolicyInput> = {},
+): AssignmentPolicyInput {
+  const base: AssignmentPolicyInput = {
+    policyVersion: REVIEW_ASSIGNMENT_POLICY_VERSION,
+    assignment: assignment(),
+    positionCommitDigest: isolationCommit().canonicalDigest,
+    sanitizedContextDigest: buildSanitizedReviewContext({
+      position: position({ receiptRefs: [receipt] }),
+      commit: isolationCommit(),
+    }).contextDigest,
+    assignmentDigest: digestA,
+    ...overrides,
+  };
+  return { ...base, assignmentDigest: reviewAssignmentPolicyDigest(base) };
+}
+
+function reviewResidue(overrides: Partial<ReviewResidue> = {}): ReviewResidue {
+  const base: ReviewResidue = {
+    id: 'residue-1',
+    policyVersion: REVIEW_ASSIGNMENT_POLICY_VERSION,
+    kind: 'minority_position',
+    attributableWorkId: 'review-work-1',
+    positionIds: ['position-1'],
+    reviewIds: [],
+    reasonCodes: ['minority-retained'],
+    retainedAt: now,
+    canonicalDigest: digestA,
+    ...overrides,
+  };
+  return { ...base, canonicalDigest: reviewResidueDigest(base) };
 }
 
 describe('P4 research-cell contract schemas', () => {
@@ -821,5 +907,272 @@ describe('admission and review policy', () => {
       ok: false,
       reasonCodes: ['correlation_policy_drift'],
     });
+  });
+});
+
+describe('P5 isolation and blind-review contracts', () => {
+  it('commits positions durably before peer reveal and rejects early or missing reveal', () => {
+    const pos = position({ receiptRefs: [receipt] });
+    const commit = isolationCommit();
+    expect(
+      commitPositionForReveal({
+        position: pos,
+        commit,
+        universe: receiptUniverse,
+      }),
+    ).toMatchObject({ ok: true });
+
+    const peer = isolationCommit({
+      id: 'commit-peer',
+      positionId: 'position-peer',
+      auditSequence: 12,
+    });
+    expect(
+      authorizePeerReveal({
+        request: {
+          protocolVersion: ISOLATION_PROTOCOL_VERSION,
+          requesterPositionId: pos.id,
+          peerPositionId: 'position-peer',
+          requesterCommitDigest: commit.canonicalDigest,
+          peerCommitDigest: peer.canonicalDigest,
+          requestedAtAuditSequence: 11,
+        },
+        commits: new Map([
+          [pos.id, commit],
+          ['position-peer', peer],
+        ]),
+      }),
+    ).toMatchObject({ ok: false, reasonCodes: ['early_reveal'] });
+
+    expect(
+      authorizePeerReveal({
+        request: {
+          protocolVersion: ISOLATION_PROTOCOL_VERSION,
+          requesterPositionId: pos.id,
+          peerPositionId: 'missing-peer',
+          requesterCommitDigest: commit.canonicalDigest,
+          peerCommitDigest: peer.canonicalDigest,
+          requestedAtAuditSequence: 20,
+        },
+        commits: new Map([[pos.id, commit]]),
+      }),
+    ).toMatchObject({
+      ok: false,
+      reasonCodes: ['missing_durable_commit'],
+    });
+
+    expect(
+      authorizePeerReveal({
+        request: {
+          protocolVersion: ISOLATION_PROTOCOL_VERSION,
+          requesterPositionId: pos.id,
+          peerPositionId: 'position-peer',
+          requesterCommitDigest: digestC,
+          peerCommitDigest: peer.canonicalDigest,
+          requestedAtAuditSequence: 20,
+        },
+        commits: new Map([
+          [pos.id, commit],
+          ['position-peer', peer],
+        ]),
+      }),
+    ).toMatchObject({ ok: false, reasonCodes: ['commit_digest_drift'] });
+  });
+
+  it('rejects reveal commits with digest drift, mutable refs, missing receipts, and unknown versions', () => {
+    const pos = position({ receiptRefs: [receipt] });
+    expect(
+      commitPositionForReveal({
+        position: pos,
+        commit: { ...isolationCommit(), protocolVersion: '9.9.9' },
+        universe: receiptUniverse,
+      }),
+    ).toMatchObject({ ok: false, reasonCodes: ['schema_invalid'] });
+
+    expect(
+      commitPositionForReveal({
+        position: pos,
+        commit: isolationCommit({ outputDigest: digestC }),
+        universe: receiptUniverse,
+      }),
+    ).toMatchObject({ ok: false, reasonCodes: ['commit_digest_drift'] });
+
+    expect(
+      commitPositionForReveal({
+        position: pos,
+        commit: isolationCommit({
+          criterionRef: {
+            ...criterionRef,
+            supersedesCriterionId: 'criterion-old',
+          },
+        }),
+        universe: receiptUniverse,
+      }),
+    ).toMatchObject({
+      ok: false,
+      reasonCodes: ['mutable_criterion_ref'],
+    });
+
+    expect(
+      commitPositionForReveal({
+        position: pos,
+        commit: isolationCommit({ modelProfileVersionId: 'model-mutable-ref' }),
+        universe: receiptUniverse,
+      }),
+    ).toMatchObject({
+      ok: false,
+      reasonCodes: ['mutable_model_profile_ref', 'unknown_model_lineage'],
+    });
+
+    expect(
+      commitPositionForReveal({
+        position: pos,
+        commit: isolationCommit({ receiptRefs: [] }),
+        universe: receiptUniverse,
+      }),
+    ).toMatchObject({ ok: false, reasonCodes: ['schema_invalid'] });
+  });
+
+  it('builds allowlisted sanitized review context and rejects prohibited leakage', () => {
+    const pos = position({ receiptRefs: [receipt] });
+    const commit = isolationCommit();
+    const context = buildSanitizedReviewContext({ position: pos, commit });
+
+    expect(context.schemaVersion).toBe(SANITIZED_REVIEW_CONTEXT_VERSION);
+    expect(Object.keys(context).sort()).not.toContain('authorAgentId');
+    expect(
+      admitSanitizedReviewContext({ raw: context, position: pos, commit }),
+    ).toMatchObject({ ok: true });
+
+    const leakCases: unknown[] = [
+      { ...context, authorAgentId: 'agent-author' },
+      { ...context, authorModel: 'hidden-model' },
+      { ...context, authorProvider: 'hidden-provider' },
+      { ...context, confidence: 0.99 },
+      { ...context, popularity: 12 },
+      { ...context, priorVerdicts: ['admit'] },
+      { ...context, upstreamPassMarker: true },
+      { ...context, nested: { authorIdentity: 'agent-author' } },
+      { ...context, futureProhibitedField: 'unknown future leak' },
+      { ...context, canonicalDigest: context.positionCommitDigest },
+    ];
+    for (const raw of leakCases) {
+      expect(
+        admitSanitizedReviewContext({ raw, position: pos, commit }),
+      ).toMatchObject({
+        ok: false,
+        reasonCodes: ['review_context_leakage', 'schema_invalid'],
+      });
+    }
+
+    expect(
+      admitSanitizedReviewContext({
+        raw: { ...context, contextDigest: context.positionCommitDigest },
+        position: pos,
+        commit,
+      }),
+    ).toMatchObject({
+      ok: false,
+      reasonCodes: ['review_context_digest_drift'],
+    });
+  });
+
+  it('applies deterministic author-aware assignment and lineage policy before blind review', () => {
+    expect(
+      admitReviewAssignment({
+        raw: assignmentPolicyInput(),
+        universe,
+      }),
+    ).toMatchObject({ ok: true });
+
+    const sameProfile = assignmentPolicyInput({
+      assignment: assignment({
+        reviewerModelProfileVersionId: authorModel.id,
+        reviewerRole: 'critic',
+      }),
+    });
+    expect(admitReviewAssignment({ raw: sameProfile, universe })).toMatchObject(
+      {
+        ok: false,
+        reasonCodes: ['correlated_review', 'self_review'],
+      },
+    );
+
+    const alias = assignmentPolicyInput({
+      assignment: assignment({ reviewerModelProfileVersionId: aliasModel.id }),
+    });
+    expect(admitReviewAssignment({ raw: alias, universe })).toMatchObject({
+      ok: false,
+      reasonCodes: ['correlated_review'],
+    });
+
+    const sameRole = assignmentPolicyInput({
+      assignment: assignment({ reviewerRole: 'lateralist' }),
+    });
+    expect(admitReviewAssignment({ raw: sameRole, universe })).toMatchObject({
+      ok: false,
+      reasonCodes: ['self_review'],
+    });
+
+    const unknown = assignmentPolicyInput({
+      assignment: assignment({
+        reviewerModelProfileVersionId: unknownModel.id,
+      }),
+    });
+    expect(admitReviewAssignment({ raw: unknown, universe })).toMatchObject({
+      ok: false,
+      reasonCodes: ['correlated_review', 'unknown_lineage_policy'],
+    });
+
+    const unblind = assignmentPolicyInput({
+      assignment: assignment({ blind: false }),
+    });
+    expect(admitReviewAssignment({ raw: unblind, universe })).toMatchObject({
+      ok: false,
+      reasonCodes: ['assignment_not_blind'],
+    });
+  });
+
+  it('preserves dissent and every invalid or unfinished review residue through synthesis', () => {
+    const residueKinds: ReviewResidue['kind'][] = [
+      'minority_position',
+      'unresolved_conflict',
+      'abstention',
+      'invalid_review',
+      'rejected_assignment',
+      'timed_out_review',
+      'never_started_review',
+    ];
+    const residues = residueKinds.map((kind, index) =>
+      reviewResidue({
+        id: `residue-${String(index + 1)}`,
+        kind,
+        reasonCodes: [`${kind}-retained`],
+      }),
+    );
+    for (const residue of residues) {
+      expect(reviewResidueDigest(residue)).toBe(residue.canonicalDigest);
+    }
+
+    const requiredResidueIds = new Set(residues.map(({ id }) => id));
+    expect(
+      admitSynthesis({
+        raw: synthesis({ dissentReportIds: [] }),
+        universe,
+        admittedClaimIds: new Set(['claim-supported']),
+        admittedPositionIds: new Set(['position-1']),
+        requiredResidueIds,
+      }),
+    ).toMatchObject({ ok: false, reasonCodes: ['residue_erased'] });
+
+    expect(
+      admitSynthesis({
+        raw: synthesis({ dissentReportIds: [...requiredResidueIds] }),
+        universe,
+        admittedClaimIds: new Set(['claim-supported']),
+        admittedPositionIds: new Set(['position-1']),
+        requiredResidueIds,
+      }),
+    ).toMatchObject({ ok: true });
   });
 });

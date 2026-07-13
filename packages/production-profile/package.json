@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "verify:lifecycle": "tsx src/cli.ts verify-lifecycle",
     "verify:p4": "tsx src/cli.ts verify-p4",
+    "verify:p5": "tsx src/cli.ts verify-p5",
     "verify:backup": "tsx src/cli.ts verify-backup"
   },
   "dependencies": {

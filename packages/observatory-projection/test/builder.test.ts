@@ -417,6 +417,124 @@ describe('ObservatoryProjectionV1', () => {
       }),
     ).toThrow(/model lineage cycle/);
   });
+
+  it('projects P5 isolation, attribution, spend, partial results, and receipts without reviewer leakage', async () => {
+    const input = withP5(withP4(await fixture()));
+    const projection = buildObservatoryProjectionV1(input);
+
+    expect(
+      projection.nodes.find(
+        (node) => node.kind === 'p5_isolation' && node.id === 'p5-run-1',
+      ),
+    ).toMatchObject({
+      workflowId: 'mammoth:DivergenceReviewWorkflow:v1:p5-run-1',
+      sequenceState: 'settled',
+      authorAgentId: 'agent-qwen',
+      authorModelProfileVersionId: 'model-lineage-qwen',
+      sanitizedContextDigest:
+        'sha256:1212121212121212121212121212121212121212121212121212121212121212',
+      reservedUsd: 1,
+      consumedUsd: 0.6,
+      releasedUsd: 0.4,
+    });
+    expect(JSON.stringify(projection)).not.toContain('authorConfidence');
+    expect(JSON.stringify(projection)).not.toContain('upstreamPassMarkers');
+    expect(
+      projection.edges.map((edge) => [edge.kind, edge.from, edge.to]),
+    ).toContainEqual(['emitted_receipt', 'p5-run-1', 'receipt-settlement']);
+  });
+
+  it('fails closed on P5 impossible sequence, digest drift, overspend, broken refs, reviewer leakage, and Temporal product state', async () => {
+    const input = withP5(withP4(await fixture()));
+    const [run] = input.isolationRuns as Record<string, unknown>[];
+    if (!run) throw new Error('P5 fixture must contain an isolation run');
+
+    expect(() =>
+      buildObservatoryProjectionV1({
+        ...input,
+        isolationRuns: [
+          withDigest({
+            ...run,
+            commitSequence: ['budget_reserved', 'position_committed'],
+          }),
+        ],
+      }),
+    ).toThrow(/impossible sequence/);
+    expect(() =>
+      buildObservatoryProjectionV1({
+        ...input,
+        isolationRuns: [
+          withDigest({
+            ...run,
+            revealedPositionDigest:
+              'sha256:3434343434343434343434343434343434343434343434343434343434343434',
+          }),
+        ],
+      }),
+    ).toThrow(/reveal digest mismatch/);
+    expect(() =>
+      buildObservatoryProjectionV1({
+        ...input,
+        isolationRuns: [
+          withDigest({
+            ...run,
+            settlement: {
+              settlementId: 'settlement-1',
+              consumedUsd: 0.8,
+              releasedUsd: 0.4,
+              receiptId: 'receipt-settlement',
+            },
+          }),
+        ],
+      }),
+    ).toThrow(/overspends reservation/);
+    expect(() =>
+      buildObservatoryProjectionV1({
+        ...input,
+        isolationRuns: [
+          withDigest({
+            ...run,
+            reviewerVisibleFields: ['claimIds', 'authorAgentId'],
+          }),
+        ],
+      }),
+    ).toThrow(/leaks reviewer context/);
+    expect(() =>
+      buildObservatoryProjectionV1({
+        ...input,
+        isolationRuns: [
+          withDigest({
+            ...run,
+            partialResultReceiptIds: ['missing-receipt'],
+          }),
+        ],
+      }),
+    ).toThrow(/unknown receipt/);
+    expect(() =>
+      buildObservatoryProjectionV1({
+        ...input,
+        temporalExecution: {
+          workflowId: 'mammoth:DivergenceReviewWorkflow:v1:p5-run-1',
+          runId: 'run-1',
+          runChain: [{ runId: 'run-1' }],
+          workflowType: 'DivergenceReviewWorkflow',
+          taskQueue: 'mammoth-research-control-v1',
+          contractVersion: '1',
+          currentDurableStep: String(run.committedPositionDigest),
+          attempt: 1,
+          events: [],
+          metrics: {
+            workflowLatencyMs: 0,
+            activityLatencyMs: 0,
+            retryCount: 0,
+            duplicateEffectsPrevented: 0,
+            failClosedStartupCount: 0,
+          },
+          logs: [],
+        },
+      }),
+    ).toThrow(/hides product state in Temporal/);
+  });
 });
 
 function withP4(input: Record<string, unknown>): Record<string, unknown> {
@@ -633,6 +751,94 @@ function withP4(input: Record<string, unknown>): Record<string, unknown> {
         status: 'succeeded',
         artifactDigest:
           'sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+        authoritativeRevision: 4,
+      }),
+    ],
+  };
+}
+
+function withP5(input: Record<string, unknown>): Record<string, unknown> {
+  const position = (
+    input.positions as { contract: { canonicalDigest: string } }[]
+  )[0];
+  if (!position) throw new Error('P4 fixture must contain a position');
+  return {
+    ...input,
+    receipts: [
+      ...(input.receipts as Record<string, unknown>[]),
+      withDigest({
+        id: 'receipt-reservation',
+        workItemId: 'reservation-1',
+        status: 'succeeded',
+        artifactDigest:
+          'sha256:1111111111111111111111111111111111111111111111111111111111111111',
+        authoritativeRevision: 4,
+      }),
+      withDigest({
+        id: 'receipt-settlement',
+        workItemId: 'settlement-1',
+        status: 'succeeded',
+        artifactDigest:
+          'sha256:2222222222222222222222222222222222222222222222222222222222222222',
+        authoritativeRevision: 4,
+      }),
+      withDigest({
+        id: 'receipt-partial',
+        workItemId: 'partial-1',
+        status: 'partial',
+        artifactDigest:
+          'sha256:3333333333333333333333333333333333333333333333333333333333333333',
+        authoritativeRevision: 4,
+      }),
+    ],
+    isolationRuns: [
+      withDigest({
+        id: 'p5-run-1',
+        workflowId: 'mammoth:DivergenceReviewWorkflow:v1:p5-run-1',
+        isolationProtocolVersion: '1.0.0',
+        sanitizedContextContractVersion: '1.0.0',
+        assignmentPolicyVersion: '1.0.0',
+        positionId: 'position-unsupported',
+        reviewId: 'review-position',
+        assignmentId: 'assignment-review-1',
+        sanitizedContextDigest:
+          'sha256:1212121212121212121212121212121212121212121212121212121212121212',
+        committedPositionDigest: position.contract.canonicalDigest,
+        revealedPositionDigest: position.contract.canonicalDigest,
+        commitSequence: [
+          'budget_reserved',
+          'position_dispatched',
+          'position_committed',
+          'position_revealed',
+          'review_assigned',
+          'review_committed',
+          'budget_settled',
+        ],
+        authorAttribution: {
+          authorAgentId: 'agent-qwen',
+          authorModelProfileVersionId: 'model-lineage-qwen',
+        },
+        reviewerVisibleFields: ['claimIds', 'evidenceIds', 'answer'],
+        prohibitedReviewerFieldDigests: [
+          'sha256:5656565656565656565656565656565656565656565656565656565656565656',
+        ],
+        correlationId: 'correlation-review-panel',
+        dissentId: 'dissent-position',
+        residueIds: ['residue-position'],
+        reservation: {
+          reservationId: 'reservation-1',
+          amountUsd: 1,
+          receiptId: 'receipt-reservation',
+        },
+        settlement: {
+          settlementId: 'settlement-1',
+          consumedUsd: 0.6,
+          releasedUsd: 0.4,
+          receiptId: 'receipt-settlement',
+        },
+        partialResultReceiptIds: ['receipt-partial'],
+        retryReceiptIds: [],
+        effectReceiptIds: ['receipt-reservation', 'receipt-settlement'],
         authoritativeRevision: 4,
       }),
     ],

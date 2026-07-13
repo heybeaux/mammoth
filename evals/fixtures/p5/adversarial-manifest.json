@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "v0.5.0-isolated-divergence",
+  "isolationProtocolVersion": "1.0.0",
+  "sanitizedReviewContextVersion": "1.0.0",
+  "reviewAssignmentPolicyVersion": "1.0.0",
+  "budgetCancellationContractVersion": "1.0.0",
+  "workflowApplicationContractMajor": 1,
+  "cases": [
+    {
+      "id": "early-peer-read-before-commit",
+      "gate": "isolation",
+      "expected": "reject"
+    },
+    {
+      "id": "reveal-without-durable-commit",
+      "gate": "isolation",
+      "expected": "reject"
+    },
+    {
+      "id": "reveal-mismatched-digest",
+      "gate": "isolation",
+      "expected": "reject"
+    },
+    {
+      "id": "reveal-stale-criterion",
+      "gate": "isolation",
+      "expected": "reject"
+    },
+    {
+      "id": "valid-commit-then-peer-reveal",
+      "gate": "isolation",
+      "expected": "admit"
+    },
+    {
+      "id": "reviewer-context-prohibited-fields",
+      "gate": "sanitized_review_context",
+      "expected": "reject"
+    },
+    {
+      "id": "reviewer-context-nested-future-fields",
+      "gate": "sanitized_review_context",
+      "expected": "reject"
+    },
+    {
+      "id": "reviewer-context-digest-confusion",
+      "gate": "sanitized_review_context",
+      "expected": "reject"
+    },
+    {
+      "id": "authoritative-attribution-retained-while-reviewer-input-sanitized",
+      "gate": "sanitized_review_context",
+      "expected": "retain"
+    },
+    {
+      "id": "same-profile-same-role-self-review",
+      "gate": "assignment_policy",
+      "expected": "reject"
+    },
+    {
+      "id": "alias-checkpoint-equivalent-self-review",
+      "gate": "assignment_policy",
+      "expected": "reject"
+    },
+    {
+      "id": "correlated-unknown-and-valid-panels",
+      "gate": "assignment_policy",
+      "expected": "classify"
+    },
+    {
+      "id": "minority-and-unresolved-conflict-survive",
+      "gate": "residue_policy",
+      "expected": "retain"
+    },
+    {
+      "id": "abstained-invalid-rejected-timed-out-never-started-reviews-retained",
+      "gate": "residue_policy",
+      "expected": "retain"
+    },
+    {
+      "id": "duplicate-position-review-budget-effect-cancellation-delivery",
+      "gate": "persistence_budget",
+      "expected": "idempotent"
+    },
+    {
+      "id": "overspend-settlement-beyond-reservation-release-after-settlement",
+      "gate": "persistence_budget",
+      "expected": "reject"
+    },
+    {
+      "id": "cancellation-before-dispatch-through-settlement",
+      "gate": "workflow_recovery",
+      "expected": "partial_receipts"
+    },
+    {
+      "id": "worker-client-and-service-death-at-durable-boundaries",
+      "gate": "workflow_recovery",
+      "expected": "recover"
+    },
+    {
+      "id": "continue-as-new-and-replay-supported-versions",
+      "gate": "workflow_recovery",
+      "expected": "replay"
+    },
+    {
+      "id": "migration-interruption-stale-fencing-digest-corruption-broken-references",
+      "gate": "persistence_budget",
+      "expected": "fail_closed"
+    },
+    {
+      "id": "future-projection-authority-and-deterministic-restart-digest",
+      "gate": "projection_operator",
+      "expected": "fail_closed"
+    }
+  ]
+}

@@ -1,0 +1,548 @@
+import { spawn } from 'node:child_process';
+import { constants } from 'node:fs';
+import { access, readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
+export type P5GateStatus = 'passed' | 'failed' | 'missing';
+
+export interface P5GateSpec {
+  readonly id: string;
+  readonly description: string;
+  readonly requiredPath: string;
+  readonly command: readonly [string, ...string[]];
+}
+
+export interface P5GateResult extends P5GateSpec {
+  readonly status: P5GateStatus;
+  readonly exitCode?: number;
+  readonly diagnostic?: string;
+  readonly caseIds?: readonly string[];
+}
+
+export interface P5VerificationResult {
+  readonly ok: boolean;
+  readonly verifier: 'mammoth-p5-acceptance-v1';
+  readonly fixtureManifest: 'evals/fixtures/p5/adversarial-manifest.json';
+  readonly gates: readonly P5GateResult[];
+}
+
+export interface P5VerifierDependencies {
+  readonly exists: (path: string) => Promise<boolean>;
+  readonly validateTarget: (
+    target: P5GateSpec,
+    absolutePath: string,
+    repository: string,
+  ) => Promise<string | undefined>;
+  readonly run: (
+    command: readonly [string, ...string[]],
+    cwd: string,
+  ) => Promise<{ exitCode: number; diagnostic?: string }>;
+}
+
+export const P5_FIXTURE_MANIFEST =
+  'evals/fixtures/p5/adversarial-manifest.json' as const;
+
+export const REQUIRED_P5_CASES = [
+  'early-peer-read-before-commit',
+  'reveal-without-durable-commit',
+  'reveal-mismatched-digest',
+  'reveal-stale-criterion',
+  'valid-commit-then-peer-reveal',
+  'reviewer-context-prohibited-fields',
+  'reviewer-context-nested-future-fields',
+  'reviewer-context-digest-confusion',
+  'authoritative-attribution-retained-while-reviewer-input-sanitized',
+  'same-profile-same-role-self-review',
+  'alias-checkpoint-equivalent-self-review',
+  'correlated-unknown-and-valid-panels',
+  'minority-and-unresolved-conflict-survive',
+  'abstained-invalid-rejected-timed-out-never-started-reviews-retained',
+  'duplicate-position-review-budget-effect-cancellation-delivery',
+  'overspend-settlement-beyond-reservation-release-after-settlement',
+  'cancellation-before-dispatch-through-settlement',
+  'worker-client-and-service-death-at-durable-boundaries',
+  'continue-as-new-and-replay-supported-versions',
+  'migration-interruption-stale-fencing-digest-corruption-broken-references',
+  'future-projection-authority-and-deterministic-restart-digest',
+] as const;
+
+export const P5_CASE_EXECUTION_GATES: Readonly<
+  Record<(typeof REQUIRED_P5_CASES)[number], readonly string[]>
+> = {
+  'early-peer-read-before-commit': ['domain-isolation-policy'],
+  'reveal-without-durable-commit': [
+    'domain-isolation-policy',
+    'persistence-budget-lifecycle',
+  ],
+  'reveal-mismatched-digest': [
+    'domain-isolation-policy',
+    'postgres-p5-migration',
+  ],
+  'reveal-stale-criterion': ['domain-isolation-policy'],
+  'valid-commit-then-peer-reveal': [
+    'domain-isolation-policy',
+    'persistence-budget-lifecycle',
+  ],
+  'reviewer-context-prohibited-fields': [
+    'domain-isolation-policy',
+    'postgres-p5-migration',
+  ],
+  'reviewer-context-nested-future-fields': ['domain-isolation-policy'],
+  'reviewer-context-digest-confusion': ['domain-isolation-policy'],
+  'authoritative-attribution-retained-while-reviewer-input-sanitized': [
+    'domain-isolation-policy',
+    'projection-operator-inspection',
+  ],
+  'same-profile-same-role-self-review': ['domain-isolation-policy'],
+  'alias-checkpoint-equivalent-self-review': ['domain-isolation-policy'],
+  'correlated-unknown-and-valid-panels': ['domain-isolation-policy'],
+  'minority-and-unresolved-conflict-survive': [
+    'domain-isolation-policy',
+    'projection-operator-inspection',
+  ],
+  'abstained-invalid-rejected-timed-out-never-started-reviews-retained': [
+    'domain-isolation-policy',
+    'projection-operator-inspection',
+  ],
+  'duplicate-position-review-budget-effect-cancellation-delivery': [
+    'persistence-budget-lifecycle',
+    'temporal-execution-recovery',
+  ],
+  'overspend-settlement-beyond-reservation-release-after-settlement': [
+    'persistence-budget-lifecycle',
+    'postgres-p5-migration',
+    'projection-operator-inspection',
+  ],
+  'cancellation-before-dispatch-through-settlement': [
+    'persistence-budget-lifecycle',
+    'temporal-execution-recovery',
+  ],
+  'worker-client-and-service-death-at-durable-boundaries': [
+    'temporal-execution-recovery',
+  ],
+  'continue-as-new-and-replay-supported-versions': [
+    'workflow-contracts',
+    'temporal-execution-recovery',
+  ],
+  'migration-interruption-stale-fencing-digest-corruption-broken-references': [
+    'persistence-budget-lifecycle',
+    'postgres-p5-migration',
+  ],
+  'future-projection-authority-and-deterministic-restart-digest': [
+    'projection-operator-inspection',
+  ],
+};
+
+export const P5_EXECUTABLE_CASE_PROOFS: readonly {
+  readonly caseId: (typeof REQUIRED_P5_CASES)[number];
+  readonly path: string;
+  readonly snippets: readonly string[];
+}[] = [
+  {
+    caseId: 'reviewer-context-nested-future-fields',
+    path: 'packages/domain/test/research-cell.test.ts',
+    snippets: ['nested: { authorIdentity', 'futureProhibitedField'],
+  },
+  {
+    caseId: 'reviewer-context-prohibited-fields',
+    path: 'packages/production-profile/src/verify.ts',
+    snippets: ['nested-sanitized-context-leakage'],
+  },
+  {
+    caseId: 'reveal-mismatched-digest',
+    path: 'packages/production-profile/src/verify.ts',
+    snippets: ['commit-digest-drift'],
+  },
+  {
+    caseId: 'authoritative-attribution-retained-while-reviewer-input-sanitized',
+    path: 'packages/observatory-projection/test/builder.test.ts',
+    snippets: [
+      'projects P5 isolation, attribution, spend, partial results, and receipts without reviewer leakage',
+      'authorAgentId: ',
+      "not.toContain('authorConfidence')",
+    ],
+  },
+  {
+    caseId: 'minority-and-unresolved-conflict-survive',
+    path: 'packages/observatory-projection/test/builder.test.ts',
+    snippets: ['dissent', 'unresolved'],
+  },
+  {
+    caseId:
+      'abstained-invalid-rejected-timed-out-never-started-reviews-retained',
+    path: 'packages/observatory-projection/test/builder.test.ts',
+    snippets: ['rejectedResidue', 'rejected_for', 'invalid schema'],
+  },
+  {
+    caseId: 'duplicate-position-review-budget-effect-cancellation-delivery',
+    path: 'packages/temporal-adapter/test/p5-live-workflow.test.ts',
+    snippets: [
+      'injected ambiguous P5 budget settlement delivery',
+      'duplicatePrevented',
+    ],
+  },
+  {
+    caseId: 'overspend-settlement-beyond-reservation-release-after-settlement',
+    path: 'packages/production-profile/src/verify.ts',
+    snippets: [
+      'settlement-overspend',
+      'release-after-settlement',
+      'provider-aggregate-overspend',
+    ],
+  },
+  {
+    caseId: 'cancellation-before-dispatch-through-settlement',
+    path: 'packages/temporal-adapter/test/p5-live-workflow.test.ts',
+    snippets: ['records honest P5 cancellation receipts', 'during_settlement'],
+  },
+  {
+    caseId: 'worker-client-and-service-death-at-durable-boundaries',
+    path: 'packages/temporal-adapter/test/p5-live-workflow.test.ts',
+    snippets: ['worker replacement', 'client handle loss', 'reacquired.result'],
+  },
+  {
+    caseId: 'continue-as-new-and-replay-supported-versions',
+    path: 'packages/temporal-adapter/test/p5-live-workflow.test.ts',
+    snippets: ['continue-as-new', 'Worker.runReplayHistory'],
+  },
+  {
+    caseId:
+      'migration-interruption-stale-fencing-digest-corruption-broken-references',
+    path: 'packages/production-profile/src/verify.ts',
+    snippets: ['verifyP5Lifecycle', 'commit-digest-drift'],
+  },
+  {
+    caseId: 'future-projection-authority-and-deterministic-restart-digest',
+    path: 'packages/observatory-projection/test/builder.test.ts',
+    snippets: ['fails closed on P5 impossible sequence', 'reviewer leakage'],
+  },
+];
+
+export const P5_GATES: readonly P5GateSpec[] = [
+  {
+    id: 'fixture-manifest',
+    description:
+      'Frozen P5 adversarial fixture manifest and verifier invariants',
+    requiredPath: 'evals/p5-acceptance/package.json',
+    command: ['pnpm', '--filter', '@mammoth/p5-acceptance', 'test'],
+  },
+  {
+    id: 'domain-isolation-policy',
+    description:
+      'Commit-before-reveal isolation, sanitized review context, assignment, dissent, and residue policy',
+    requiredPath: 'packages/domain/package.json',
+    command: ['pnpm', '--filter', '@mammoth/domain', 'test'],
+  },
+  {
+    id: 'persistence-budget-lifecycle',
+    description:
+      'Authoritative P5 persistence ports, budget settlement, cancellation receipts, and restart reconstruction',
+    requiredPath: 'packages/persistence/package.json',
+    command: ['pnpm', '--filter', '@mammoth/persistence', 'test'],
+  },
+  {
+    id: 'postgres-p5-migration',
+    description:
+      'Forward-only production Postgres migration after P4 version 5 with live trigger fixtures',
+    requiredPath: 'packages/production-profile/package.json',
+    command: ['pnpm', '--filter', '@mammoth/production-profile', 'verify:p5'],
+  },
+  {
+    id: 'workflow-contracts',
+    description:
+      'Divergence/review workflow IDs, carry, continue-as-new reconstruction, and replay contracts',
+    requiredPath: 'packages/workflow/package.json',
+    command: ['pnpm', '--filter', '@mammoth/workflow', 'test'],
+  },
+  {
+    id: 'temporal-execution-recovery',
+    description:
+      'Live Temporal divergence/review worker, idempotent Activities, cancellation, continue-as-new, and replay fixtures',
+    requiredPath: 'packages/temporal-adapter/package.json',
+    command: ['pnpm', '--filter', '@mammoth/temporal-adapter', 'test:live'],
+  },
+  {
+    id: 'projection-operator-inspection',
+    description:
+      'Read-only fail-closed P5 Observatory projection and operator inspection',
+    requiredPath: 'packages/observatory-projection/package.json',
+    command: ['pnpm', '--filter', '@mammoth/observatory-projection', 'test'],
+  },
+];
+
+export async function verifyP5FixtureManifest(
+  repository: string,
+): Promise<void> {
+  const parsed: unknown = JSON.parse(
+    await readFile(resolve(repository, P5_FIXTURE_MANIFEST), 'utf8'),
+  );
+  if (!isRecord(parsed) || parsed.schemaVersion !== 1)
+    throw new Error('P5_FIXTURE_MANIFEST_VERSION');
+  for (const [field, expected] of [
+    ['checkpoint', 'v0.5.0-isolated-divergence'],
+    ['isolationProtocolVersion', '1.0.0'],
+    ['sanitizedReviewContextVersion', '1.0.0'],
+    ['reviewAssignmentPolicyVersion', '1.0.0'],
+    ['budgetCancellationContractVersion', '1.0.0'],
+  ] as const) {
+    if (parsed[field] !== expected)
+      throw new Error(`P5_FIXTURE_MANIFEST_POLICY:${field}`);
+  }
+  if (parsed.workflowApplicationContractMajor !== 1)
+    throw new Error('P5_FIXTURE_MANIFEST_WORKFLOW_MAJOR');
+  if (!Array.isArray(parsed.cases))
+    throw new Error('P5_FIXTURE_MANIFEST_CASES');
+  const ids = parsed.cases.map((value) => {
+    if (
+      !isRecord(value) ||
+      typeof value.id !== 'string' ||
+      typeof value.gate !== 'string' ||
+      typeof value.expected !== 'string'
+    )
+      throw new Error('P5_FIXTURE_MANIFEST_CASE_ID');
+    return value.id;
+  });
+  if (new Set(ids).size !== ids.length)
+    throw new Error('P5_FIXTURE_MANIFEST_DUPLICATE_CASE');
+  const missing = REQUIRED_P5_CASES.filter((id) => !ids.includes(id));
+  const extra = ids.filter(
+    (id) => !(REQUIRED_P5_CASES as readonly string[]).includes(id),
+  );
+  if (missing.length > 0 || extra.length > 0) {
+    throw new Error(
+      `P5_FIXTURE_MANIFEST_DRIFT:missing=${missing.join(',')};extra=${extra.join(',')}`,
+    );
+  }
+  const mapped = Object.keys(P5_CASE_EXECUTION_GATES);
+  const missingExecution = ids.filter((id) => !mapped.includes(id));
+  const staleExecution = mapped.filter((id) => !ids.includes(id));
+  if (missingExecution.length > 0 || staleExecution.length > 0) {
+    throw new Error(
+      `P5_FIXTURE_EXECUTION_DRIFT:missing=${missingExecution.join(',')};extra=${staleExecution.join(',')}`,
+    );
+  }
+}
+
+export async function verifyP5(
+  repository: string,
+  dependencies: P5VerifierDependencies = systemDependencies,
+  gates: readonly P5GateSpec[] = P5_GATES,
+): Promise<P5VerificationResult> {
+  assertUniqueGateIds(gates);
+  assertFixtureExecutionGates(gates);
+  await verifyP5FixtureManifest(repository);
+  await verifyP5ExecutableCaseProofs(repository);
+  const results: P5GateResult[] = [];
+  for (const gate of gates) {
+    const absolutePath = resolve(repository, gate.requiredPath);
+    if (!(await dependencies.exists(absolutePath))) {
+      results.push({
+        ...gate,
+        status: 'missing',
+        diagnostic: `required acceptance target is absent: ${gate.requiredPath}`,
+      });
+      continue;
+    }
+    const invalid = await dependencies.validateTarget(
+      gate,
+      absolutePath,
+      repository,
+    );
+    if (invalid !== undefined) {
+      results.push({ ...gate, status: 'missing', diagnostic: invalid });
+      continue;
+    }
+    const execution = await dependencies.run(gate.command, repository);
+    results.push({
+      ...gate,
+      status: execution.exitCode === 0 ? 'passed' : 'failed',
+      exitCode: execution.exitCode,
+      caseIds: caseIdsForGate(gate.id),
+      ...(execution.diagnostic === undefined
+        ? {}
+        : { diagnostic: execution.diagnostic }),
+    });
+  }
+  return {
+    ok:
+      results.length > 0 && results.every(({ status }) => status === 'passed'),
+    verifier: 'mammoth-p5-acceptance-v1',
+    fixtureManifest: P5_FIXTURE_MANIFEST,
+    gates: results,
+  };
+}
+
+export async function verifyP5ExecutableCaseProofs(
+  repository: string,
+): Promise<void> {
+  const proven = new Set<(typeof REQUIRED_P5_CASES)[number]>();
+  for (const proof of P5_EXECUTABLE_CASE_PROOFS) {
+    const source = await readFile(resolve(repository, proof.path), 'utf8');
+    for (const snippet of proof.snippets) {
+      if (!source.includes(snippet)) {
+        throw new Error(
+          `P5_EXECUTABLE_CASE_PROOF_MISSING:${proof.caseId}:${proof.path}:${snippet}`,
+        );
+      }
+    }
+    proven.add(proof.caseId);
+  }
+  const executableCases = REQUIRED_P5_CASES.filter((caseId) =>
+    P5_CASE_EXECUTION_GATES[caseId].some((gate) =>
+      [
+        'postgres-p5-migration',
+        'temporal-execution-recovery',
+        'projection-operator-inspection',
+      ].includes(gate),
+    ),
+  );
+  const missing = executableCases.filter((caseId) => !proven.has(caseId));
+  if (missing.length > 0)
+    throw new Error(`P5_EXECUTABLE_CASE_PROOF_DRIFT:${missing.join(',')}`);
+}
+
+function assertUniqueGateIds(gates: readonly P5GateSpec[]): void {
+  const ids = new Set<string>();
+  for (const gate of gates) {
+    if (ids.has(gate.id))
+      throw new Error(`P5_VERIFIER_DUPLICATE_GATE:${gate.id}`);
+    ids.add(gate.id);
+  }
+}
+
+function assertFixtureExecutionGates(gates: readonly P5GateSpec[]): void {
+  const gateIds = new Set(gates.map(({ id }) => id));
+  const missing = new Set<string>();
+  for (const gateIdList of Object.values(P5_CASE_EXECUTION_GATES)) {
+    for (const gateId of gateIdList) {
+      if (!gateIds.has(gateId)) missing.add(gateId);
+    }
+  }
+  if (missing.size > 0) {
+    throw new Error(
+      `P5_VERIFIER_CASE_GATE_MISSING:${[...missing].sort().join(',')}`,
+    );
+  }
+}
+
+function caseIdsForGate(gateId: string): readonly string[] {
+  return REQUIRED_P5_CASES.filter((caseId) =>
+    P5_CASE_EXECUTION_GATES[caseId].includes(gateId),
+  );
+}
+
+const systemDependencies: P5VerifierDependencies = {
+  exists: async (path) =>
+    access(path, constants.R_OK)
+      .then(() => true)
+      .catch(() => false),
+  validateTarget: async (target, absolutePath, repository) => {
+    if (target.id === 'fixture-manifest') {
+      const document: unknown = JSON.parse(
+        await readFile(absolutePath, 'utf8'),
+      );
+      if (
+        !isRecord(document) ||
+        !isRecord(document.scripts) ||
+        document.scripts.test !== 'vitest run'
+      )
+        return 'P5 acceptance package must expose a vitest test script';
+    }
+    if (target.id === 'postgres-p5-migration') {
+      const source = await readFile(
+        resolve(repository, 'packages/postgres-adapter/src/migrations.ts'),
+        'utf8',
+      );
+      const packageDocument: unknown = JSON.parse(
+        await readFile(absolutePath, 'utf8'),
+      );
+      if (
+        !isRecord(packageDocument) ||
+        !isRecord(packageDocument.scripts) ||
+        packageDocument.scripts['verify:p5'] !== 'tsx src/cli.ts verify-p5'
+      )
+        return 'production profile package must expose the live P5 Postgres verifier';
+      if (
+        !source.includes('version: 6') ||
+        !source.includes("name: 'p5_isolated_divergence'")
+      )
+        return 'production Postgres migration registry lacks P5 version 6';
+      const testSource = await readFile(
+        resolve(
+          repository,
+          'packages/postgres-adapter/test/research-cells.test.ts',
+        ),
+        'utf8',
+      );
+      if (!testSource.includes('p5_isolated_divergence'))
+        return 'Postgres lifecycle tests do not cover the P5 migration';
+      if (
+        !source.includes('mammoth_p5_guard_isolation_commit') ||
+        !source.includes('mammoth_p5_guard_sanitized_review_context') ||
+        !source.includes('mammoth_p5_guard_budget_settlement') ||
+        !source.includes('mammoth_p5_guard_cancellation_receipt') ||
+        !source.includes('mammoth_p5_json_contains_forbidden_attribution') ||
+        !source.includes('mammoth_p5_provider_charge_guard')
+      )
+        return 'production Postgres migration lacks executable P5 invariant guards';
+      const verifierSource = await readFile(
+        resolve(repository, 'packages/production-profile/src/verify.ts'),
+        'utf8',
+      );
+      if (
+        !verifierSource.includes('verifyP5Lifecycle') ||
+        !verifierSource.includes('nested-sanitized-context-leakage') ||
+        !verifierSource.includes('provider-aggregate-overspend') ||
+        !verifierSource.includes('cancellation-combined-overspend')
+      )
+        return 'production profile lacks live P5 trigger adversarial fixtures';
+    }
+    if (target.id === 'temporal-execution-recovery') {
+      const document: unknown = JSON.parse(
+        await readFile(absolutePath, 'utf8'),
+      );
+      if (!isRecord(document) || !isRecord(document.scripts))
+        return 'Temporal adapter package scripts are unreadable';
+      if (
+        document.scripts['test:live'] !==
+        'pnpm --filter @mammoth/adapter-contracts build && pnpm --filter @mammoth/workflow build && vitest run test/live-probe.test.ts test/research-workflow.test.ts test/research-cli.test.ts test/p5-live-workflow.test.ts --test-timeout 120000 --no-file-parallelism'
+      )
+        return 'Temporal P5 gate must execute the live P5 workflow test';
+    }
+    return undefined;
+  },
+  run: (command, cwd) =>
+    new Promise((resolveRun) => {
+      const child = spawn(command[0], command.slice(1), {
+        cwd,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: false,
+      });
+      let output = '';
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
+      child.stdout.on('data', (chunk) => {
+        output += String(chunk);
+      });
+      child.stderr.on('data', (chunk) => {
+        output += String(chunk);
+      });
+      child.on('error', (error) => {
+        resolveRun({ exitCode: 127, diagnostic: error.message });
+      });
+      child.on('close', (code) => {
+        resolveRun({
+          exitCode: code ?? 1,
+          ...(code === 0
+            ? {}
+            : {
+                diagnostic: output.slice(-4000),
+              }),
+        });
+      });
+    }),
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}

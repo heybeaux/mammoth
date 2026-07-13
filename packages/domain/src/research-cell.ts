@@ -13,6 +13,9 @@ import {
 export const RESEARCH_CELL_CONTRACT_VERSION = '1.0.0';
 export const MODEL_LINEAGE_POLICY_VERSION = '1.0.0';
 export const RESEARCH_CELL_POLICY_VERSION = '1.0.0';
+export const ISOLATION_PROTOCOL_VERSION = '1.0.0';
+export const SANITIZED_REVIEW_CONTEXT_VERSION = '1.0.0';
+export const REVIEW_ASSIGNMENT_POLICY_VERSION = '1.0.0';
 
 export const CriterionReferenceSchema = z
   .object({
@@ -443,6 +446,129 @@ export const CellOutcomeSchema = z
     }
   });
 
+export const IsolationCommitSchema = z
+  .object({
+    id: EntityIdSchema,
+    protocolVersion: z.literal(ISOLATION_PROTOCOL_VERSION),
+    programId: EntityIdSchema,
+    cellPlanId: EntityIdSchema,
+    workItemId: EntityIdSchema,
+    positionId: EntityIdSchema,
+    authorAgentId: EntityIdSchema,
+    role: NonEmptyStringSchema,
+    criterionRef: CriterionReferenceSchema,
+    modelProfileVersionId: EntityIdSchema,
+    inputDigest: DigestSchema,
+    outputDigest: DigestSchema,
+    outputSchemaVersion: SchemaVersionSchema,
+    receiptRefs: z.array(ReceiptReferenceSchema).min(1),
+    auditSequence: z.number().int().nonnegative(),
+    committedAt: TimestampSchema,
+    canonicalDigest: DigestSchema,
+  })
+  .strict()
+  .superRefine((commit, ctx) => {
+    if (commit.canonicalDigest !== isolationCommitDigest(commit)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['canonicalDigest'],
+        message: 'isolation commit digest is not canonical',
+      });
+    }
+  });
+
+export const PeerRevealRequestSchema = z
+  .object({
+    protocolVersion: z.literal(ISOLATION_PROTOCOL_VERSION),
+    requesterPositionId: EntityIdSchema,
+    peerPositionId: EntityIdSchema,
+    requesterCommitDigest: DigestSchema,
+    peerCommitDigest: DigestSchema,
+    requestedAtAuditSequence: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const SanitizedReviewContextSchema = z
+  .object({
+    schemaVersion: z.literal(SANITIZED_REVIEW_CONTEXT_VERSION),
+    positionId: EntityIdSchema,
+    programId: EntityIdSchema,
+    criterionRef: CriterionReferenceSchema,
+    inputDigest: DigestSchema,
+    outputDigest: DigestSchema,
+    outputSchemaVersion: SchemaVersionSchema,
+    answer: NonEmptyStringSchema,
+    claimIds: z.array(EntityIdSchema),
+    evidenceIds: z.array(EntityIdSchema),
+    hypothesisIds: z.array(EntityIdSchema),
+    artifactIds: z.array(EntityIdSchema),
+    assumptions: z.array(NonEmptyStringSchema),
+    dissent: z.array(NonEmptyStringSchema),
+    proposedFalsifiers: z.array(NonEmptyStringSchema),
+    positionCommitDigest: DigestSchema,
+    contextDigest: DigestSchema,
+  })
+  .strict()
+  .superRefine((context, ctx) => {
+    if (context.contextDigest !== sanitizedReviewContextDigest(context)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['contextDigest'],
+        message: 'sanitized review context digest is not canonical',
+      });
+    }
+  });
+
+export const AssignmentPolicyInputSchema = z
+  .object({
+    policyVersion: z.literal(REVIEW_ASSIGNMENT_POLICY_VERSION),
+    assignment: ReviewAssignmentSchema,
+    positionCommitDigest: DigestSchema,
+    sanitizedContextDigest: DigestSchema,
+    assignmentDigest: DigestSchema,
+  })
+  .strict()
+  .superRefine((input, ctx) => {
+    if (input.assignmentDigest !== reviewAssignmentPolicyDigest(input)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['assignmentDigest'],
+        message: 'review assignment policy digest is not canonical',
+      });
+    }
+  });
+
+export const ReviewResidueSchema = z
+  .object({
+    id: EntityIdSchema,
+    policyVersion: z.literal(REVIEW_ASSIGNMENT_POLICY_VERSION),
+    kind: z.enum([
+      'minority_position',
+      'unresolved_conflict',
+      'abstention',
+      'invalid_review',
+      'rejected_assignment',
+      'timed_out_review',
+      'never_started_review',
+    ]),
+    attributableWorkId: EntityIdSchema,
+    positionIds: z.array(EntityIdSchema),
+    reviewIds: z.array(EntityIdSchema),
+    reasonCodes: z.array(NonEmptyStringSchema).min(1),
+    retainedAt: TimestampSchema,
+    canonicalDigest: DigestSchema,
+  })
+  .strict()
+  .superRefine((residue, ctx) => {
+    if (residue.canonicalDigest !== reviewResidueDigest(residue)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['canonicalDigest'],
+        message: 'review residue digest is not canonical',
+      });
+    }
+  });
+
 export type CriterionReference = z.infer<typeof CriterionReferenceSchema>;
 export type ReceiptReference = z.infer<typeof ReceiptReferenceSchema>;
 export type ModelUsage = z.infer<typeof ModelUsageSchema>;
@@ -461,6 +587,13 @@ export type DissentReport = z.infer<typeof DissentReportSchema>;
 export type SynthesisArtifact = z.infer<typeof SynthesisArtifactSchema>;
 export type CorrelationAssessment = z.infer<typeof CorrelationAssessmentSchema>;
 export type CellOutcome = z.infer<typeof CellOutcomeSchema>;
+export type IsolationCommit = z.infer<typeof IsolationCommitSchema>;
+export type PeerRevealRequest = z.infer<typeof PeerRevealRequestSchema>;
+export type SanitizedReviewContext = z.infer<
+  typeof SanitizedReviewContextSchema
+>;
+export type AssignmentPolicyInput = z.infer<typeof AssignmentPolicyInputSchema>;
+export type ReviewResidue = z.infer<typeof ReviewResidueSchema>;
 
 function digestWithoutMutableDigest(kind: string, value: object): Digest {
   const rest = { ...(value as Record<string, unknown>) };
@@ -515,6 +648,38 @@ export function synthesisArtifactDigest(artifact: SynthesisArtifact): Digest {
 
 export function cellOutcomeDigest(outcome: CellOutcome): Digest {
   return digestWithoutMutableDigest('cell-outcome', outcome);
+}
+
+export function isolationCommitDigest(commit: IsolationCommit): Digest {
+  return digestWithoutMutableDigest('isolation-commit', commit);
+}
+
+export function sanitizedReviewContextDigest(
+  context: SanitizedReviewContext,
+): Digest {
+  const rest = { ...(context as Record<string, unknown>) };
+  delete rest.contextDigest;
+  return canonicalDigest({
+    kind: 'sanitized-review-context',
+    schemaVersion: SANITIZED_REVIEW_CONTEXT_VERSION,
+    value: rest,
+  });
+}
+
+export function reviewAssignmentPolicyDigest(
+  input: AssignmentPolicyInput,
+): Digest {
+  const rest = { ...(input as Record<string, unknown>) };
+  delete rest.assignmentDigest;
+  return canonicalDigest({
+    kind: 'review-assignment-policy-input',
+    schemaVersion: REVIEW_ASSIGNMENT_POLICY_VERSION,
+    value: rest,
+  });
+}
+
+export function reviewResidueDigest(residue: ReviewResidue): Digest {
+  return digestWithoutMutableDigest('review-residue', residue);
 }
 
 export type ModelLineageGraphResult =
@@ -749,6 +914,18 @@ export type AdmissionReason =
   | 'noncanonical_digest'
   | 'synthesis_non_admitted_claim'
   | 'synthesis_unknown_position'
+  | 'early_reveal'
+  | 'missing_durable_commit'
+  | 'commit_digest_drift'
+  | 'commit_sequence_drift'
+  | 'mutable_criterion_ref'
+  | 'mutable_model_profile_ref'
+  | 'review_context_leakage'
+  | 'review_context_digest_drift'
+  | 'assignment_policy_drift'
+  | 'assignment_not_blind'
+  | 'unknown_lineage_policy'
+  | 'residue_erased'
   | 'admitted_on_branch'
   | 'admitted';
 
@@ -964,6 +1141,7 @@ export function admitSynthesis(input: {
   universe: ReferenceUniverse;
   admittedClaimIds: ReadonlySet<string>;
   admittedPositionIds: ReadonlySet<string>;
+  requiredResidueIds?: ReadonlySet<string>;
 }): PolicyDecision<SynthesisArtifact> {
   const parsed = SynthesisArtifactSchema.safeParse(input.raw);
   if (!parsed.success) {
@@ -999,6 +1177,11 @@ export function admitSynthesis(input: {
       reasons.push('synthesis_unknown_position');
     }
   }
+  for (const residueId of input.requiredResidueIds ?? []) {
+    if (!artifact.dissentReportIds.includes(residueId)) {
+      reasons.push('residue_erased');
+    }
+  }
   return reasons.length === 0
     ? {
         ok: true,
@@ -1006,6 +1189,232 @@ export function admitSynthesis(input: {
         reasonCodes: admissionSuccessReasons(artifact, input.universe),
       }
     : { ok: false, rejected: artifact, reasonCodes: uniqueReasons(reasons) };
+}
+
+export function commitPositionForReveal(input: {
+  position: unknown;
+  commit: unknown;
+  universe: ReferenceUniverse;
+}): PolicyDecision<IsolationCommit> {
+  const parsedPosition = ResearchPositionSchema.safeParse(input.position);
+  if (!parsedPosition.success) {
+    return {
+      ok: false,
+      rejected: input.position,
+      reasonCodes: ['schema_invalid'],
+    };
+  }
+  const parsedCommit = IsolationCommitSchema.safeParse(input.commit);
+  if (!parsedCommit.success) {
+    const reasonCodes: AdmissionReason[] = parsedCommit.error.issues.some(
+      (issue) => issue.message.includes('digest'),
+    )
+      ? ['schema_invalid', 'noncanonical_digest']
+      : ['schema_invalid'];
+    return { ok: false, rejected: input.commit, reasonCodes };
+  }
+  const position = parsedPosition.data;
+  const commit = parsedCommit.data;
+  const reasons = commonProposalReasons(position, input.universe);
+  if (commit.programId !== position.programId) reasons.push('schema_invalid');
+  if (commit.cellPlanId !== position.cellPlanId)
+    reasons.push('cell_plan_drift');
+  if (commit.workItemId !== position.workItemId)
+    reasons.push('work_item_drift');
+  if (commit.positionId !== position.id) reasons.push('schema_invalid');
+  if (commit.authorAgentId !== position.authorAgentId) {
+    reasons.push('schema_invalid');
+  }
+  if (commit.role !== position.role) reasons.push('schema_invalid');
+  if (!criterionRefsEqual(commit.criterionRef, position.criterionRef)) {
+    reasons.push('criterion_drift');
+  }
+  if (commit.criterionRef.supersedesCriterionId) {
+    reasons.push('mutable_criterion_ref');
+  }
+  if (commit.modelProfileVersionId !== position.modelProfileVersionId) {
+    reasons.push('mutable_model_profile_ref');
+  }
+  if (!input.universe.modelVersions.has(commit.modelProfileVersionId)) {
+    reasons.push('unknown_model_lineage');
+  }
+  if (commit.inputDigest !== position.inputDigest) {
+    reasons.push('input_digest_drift');
+  }
+  if (commit.outputSchemaVersion !== position.outputSchemaVersion) {
+    reasons.push('output_schema_drift');
+  }
+  if (commit.outputDigest !== researchPositionDigest(position)) {
+    reasons.push('commit_digest_drift');
+  }
+  if (commit.receiptRefs.length === 0) reasons.push('missing_receipt_ref');
+  for (const receipt of commit.receiptRefs) {
+    const known = input.universe.receiptRefs.get(receipt.receiptId);
+    if (!known) reasons.push('missing_receipt_ref');
+    else if (canonicalDigest(known) !== canonicalDigest(receipt)) {
+      reasons.push('receipt_ref_drift');
+    }
+  }
+  return reasons.length === 0
+    ? { ok: true, value: commit, reasonCodes: ['admitted'] }
+    : { ok: false, rejected: commit, reasonCodes: uniqueReasons(reasons) };
+}
+
+export function authorizePeerReveal(input: {
+  request: unknown;
+  commits: ReadonlyMap<string, IsolationCommit>;
+}): PolicyDecision<PeerRevealRequest> {
+  const parsed = PeerRevealRequestSchema.safeParse(input.request);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      rejected: input.request,
+      reasonCodes: ['schema_invalid'],
+    };
+  }
+  const request = parsed.data;
+  const reasons: AdmissionReason[] = [];
+  const requester = input.commits.get(request.requesterPositionId);
+  const peer = input.commits.get(request.peerPositionId);
+  if (!requester || !peer) reasons.push('missing_durable_commit');
+  if (
+    requester &&
+    requester.canonicalDigest !== request.requesterCommitDigest
+  ) {
+    reasons.push('commit_digest_drift');
+  }
+  if (peer && peer.canonicalDigest !== request.peerCommitDigest) {
+    reasons.push('commit_digest_drift');
+  }
+  if (
+    requester &&
+    peer &&
+    request.requestedAtAuditSequence <=
+      Math.max(requester.auditSequence, peer.auditSequence)
+  ) {
+    reasons.push('early_reveal');
+  }
+  return reasons.length === 0
+    ? { ok: true, value: request, reasonCodes: ['admitted'] }
+    : { ok: false, rejected: request, reasonCodes: uniqueReasons(reasons) };
+}
+
+export function buildSanitizedReviewContext(input: {
+  position: ResearchPosition;
+  commit: IsolationCommit;
+}): SanitizedReviewContext {
+  const base: SanitizedReviewContext = {
+    schemaVersion: SANITIZED_REVIEW_CONTEXT_VERSION,
+    positionId: input.position.id,
+    programId: input.position.programId,
+    criterionRef: input.position.criterionRef,
+    inputDigest: input.position.inputDigest,
+    outputDigest: researchPositionDigest(input.position),
+    outputSchemaVersion: input.position.outputSchemaVersion,
+    answer: input.position.answer,
+    claimIds: input.position.claimIds,
+    evidenceIds: input.position.evidenceIds,
+    hypothesisIds: input.position.hypothesisIds,
+    artifactIds: input.position.artifactIds,
+    assumptions: input.position.assumptions,
+    dissent: input.position.dissent,
+    proposedFalsifiers: input.position.proposedFalsifiers,
+    positionCommitDigest: input.commit.canonicalDigest,
+    contextDigest: input.commit.canonicalDigest,
+  };
+  return { ...base, contextDigest: sanitizedReviewContextDigest(base) };
+}
+
+export function admitSanitizedReviewContext(input: {
+  raw: unknown;
+  position: ResearchPosition;
+  commit: IsolationCommit;
+}): PolicyDecision<SanitizedReviewContext> {
+  const forbidden = findForbiddenReviewContextFields(input.raw);
+  const parsed = SanitizedReviewContextSchema.safeParse(input.raw);
+  const reasons: AdmissionReason[] = forbidden.length
+    ? ['review_context_leakage']
+    : [];
+  if (!parsed.success) {
+    reasons.push(
+      parsed.error.issues.some((issue) => issue.message.includes('digest'))
+        ? 'review_context_digest_drift'
+        : 'schema_invalid',
+    );
+    return {
+      ok: false,
+      rejected: input.raw,
+      reasonCodes: uniqueReasons(reasons),
+    };
+  }
+  const context = parsed.data;
+  const expected = buildSanitizedReviewContext({
+    position: input.position,
+    commit: input.commit,
+  });
+  if (canonicalDigest(context) !== canonicalDigest(expected)) {
+    reasons.push('review_context_digest_drift');
+  }
+  return reasons.length === 0
+    ? { ok: true, value: context, reasonCodes: ['admitted'] }
+    : { ok: false, rejected: context, reasonCodes: uniqueReasons(reasons) };
+}
+
+export function admitReviewAssignment(input: {
+  raw: unknown;
+  universe: ReferenceUniverse;
+}): PolicyDecision<AssignmentPolicyInput> {
+  const parsed = AssignmentPolicyInputSchema.safeParse(input.raw);
+  if (!parsed.success) {
+    const reasonCodes: AdmissionReason[] = parsed.error.issues.some((issue) =>
+      issue.message.includes('digest'),
+    )
+      ? ['schema_invalid', 'assignment_policy_drift']
+      : ['schema_invalid'];
+    return { ok: false, rejected: input.raw, reasonCodes };
+  }
+  const policyInput = parsed.data;
+  const reasons: AdmissionReason[] = [];
+  const assignment = policyInput.assignment;
+  if (!assignment.blind) reasons.push('assignment_not_blind');
+  if (assignment.programId !== input.universe.programId) {
+    reasons.push('schema_invalid');
+  }
+  if (
+    !criterionRefsEqual(assignment.criterionRef, input.universe.criterionRef)
+  ) {
+    reasons.push('criterion_drift');
+  }
+  if (
+    assignment.reviewerAgentId === assignment.targetAuthorAgentId ||
+    assignment.reviewerModelProfileVersionId ===
+      assignment.targetModelProfileVersionId ||
+    assignment.reviewerRole === assignment.targetRole
+  ) {
+    reasons.push('self_review');
+  }
+  const reviewer = input.universe.modelVersions.get(
+    assignment.reviewerModelProfileVersionId,
+  );
+  const target = input.universe.modelVersions.get(
+    assignment.targetModelProfileVersionId,
+  );
+  if (!reviewer || !target) {
+    reasons.push('unknown_model_lineage');
+  } else {
+    const correlation = assessModelCorrelation({
+      subject: reviewer,
+      candidate: target,
+      registry: input.universe.modelVersions,
+    });
+    if (correlation.reasonCodes.includes('unknown_lineage')) {
+      reasons.push('unknown_lineage_policy');
+    }
+    if (!correlation.independent) reasons.push('correlated_review');
+  }
+  return reasons.length === 0
+    ? { ok: true, value: policyInput, reasonCodes: ['admitted'] }
+    : { ok: false, rejected: policyInput, reasonCodes: uniqueReasons(reasons) };
 }
 
 export interface ProposalAudit<T> {
@@ -1159,6 +1568,46 @@ function hasModelAncestry(
     return parents.some((parentId) => visit(parentId, seen));
   };
   return visit(subjectId, new Set());
+}
+
+const forbiddenReviewContextFields = new Set([
+  'authorAgentId',
+  'authorIdentity',
+  'authorModelProfileVersionId',
+  'authorModel',
+  'authorProvider',
+  'modelProfileVersionId',
+  'provider',
+  'confidence',
+  'selfConfidence',
+  'popularity',
+  'voteCount',
+  'priorVerdict',
+  'priorVerdicts',
+  'previousReviewerVerdicts',
+  'upstreamPass',
+  'upstreamPassMarker',
+  'passMarker',
+  'canonicalDigest',
+]);
+
+function findForbiddenReviewContextFields(value: unknown): string[] {
+  const found = new Set<string>();
+  const visit = (entry: unknown): void => {
+    if (!entry || typeof entry !== 'object') return;
+    if (Array.isArray(entry)) {
+      for (const item of entry) visit(item);
+      return;
+    }
+    for (const [key, child] of Object.entries(entry)) {
+      if (forbiddenReviewContextFields.has(key) || key.startsWith('future')) {
+        found.add(key);
+      }
+      visit(child);
+    }
+  };
+  visit(value);
+  return [...found].sort();
 }
 
 function uniqueReasons(reasons: readonly AdmissionReason[]): AdmissionReason[] {

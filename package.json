@@ -34,6 +34,7 @@
     "verify:p2:profile": "bash infra/verify-production-profile.sh",
     "verify:p3": "tsx scripts/verify-p3.ts",
     "verify:p4": "tsx scripts/verify-p4.ts",
+    "verify:p5": "tsx scripts/verify-p5.ts",
     "eval:offline": "tsx scripts/verify-phase-0.ts"
   },
   "devDependencies": {

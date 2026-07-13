@@ -187,21 +187,54 @@ describe('research-cell migration', () => {
       "assignment_reviewer_agent <> new.authoritative_contract->>'reviewerAgentId'",
     );
     expect(foundationMigrations.map(({ version }) => version)).toEqual([
-      1, 2, 3, 4, 5,
+      1, 2, 3, 4, 5, 6,
     ]);
   });
 
-  it('preserves P3 migration checksums while appending the P4 migration', () => {
+  it('appends the forward-only P5 migration after the P4 migration', () => {
     expect(foundationMigrations.slice(0, 4).map(({ name }) => name)).toEqual([
       'adapter_foundation',
       'transactional_epistemic_ledger',
       'durable_work_effects_outbox',
       'activity_effect_v2',
     ]);
+    expect(foundationMigrations[4]?.name).toBe('research_cell_persistence');
+    expect(foundationMigrations[5]?.name).toBe('p5_isolated_divergence');
     expect(foundationMigrations[4]?.checksum).toMatch(/^[a-f0-9]{64}$/);
+    expect(foundationMigrations[5]?.checksum).toMatch(/^[a-f0-9]{64}$/);
+    expect(foundationMigrations[5]?.sql).toContain(
+      'create table mammoth_p5_isolation_commits',
+    );
+    expect(foundationMigrations[5]?.sql).toContain(
+      'create table mammoth_p5_budget_reservations',
+    );
+    expect(foundationMigrations[5]?.sql).toContain(
+      'create table mammoth_p5_cancellation_receipts',
+    );
+    expect(foundationMigrations[5]?.sql).toContain(
+      "isolation_protocol_version text not null check (isolation_protocol_version = '1.0.0')",
+    );
+    expect(foundationMigrations[5]?.sql).toContain(
+      'P5 isolation commit metadata mismatch',
+    );
+    expect(foundationMigrations[5]?.sql).toContain(
+      'P5 reveal audit sequence must follow commit sequence',
+    );
+    expect(foundationMigrations[5]?.sql).toContain(
+      'P5 sanitized context contains forbidden attribution',
+    );
+    expect(foundationMigrations[5]?.sql).toContain(
+      'P5 budget reservation transition is invalid',
+    );
+    expect(foundationMigrations[5]?.sql).toContain(
+      'P5 budget settlement exceeds reservation ceiling',
+    );
+    expect(foundationMigrations[5]?.sql).toContain(
+      'P5 cancellation amount exceeds reservation ceiling',
+    );
   });
 
-  it('installs P4 research-cell schema on an empty database and is repeatable after restart', async () => {
+  it('installs P5 research-cell schema on an empty database and is repeatable after restart', async () => {
     const database = new FakeMigrationDatabase();
     const runner = new MigrationRunner(
       database,
@@ -212,14 +245,14 @@ describe('research-cell migration', () => {
     const applied = await runner.migrate();
     const repeated = await runner.migrate();
 
-    expect(applied.map((entry) => entry.version)).toEqual([1, 2, 3, 4, 5]);
-    expect(repeated.map((entry) => entry.version)).toEqual([1, 2, 3, 4, 5]);
+    expect(applied.map((entry) => entry.version)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(repeated.map((entry) => entry.version)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(database.executedMigrations).toEqual(
       foundationMigrations.map((migration) => migration.sql),
     );
   });
 
-  it('upgrades from the current P3 schema by executing only the P4 migration', async () => {
+  it('upgrades from the current P3 schema by executing P4 then P5 migrations', async () => {
     const database = new FakeMigrationDatabase();
     const p3Runner = new MigrationRunner(
       database,
@@ -236,8 +269,32 @@ describe('research-cell migration', () => {
     );
     const applied = await p4Runner.migrate();
 
-    expect(applied.map((entry) => entry.version)).toEqual([1, 2, 3, 4, 5]);
-    expect(database.executedMigrations).toEqual([foundationMigrations[4]?.sql]);
+    expect(applied.map((entry) => entry.version)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(database.executedMigrations).toEqual([
+      foundationMigrations[4]?.sql,
+      foundationMigrations[5]?.sql,
+    ]);
+  });
+
+  it('upgrades from the P4 schema by executing only the P5 migration', async () => {
+    const database = new FakeMigrationDatabase();
+    const p4Runner = new MigrationRunner(
+      database,
+      foundationMigrations.slice(0, 5),
+      transaction,
+    );
+    await p4Runner.migrate();
+    database.executedMigrations.length = 0;
+
+    const p5Runner = new MigrationRunner(
+      database,
+      foundationMigrations,
+      transaction,
+    );
+    const applied = await p5Runner.migrate();
+
+    expect(applied.map((entry) => entry.version)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(database.executedMigrations).toEqual([foundationMigrations[5]?.sql]);
   });
 
   it('preserves interrupted P4 migration residue and fails closed on restart', async () => {
