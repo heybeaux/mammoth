@@ -94,3 +94,6 @@ jobs:
 
       - name: Verify P4 research-cell contracts
         run: pnpm verify:p4
+
+      - name: Verify P5 isolated divergence
+        run: pnpm verify:p5
