@@ -224,6 +224,12 @@ export const ModelLineageProjectionInputSchema =
         });
     });
 
+export const CorrelationProjectionStatusSchema = z.enum([
+  'independent',
+  'correlated',
+  'unknown_penalized',
+]);
+
 export const CorrelationProjectionInputSchema =
   ProjectionDigestRecordSchema.extend({
     contract: CorrelationAssessmentSchema,
@@ -231,20 +237,80 @@ export const CorrelationProjectionInputSchema =
     modelLineageIds: z.array(EntityIdSchema).min(2),
     policyVersion: NonEmptyStringSchema,
     score: z.number().min(0).max(1),
-    status: z.enum(['independent', 'correlated', 'unknown_penalized']),
+    status: CorrelationProjectionStatusSchema,
     reasonCodes: z.array(NonEmptyStringSchema),
-  }).strict();
+  })
+    .strict()
+    .superRefine((record, context) => {
+      const contract = record.contract;
+      const expectedStatus = contract.independent
+        ? 'independent'
+        : contract.reasonCodes.includes('unknown_lineage')
+          ? 'unknown_penalized'
+          : 'correlated';
+      if (
+        record.id !== contract.id ||
+        record.policyVersion !== contract.policyVersion ||
+        record.score !== contract.correlationScore ||
+        record.status !== expectedStatus ||
+        !sameOrderedValues(record.modelLineageIds, [
+          contract.subjectModelProfileVersionId,
+          contract.candidateModelProfileVersionId,
+        ]) ||
+        !sameOrderedValues(record.reasonCodes, contract.reasonCodes)
+      )
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['contract'],
+          message:
+            'correlation projection metadata drifts from domain contract',
+        });
+    });
+
+export const DissentProjectionStatusSchema = z.enum([
+  'minority',
+  'unresolved',
+  'contradicted',
+  'preserved',
+]);
 
 export const DissentProjectionInputSchema = ProjectionDigestRecordSchema.extend(
   {
     contract: DissentReportSchema,
     id: EntityIdSchema,
-    positionId: EntityIdSchema,
+    positionIds: z.array(EntityIdSchema).min(1),
     claimIds: z.array(EntityIdSchema),
-    status: z.enum(['minority', 'unresolved', 'contradicted', 'preserved']),
+    evidenceIds: z.array(EntityIdSchema),
+    status: DissentProjectionStatusSchema,
     reasonCodes: z.array(NonEmptyStringSchema),
   },
-).strict();
+)
+  .strict()
+  .superRefine((record, context) => {
+    const contract = record.contract;
+    if (
+      record.id !== contract.id ||
+      !sameOrderedValues(record.positionIds, contract.positionIds) ||
+      !sameOrderedValues(record.claimIds, contract.claimIds) ||
+      !sameOrderedValues(record.evidenceIds, contract.evidenceIds) ||
+      !sameOrderedValues(record.reasonCodes, contract.unresolvedReasonCodes)
+    )
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['contract'],
+        message: 'dissent projection metadata drifts from domain contract',
+      });
+  });
+
+function sameOrderedValues(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}
 
 export const RejectedResidueProjectionInputSchema =
   ProjectionDigestRecordSchema.extend({
@@ -414,8 +480,10 @@ export const CorrelationNodeSchema = z
     id: EntityIdSchema,
     policyVersion: NonEmptyStringSchema,
     score: z.number().min(0).max(1),
-    status: CorrelationProjectionInputSchema.shape.status,
+    status: CorrelationProjectionStatusSchema,
     reasonCodes: z.array(NonEmptyStringSchema),
+    modelLineageIds: z.array(EntityIdSchema).min(2),
+    contractDigest: DigestSchema,
   })
   .strict();
 
@@ -423,8 +491,15 @@ export const DissentNodeSchema = z
   .object({
     kind: z.literal('dissent'),
     id: EntityIdSchema,
-    status: DissentProjectionInputSchema.shape.status,
+    status: DissentProjectionStatusSchema,
     reasonCodes: z.array(NonEmptyStringSchema),
+    positionIds: z.array(EntityIdSchema).min(1),
+    claimIds: z.array(EntityIdSchema),
+    evidenceIds: z.array(EntityIdSchema),
+    criterionId: EntityIdSchema,
+    criterionVersion: z.number().int().positive(),
+    criterionDigest: DigestSchema,
+    contractDigest: DigestSchema,
   })
   .strict();
 

@@ -117,12 +117,21 @@ export function buildObservatoryProjectionV1(
       score: correlation.score,
       status: correlation.status,
       reasonCodes: [...correlation.reasonCodes].sort(),
+      modelLineageIds: [...correlation.modelLineageIds].sort(),
+      contractDigest: correlation.contract.canonicalDigest,
     })),
     ...source.dissentReports.map((dissent) => ({
       kind: 'dissent' as const,
       id: dissent.id,
       status: dissent.status,
       reasonCodes: [...dissent.reasonCodes].sort(),
+      positionIds: [...dissent.positionIds].sort(),
+      claimIds: [...dissent.claimIds].sort(),
+      evidenceIds: [...dissent.evidenceIds].sort(),
+      criterionId: dissent.contract.criterionRef.criterionId,
+      criterionVersion: dissent.contract.criterionRef.criterionVersion,
+      criterionDigest: dissent.contract.criterionRef.criterionDigest,
+      contractDigest: dissent.contract.canonicalDigest,
     })),
     ...source.rejectedResidue.map((residue) => ({
       kind: 'rejected_residue' as const,
@@ -241,18 +250,25 @@ export function buildObservatoryProjectionV1(
       })),
     ),
     ...source.dissentReports.flatMap((dissent) => [
-      {
-        id: `${dissent.id}:position:${dissent.positionId}`,
+      ...dissent.positionIds.map((positionId) => ({
+        id: `${dissent.id}:position:${positionId}`,
         from: dissent.id,
-        to: dissent.positionId,
+        to: positionId,
         kind: 'dissents_from' as const,
         status: projectionStatus(dissent.status),
-      },
+      })),
       ...dissent.claimIds.map((claimId) => ({
         id: `${dissent.id}:claim:${claimId}`,
         from: dissent.id,
         to: claimId,
         kind: 'references_claim' as const,
+        status: projectionStatus(dissent.status),
+      })),
+      ...dissent.evidenceIds.map((evidenceId) => ({
+        id: `${dissent.id}:evidence:${evidenceId}`,
+        from: dissent.id,
+        to: evidenceId,
+        kind: 'references_evidence' as const,
         status: projectionStatus(dissent.status),
       })),
     ]),
@@ -339,6 +355,7 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
   const lineages = new Set(source.sourceLineages.map(({ id }) => id));
   const cells = new Set(source.cells.map(({ id }) => id));
   const cellsById = new Map(source.cells.map((cell) => [cell.id, cell]));
+  const cellPlanIds = new Set(source.cells.map(({ contract }) => contract.id));
   const positions = new Set(source.positions.map(({ id }) => id));
   const reviews = new Set(source.reviews.map(({ id }) => id));
   const modelLineages = new Set(source.modelLineages.map(({ id }) => id));
@@ -539,10 +556,24 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
   for (const dissent of source.dissentReports) {
     assertRecordDigest(dissent, 'dissent');
     assertNotFutureAuthority(dissent, source.authoritativeRevision, 'dissent');
-    if (!positions.has(dissent.positionId))
+    if (dissent.contract.programId !== source.program.id)
+      throw new Error(`dissent ${dissent.id} belongs to another program`);
+    if (!cellPlanIds.has(dissent.contract.cellPlanId))
+      throw new Error(`dissent ${dissent.id} references unknown cell plan`);
+    if (
+      dissent.contract.criterionRef.criterionId !== source.criterion.id ||
+      dissent.contract.criterionRef.criterionVersion !==
+        source.criterion.version ||
+      dissent.contract.criterionRef.criterionDigest !==
+        source.criterion.canonicalDigest
+    )
+      throw new Error(`dissent ${dissent.id} references unknown criterion`);
+    if (dissent.positionIds.some((id) => !positions.has(id)))
       throw new Error(`dissent ${dissent.id} references unknown position`);
     if (dissent.claimIds.some((id) => !claims.has(id)))
       throw new Error(`dissent ${dissent.id} references unknown claim`);
+    if (dissent.evidenceIds.some((id) => !evidence.has(id)))
+      throw new Error(`dissent ${dissent.id} references unknown evidence`);
   }
   for (const residue of source.rejectedResidue) {
     assertRecordDigest(residue, 'rejected residue');

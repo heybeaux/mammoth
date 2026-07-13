@@ -5,10 +5,14 @@ import {
   RESEARCH_CELL_CONTRACT_VERSION,
   canonicalDigest,
   cellInputDigest,
+  correlationAssessmentDigest,
+  dissentReportDigest,
   modelProfileVersionDigest,
   researchPositionDigest,
   researchReviewDigest,
   type CellInput,
+  type CorrelationAssessment,
+  type DissentReport,
   type ModelProfileVersion,
   type ResearchPosition,
   type ResearchReview,
@@ -268,6 +272,31 @@ describe('ObservatoryProjectionV1', () => {
       ['rejected_residue', 'residue-position'],
     );
     expect(
+      projection.nodes.find(
+        (node) =>
+          node.kind === 'correlation' && node.id === 'correlation-review-panel',
+      ),
+    ).toMatchObject({
+      policyVersion: MODEL_LINEAGE_POLICY_VERSION,
+      modelLineageIds: ['model-lineage-frontier', 'model-lineage-qwen'],
+      contractDigest: (
+        input.correlations as { contract: { canonicalDigest: string } }[]
+      )[0]?.contract.canonicalDigest,
+    });
+    expect(
+      projection.nodes.find(
+        (node) => node.kind === 'dissent' && node.id === 'dissent-position',
+      ),
+    ).toMatchObject({
+      positionIds: ['position-unsupported'],
+      claimIds: ['claim-unresolved'],
+      evidenceIds: ['evidence-support'],
+      criterionId: 'criterion-1',
+      contractDigest: (
+        input.dissentReports as { contract: { canonicalDigest: string } }[]
+      )[0]?.contract.canonicalDigest,
+    });
+    expect(
       projection.edges.map((edge) => [edge.kind, edge.from, edge.to]),
     ).toContainEqual(['reviews', 'review-position', 'position-unsupported']);
     expect(
@@ -282,6 +311,33 @@ describe('ObservatoryProjectionV1', () => {
 
   it('fails closed on P4 future authority, digest mismatch, broken references, and lineage cycles', async () => {
     const input = withP4(await fixture());
+
+    const [sourceCorrelation] = input.correlations as Record<string, unknown>[];
+    const [sourceDissent] = input.dissentReports as Record<string, unknown>[];
+    if (!sourceCorrelation || !sourceDissent)
+      throw new Error('P4 fixture must contain correlation and dissent');
+    expect(() =>
+      buildObservatoryProjectionV1({
+        ...input,
+        correlations: [
+          withDigest({
+            ...sourceCorrelation,
+            policyVersion: 'drifted-policy',
+          }),
+        ],
+      }),
+    ).toThrow(/correlation projection metadata drifts/);
+    expect(() =>
+      buildObservatoryProjectionV1({
+        ...input,
+        dissentReports: [
+          withDigest({
+            ...sourceDissent,
+            evidenceIds: [],
+          }),
+        ],
+      }),
+    ).toThrow(/dissent projection metadata drifts/);
 
     const [sourceCell] = input.cells as Record<string, unknown>[];
     if (!sourceCell) throw new Error('P4 fixture must contain a cell');
@@ -416,6 +472,41 @@ function withP4(input: Record<string, unknown>): Record<string, unknown> {
     authoritativeInputDigest,
   );
   const reviewContract = reviewContractForProjection(criterionRef);
+  const correlationContractBase: CorrelationAssessment = {
+    id: 'correlation-review-panel',
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    policyVersion: MODEL_LINEAGE_POLICY_VERSION,
+    subjectModelProfileVersionId: 'model-lineage-qwen',
+    candidateModelProfileVersionId: 'model-lineage-frontier',
+    independent: false,
+    correlationScore: 0.6,
+    reasonCodes: ['unknown_lineage'],
+    assessedAt: '2026-07-13T18:00:00.000Z',
+    canonicalDigest:
+      'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+  };
+  const correlationContract = {
+    ...correlationContractBase,
+    canonicalDigest: correlationAssessmentDigest(correlationContractBase),
+  };
+  const dissentContractBase: DissentReport = {
+    id: 'dissent-position',
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    programId: 'program-p2',
+    cellPlanId: 'cell-plan-divergence',
+    criterionRef,
+    positionIds: ['position-unsupported'],
+    claimIds: ['claim-unresolved'],
+    evidenceIds: ['evidence-support'],
+    unresolvedReasonCodes: ['minority-report-retained'],
+    canonicalDigest:
+      'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+    createdAt: '2026-07-13T18:00:00.000Z',
+  };
+  const dissentContract = {
+    ...dissentContractBase,
+    canonicalDigest: dissentReportDigest(dissentContractBase),
+  };
   return {
     ...input,
     cells: [
@@ -494,47 +585,23 @@ function withP4(input: Record<string, unknown>): Record<string, unknown> {
     ],
     correlations: [
       withDigest({
-        contract: {
-          id: 'correlation-review-panel',
-          schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
-          policyVersion: MODEL_LINEAGE_POLICY_VERSION,
-          subjectModelProfileVersionId: 'model-lineage-qwen',
-          candidateModelProfileVersionId: 'model-lineage-frontier',
-          independent: false,
-          correlationScore: 0.25,
-          reasonCodes: ['unknown-lineage-penalty'],
-          assessedAt: '2026-07-13T18:00:00.000Z',
-          canonicalDigest:
-            'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-        },
+        contract: correlationContract,
         id: 'correlation-review-panel',
         modelLineageIds: ['model-lineage-qwen', 'model-lineage-frontier'],
-        policyVersion: 'correlation-v1',
-        score: 0.25,
+        policyVersion: MODEL_LINEAGE_POLICY_VERSION,
+        score: 0.6,
         status: 'unknown_penalized',
-        reasonCodes: ['unknown-lineage-penalty'],
+        reasonCodes: ['unknown_lineage'],
         authoritativeRevision: 4,
       }),
     ],
     dissentReports: [
       withDigest({
-        contract: {
-          id: 'dissent-position',
-          schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
-          programId: 'program-p2',
-          cellPlanId: 'cell-plan-divergence',
-          criterionRef,
-          positionIds: ['position-unsupported'],
-          claimIds: ['claim-unresolved'],
-          evidenceIds: ['evidence-support'],
-          unresolvedReasonCodes: ['minority-report-retained'],
-          canonicalDigest:
-            'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
-          createdAt: '2026-07-13T18:00:00.000Z',
-        },
+        contract: dissentContract,
         id: 'dissent-position',
-        positionId: 'position-unsupported',
+        positionIds: ['position-unsupported'],
         claimIds: ['claim-unresolved'],
+        evidenceIds: ['evidence-support'],
         status: 'preserved',
         reasonCodes: ['minority-report-retained'],
         authoritativeRevision: 4,

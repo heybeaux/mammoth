@@ -78,13 +78,44 @@ describe('P4 acceptance verifier', () => {
       await mkdir(dirname(target), { recursive: true });
       const source = JSON.parse(
         await readFile(join(repositoryRoot(), P4_FIXTURE_MANIFEST), 'utf8'),
-      ) as { cases: { id: string; expected: string }[] };
+      ) as {
+        cases: {
+          id: string;
+          evaluator: string;
+          expected: string;
+          input: Record<string, unknown>;
+        }[];
+      };
       source.cases = source.cases.filter(
         ({ id }) => id !== REQUIRED_P4_CASES[0],
       );
       await writeFile(target, JSON.stringify(source));
       await expect(verifyP4FixtureManifest(root)).rejects.toThrow(
         /P4_FIXTURE_MANIFEST_DRIFT/,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('executes every frozen case and rejects a false expected outcome', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mammoth-p4-executable-'));
+    try {
+      const target = join(root, P4_FIXTURE_MANIFEST);
+      await mkdir(dirname(target), { recursive: true });
+      const source = JSON.parse(
+        await readFile(join(repositoryRoot(), P4_FIXTURE_MANIFEST), 'utf8'),
+      ) as {
+        cases: { id: string; input: Record<string, unknown> }[];
+      };
+      const targetCase = source.cases.find(
+        ({ id }) => id === 'unsupported-agreement-one',
+      );
+      if (!targetCase) throw new Error('missing executable fixture case');
+      targetCase.input.claimAdmitted = true;
+      await writeFile(target, JSON.stringify(source));
+      await expect(verifyP4FixtureManifest(root)).rejects.toThrow(
+        /P4_FIXTURE_CASE_FAILED/,
       );
     } finally {
       await rm(root, { recursive: true, force: true });

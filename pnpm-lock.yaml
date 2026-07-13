@@ -110,6 +110,13 @@ importers:
         version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
 
   evals/p4-acceptance:
+    dependencies:
+      '@mammoth/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@mammoth/observatory-projection':
+        specifier: workspace:*
+        version: link:../../packages/observatory-projection
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

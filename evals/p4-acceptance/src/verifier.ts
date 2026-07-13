@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { constants } from 'node:fs';
 import { access, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { evaluateP4Case, type P4ExecutableCase } from './case-evaluator.js';
 
 export type P4GateStatus = 'passed' | 'failed' | 'missing';
 
@@ -152,11 +153,13 @@ export async function verifyP4FixtureManifest(
   }
   if (!Array.isArray(parsed.cases))
     throw new Error('P4_FIXTURE_MANIFEST_CASES');
-  const ids = parsed.cases.map((value) => {
+  const executableCases: P4ExecutableCase[] = parsed.cases.map((value) => {
     if (
       !isRecord(value) ||
       typeof value.id !== 'string' ||
-      typeof value.expected !== 'string'
+      typeof value.evaluator !== 'string' ||
+      typeof value.expected !== 'string' ||
+      !isRecord(value.input)
     ) {
       throw new Error('P4_FIXTURE_MANIFEST_CASE_ID');
     }
@@ -167,8 +170,14 @@ export async function verifyP4FixtureManifest(
     ) {
       throw new Error(`P4_FIXTURE_MANIFEST_OUTCOME:${value.id}`);
     }
-    return value.id;
+    return {
+      id: value.id,
+      evaluator: value.evaluator,
+      expected: value.expected,
+      input: value.input,
+    };
   });
+  const ids = executableCases.map(({ id }) => id);
   if (new Set(ids).size !== ids.length) {
     throw new Error('P4_FIXTURE_MANIFEST_DUPLICATE_CASE');
   }
@@ -180,6 +189,14 @@ export async function verifyP4FixtureManifest(
     throw new Error(
       `P4_FIXTURE_MANIFEST_DRIFT:missing=${missing.join(',')};extra=${extra.join(',')}`,
     );
+  }
+  for (const testCase of executableCases) {
+    const actual = await evaluateP4Case(testCase, repository);
+    if (actual !== testCase.expected) {
+      throw new Error(
+        `P4_FIXTURE_CASE_FAILED:${testCase.id}:expected=${testCase.expected};actual=${actual}`,
+      );
+    }
   }
 }
 

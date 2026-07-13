@@ -6,58 +6,88 @@
   "cases": [
     {
       "id": "unsupported-agreement-one",
+      "evaluator": "unsupported_agreement",
+      "input": { "supportingPositionCount": 1, "claimAdmitted": false },
       "expected": "unsupported"
     },
     {
       "id": "unsupported-agreement-hundred",
+      "evaluator": "unsupported_agreement",
+      "input": { "supportingPositionCount": 100, "claimAdmitted": false },
       "expected": "unsupported"
     },
     {
       "id": "alias-checkpoint-correlation",
+      "evaluator": "model_correlation",
+      "input": { "scenario": "alias_checkpoint" },
       "expected": "correlated_review"
     },
     {
       "id": "unknown-lineage-independence",
+      "evaluator": "model_correlation",
+      "input": { "scenario": "unknown_lineage" },
       "expected": "correlated_review"
     },
     {
       "id": "same-profile-same-role-self-review",
+      "evaluator": "review_admission",
+      "input": { "scenario": "self_review" },
       "expected": "self_review"
     },
     {
       "id": "shared-derivation-review",
+      "evaluator": "review_admission",
+      "input": { "scenario": "shared_derivation" },
       "expected": "correlated_review"
     },
     {
       "id": "valid-cross-family-review",
+      "evaluator": "review_admission",
+      "input": { "scenario": "cross_family" },
       "expected": "admitted"
     },
     {
       "id": "silent-criterion-edit",
+      "evaluator": "position_admission",
+      "input": { "scenario": "criterion_drift" },
       "expected": "criterion_drift"
     },
     {
       "id": "explicit-criterion-branch",
+      "evaluator": "position_admission",
+      "input": { "scenario": "explicit_branch" },
       "expected": "admitted_on_branch"
     },
     {
       "id": "missing-proposal-references",
+      "evaluator": "position_admission",
+      "input": { "scenario": "missing_references" },
       "expected": "missing_references"
     },
     {
       "id": "cyclic-and-dangling-lineage",
+      "evaluator": "lineage_validation",
+      "input": { "scenario": "cycle_and_dangling" },
       "expected": "lineage_rejected"
     },
     {
       "id": "rejected-position-audit-residue",
+      "evaluator": "rejected_residue",
+      "input": { "scenario": "missing_claim" },
       "expected": "retained"
     },
     {
       "id": "future-authority-and-digest-mismatch",
+      "evaluator": "projection_integrity",
+      "input": { "checks": ["future_authority", "digest_mismatch"] },
       "expected": "projection_rejected"
     },
     {
       "id": "projection-restart-determinism",
+      "evaluator": "projection_determinism",
+      "input": {
+        "reorder": ["claims", "evidence", "assessments", "auditEvents"]
+      },
       "expected": "deterministic"
     }
   ]
