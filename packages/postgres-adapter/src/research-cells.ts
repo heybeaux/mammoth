@@ -1494,6 +1494,8 @@ function rejectedAdmissionResidue(
 }
 
 async function insertImmutable<
+  // Row couples the selected query shape to the mapper input at the call site.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
   Row extends Record<string, unknown>,
   RecordValue,
 >(

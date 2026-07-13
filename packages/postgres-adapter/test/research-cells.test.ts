@@ -597,13 +597,11 @@ describe('Postgres research-cell repositories', () => {
       transaction,
       now: () => now,
     }).recordPosition(candidate);
-    expect(first).toMatchObject({
-      decision: 'rejected',
-      residue: {
-        subjectId: candidate.id,
-        reasonCodes: expect.arrayContaining(['missing_claim_ref']),
-      },
-    });
+    expect(first.decision).toBe('rejected');
+    if (first.decision !== 'rejected')
+      throw new Error('expected position rejection residue');
+    expect(first.residue.subjectId).toBe(candidate.id);
+    expect(first.residue.reasonCodes).toContain('missing_claim_ref');
     expect(
       database.calls.some((call) =>
         call.sql.includes('insert into mammoth_rejected_audit_residue'),
@@ -731,10 +729,10 @@ describe('Postgres research-cell repositories', () => {
         now: () => now,
       },
     ).recordReview(researchReview());
-    expect(rejectedReview).toMatchObject({
-      decision: 'rejected',
-      residue: { reasonCodes: expect.arrayContaining(['correlated_review']) },
-    });
+    expect(rejectedReview.decision).toBe('rejected');
+    if (rejectedReview.decision !== 'rejected')
+      throw new Error('expected review rejection residue');
+    expect(rejectedReview.residue.reasonCodes).toContain('correlated_review');
     expect(
       reviewDatabase.calls.some((call) =>
         call.sql.includes('insert into mammoth_research_reviews'),
