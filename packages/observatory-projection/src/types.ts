@@ -102,10 +102,18 @@ export const TemporalOperationLogSchema = z
   })
   .strict();
 
+export const TemporalRunLinkSchema = z
+  .object({
+    runId: NonEmptyStringSchema,
+    continuedFromRunId: NonEmptyStringSchema.optional(),
+  })
+  .strict();
+
 export const TemporalExecutionLinkSchema = z
   .object({
     workflowId: NonEmptyStringSchema,
     runId: NonEmptyStringSchema,
+    runChain: z.array(TemporalRunLinkSchema).min(1),
     workflowType: NonEmptyStringSchema,
     taskQueue: NonEmptyStringSchema,
     contractVersion: NonEmptyStringSchema,

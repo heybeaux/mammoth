@@ -156,6 +156,24 @@ describe('Temporal dev service lifecycle arguments', () => {
     });
   });
 
+  it('restarts the same persistent profile after a complete service stop', async () => {
+    await withProfile(async (config) => {
+      const runner = new LifecycleRunner();
+      const control = new FakeProcessControl(runner);
+      const service = new TemporalDevServerService(config, runner, control);
+      await service.start();
+      await service.stop();
+      await service.start();
+      expect(control.spawned).toBe(2);
+      expect(temporalDevServerArgs(config)).toContain(
+        join(config.root, 'temporal-dev.db'),
+      );
+      expect(await service.serviceReady()).toBe(true);
+      await service.stop();
+      expect(control.childKills).toBe(2);
+    });
+  });
+
   it('cleans up the child and ownership after readiness timeout', async () => {
     await withProfile(async (baseConfig) => {
       const config = { ...baseConfig, startupTimeoutMs: 10 };

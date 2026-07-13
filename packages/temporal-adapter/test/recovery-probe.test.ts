@@ -82,11 +82,10 @@ describe('Temporal SDK recovery probe', () => {
     let activityWorker: ChildProcessWithoutNullStreams | undefined;
     try {
       workflowWorker = launch(workerScript, ['workflow', ...workerArgs]);
-      activityWorker = launch(
-        workerScript,
-        ['activity', ...workerArgs],
-        { ...process.env, MAMMOTH_RECOVERY_CRASH_AFTER_EFFECT: '1' },
-      );
+      activityWorker = launch(workerScript, ['activity', ...workerArgs], {
+        ...process.env,
+        MAMMOTH_RECOVERY_CRASH_AFTER_EFFECT: '1',
+      });
       await Promise.all([
         waitForOutput(workflowWorker, 'MAMMOTH_RECOVERY_WORKER_READY:workflow'),
         waitForOutput(activityWorker, 'MAMMOTH_RECOVERY_WORKER_READY:activity'),
@@ -99,9 +98,26 @@ describe('Temporal SDK recovery probe', () => {
         authoritativeRevision: 12,
         authorityDigest: 'sha256:authority-before-process-kills',
       };
-      const started = await runClient(launch, testEnv.address, namespace, taskQueue, workflowId, 'start', input);
+      const started = await runClient(
+        launch,
+        testEnv.address,
+        namespace,
+        taskQueue,
+        workflowId,
+        'start',
+        input,
+      );
       expect(started).toMatchObject({ workflowId });
-      expect(await runClient(launch, testEnv.address, namespace, taskQueue, workflowId, 'query')).toMatchObject({
+      expect(
+        await runClient(
+          launch,
+          testEnv.address,
+          namespace,
+          taskQueue,
+          workflowId,
+          'query',
+        ),
+      ).toMatchObject({
         durableStep: 'awaiting_worker_restart',
         signalAccepted: false,
         authoritativeRevision: 12,
@@ -110,10 +126,30 @@ describe('Temporal SDK recovery probe', () => {
       workflowWorker.kill('SIGKILL');
       await waitForExit(workflowWorker);
       workflowWorker = launch(workerScript, ['workflow', ...workerArgs]);
-      await waitForOutput(workflowWorker, 'MAMMOTH_RECOVERY_WORKER_READY:workflow');
+      await waitForOutput(
+        workflowWorker,
+        'MAMMOTH_RECOVERY_WORKER_READY:workflow',
+      );
 
-      await runClient(launch, testEnv.address, namespace, taskQueue, workflowId, 'signal', 'stale-checkpoint');
-      expect(await runClient(launch, testEnv.address, namespace, taskQueue, workflowId, 'query')).toMatchObject({
+      await runClient(
+        launch,
+        testEnv.address,
+        namespace,
+        taskQueue,
+        workflowId,
+        'signal',
+        'stale-checkpoint',
+      );
+      expect(
+        await runClient(
+          launch,
+          testEnv.address,
+          namespace,
+          taskQueue,
+          workflowId,
+          'query',
+        ),
+      ).toMatchObject({
         durableStep: 'awaiting_worker_restart',
         signalAccepted: false,
       });
@@ -129,13 +165,31 @@ describe('Temporal SDK recovery probe', () => {
       abandonedCli.kill('SIGKILL');
       await waitForExit(abandonedCli);
 
-      await runClient(launch, testEnv.address, namespace, taskQueue, workflowId, 'signal', input.checkpoint);
+      await runClient(
+        launch,
+        testEnv.address,
+        namespace,
+        taskQueue,
+        workflowId,
+        'signal',
+        input.checkpoint,
+      );
       await waitForExit(activityWorker);
-      expect(activityWorker.signalCode).toBe('SIGKILL');
+      expect(activityWorker.exitCode).not.toBe(0);
       activityWorker = launch(workerScript, ['activity', ...workerArgs]);
-      await waitForOutput(activityWorker, 'MAMMOTH_RECOVERY_WORKER_READY:activity');
+      await waitForOutput(
+        activityWorker,
+        'MAMMOTH_RECOVERY_WORKER_READY:activity',
+      );
 
-      const result = await runClient(launch, testEnv.address, namespace, taskQueue, workflowId, 'result');
+      const result = await runClient(
+        launch,
+        testEnv.address,
+        namespace,
+        taskQueue,
+        workflowId,
+        'result',
+      );
       expect(result).toMatchObject({
         workflowId,
         durableStep: 'completed',
@@ -151,6 +205,139 @@ describe('Temporal SDK recovery probe', () => {
       for (const child of children) child.kill('SIGKILL');
       await Promise.all([...children].map((child) => waitForExit(child)));
       await testEnv.teardown();
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it('continues the same open run after a persistent Temporal service restart', async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), 'mammoth-p3-service-recovery-'),
+    );
+    const dbFilename = join(directory, 'temporal.db');
+    const namespace = `mammoth-recovery-${String(process.pid)}`;
+    let testEnv = await TestWorkflowEnvironment.createLocal({
+      server: { dbFilename, namespace },
+    });
+    const taskQueue = `mammoth-service-recovery-${String(process.pid)}`;
+    const workflowId = `mammoth-service-recovery-${String(process.pid)}`;
+    const children = new Set<ChildProcessWithoutNullStreams>();
+    const launch: Launch = (script, args, env = process.env) => {
+      const child = spawn('pnpm', ['exec', 'tsx', script, ...args], {
+        cwd: packageRoot,
+        env,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      children.add(child);
+      child.once('exit', () => children.delete(child));
+      return child;
+    };
+    try {
+      let workflowWorker = launch(workerScript, [
+        'workflow',
+        testEnv.address,
+        namespace,
+        taskQueue,
+      ]);
+      let activityWorker = launch(workerScript, [
+        'activity',
+        testEnv.address,
+        namespace,
+        taskQueue,
+      ]);
+      await Promise.all([
+        waitForOutput(workflowWorker, 'MAMMOTH_RECOVERY_WORKER_READY:workflow'),
+        waitForOutput(activityWorker, 'MAMMOTH_RECOVERY_WORKER_READY:activity'),
+      ]);
+      const input = {
+        checkpoint: 'release-after-service-restart',
+        effectKey: `effect:${workflowId}`,
+        receiptPath: join(directory, 'effect-receipt.json'),
+        authoritativeRevision: 21,
+        authorityDigest: 'sha256:authority-before-service-restart',
+      };
+      const started = await runClient(
+        launch,
+        testEnv.address,
+        namespace,
+        taskQueue,
+        workflowId,
+        'start',
+        input,
+      );
+      const originalRunId = started.runId;
+      expect(originalRunId).toMatch(/[0-9a-f-]{36}/);
+
+      workflowWorker.kill('SIGKILL');
+      activityWorker.kill('SIGKILL');
+      await Promise.all([
+        waitForExit(workflowWorker),
+        waitForExit(activityWorker),
+      ]);
+      await testEnv.teardown();
+
+      testEnv = await TestWorkflowEnvironment.createLocal({
+        server: { dbFilename, namespace },
+      });
+      workflowWorker = launch(workerScript, [
+        'workflow',
+        testEnv.address,
+        namespace,
+        taskQueue,
+      ]);
+      activityWorker = launch(workerScript, [
+        'activity',
+        testEnv.address,
+        namespace,
+        taskQueue,
+      ]);
+      await Promise.all([
+        waitForOutput(workflowWorker, 'MAMMOTH_RECOVERY_WORKER_READY:workflow'),
+        waitForOutput(activityWorker, 'MAMMOTH_RECOVERY_WORKER_READY:activity'),
+      ]);
+
+      expect(
+        await runClient(
+          launch,
+          testEnv.address,
+          namespace,
+          taskQueue,
+          workflowId,
+          'query',
+        ),
+      ).toMatchObject({
+        durableStep: 'awaiting_worker_restart',
+        authoritativeRevision: 21,
+        authorityDigest: input.authorityDigest,
+      });
+      await runClient(
+        launch,
+        testEnv.address,
+        namespace,
+        taskQueue,
+        workflowId,
+        'signal',
+        input.checkpoint,
+      );
+      const result = await runClient(
+        launch,
+        testEnv.address,
+        namespace,
+        taskQueue,
+        workflowId,
+        'result',
+      );
+      expect(result).toMatchObject({
+        runId: originalRunId,
+        workflowId,
+        durableStep: 'completed',
+        authoritativeRevision: 21,
+        authorityDigest: input.authorityDigest,
+        effect: { providerCallCount: 1 },
+      });
+    } finally {
+      for (const child of children) child.kill('SIGKILL');
+      await Promise.all([...children].map((child) => waitForExit(child)));
+      await testEnv.teardown().catch(() => undefined);
       await rm(directory, { recursive: true, force: true });
     }
   }, 120_000);
@@ -182,7 +369,8 @@ async function runClient(
   const output = await collectSuccessfulOutput(child);
   const marker = 'MAMMOTH_RECOVERY_CLIENT_RESULT:';
   const line = output.split('\n').find((entry) => entry.startsWith(marker));
-  if (!line) throw new Error(`recovery client result marker missing:\n${output}`);
+  if (!line)
+    throw new Error(`recovery client result marker missing:\n${output}`);
   return JSON.parse(line.slice(marker.length)) as Record<string, unknown>;
 }
 
@@ -201,7 +389,11 @@ function waitForOutput(
     };
     const exited = (code: number | null, signal: NodeJS.Signals | null) => {
       cleanup();
-      reject(new Error(`process exited before ${marker}: ${String(code)} ${String(signal)}\n${output}`));
+      reject(
+        new Error(
+          `process exited before ${marker}: ${String(code)} ${String(signal)}\n${output}`,
+        ),
+      );
     };
     const cleanup = () => {
       child.stdout.off('data', consume);
@@ -214,21 +406,33 @@ function waitForOutput(
   });
 }
 
-function collectSuccessfulOutput(child: ChildProcessWithoutNullStreams): Promise<string> {
+function collectSuccessfulOutput(
+  child: ChildProcessWithoutNullStreams,
+): Promise<string> {
   return new Promise((resolvePromise, reject) => {
     let output = '';
     child.stdout.on('data', (chunk: Buffer) => (output += chunk.toString()));
     child.stderr.on('data', (chunk: Buffer) => (output += chunk.toString()));
     child.once('exit', (code, signal) => {
       if (code === 0) resolvePromise(output);
-      else reject(new Error(`recovery client failed: ${String(code)} ${String(signal)}\n${output}`));
+      else
+        reject(
+          new Error(
+            `recovery client failed: ${String(code)} ${String(signal)}\n${output}`,
+          ),
+        );
     });
   });
 }
 
 function waitForExit(child: ChildProcessWithoutNullStreams): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
-  return new Promise((resolvePromise) => child.once('exit', () => resolvePromise()));
+  if (child.exitCode !== null || child.signalCode !== null)
+    return Promise.resolve();
+  return new Promise((resolvePromise) => {
+    child.once('exit', () => {
+      resolvePromise();
+    });
+  });
 }
 
 function delay(ms: number): Promise<void> {

@@ -259,13 +259,31 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
   if (source.temporalExecution) {
     const execution = source.temporalExecution;
     assertUnique(execution.events, 'Temporal operation event');
+    assertUnique(
+      execution.runChain.map(({ runId }) => ({ id: runId })),
+      'Temporal run',
+    );
     const auditIds = new Set(source.auditEvents.map(({ id }) => id));
-    for (const event of execution.events) {
+    const runIds = new Set(execution.runChain.map(({ runId }) => runId));
+    for (const [index, run] of execution.runChain.entries()) {
+      const previous = execution.runChain[index - 1];
       if (
-        event.workflowId !== execution.workflowId ||
-        event.runId !== execution.runId
+        run.continuedFromRunId !==
+        (previous === undefined ? undefined : previous.runId)
       )
+        throw new Error(
+          `Temporal run ${run.runId} breaks continue-as-new chain`,
+        );
+    }
+    if (execution.runChain.at(-1)?.runId !== execution.runId)
+      throw new Error('Temporal current run does not match run chain head');
+    for (const event of execution.events) {
+      if (event.workflowId !== execution.workflowId || !runIds.has(event.runId))
         throw new Error(`Temporal event ${event.id} belongs to another run`);
+      if (event.attempt > execution.attempt)
+        throw new Error(
+          `Temporal event ${event.id} references a future attempt`,
+        );
       if (event.authoritativeRevision > source.authoritativeRevision)
         throw new Error(
           `Temporal event ${event.id} references a future authoritative revision`,
@@ -278,12 +296,31 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
           `Temporal event ${event.id} references unknown admitted audit event`,
         );
     }
-    for (const log of execution.logs)
-      if (
-        log.workflowId !== execution.workflowId ||
-        log.runId !== execution.runId
-      )
+    for (const log of execution.logs) {
+      if (log.workflowId !== execution.workflowId || !runIds.has(log.runId))
         throw new Error('Temporal operation log belongs to another run');
+      if (log.attempt !== undefined && log.attempt > execution.attempt)
+        throw new Error('Temporal operation log references a future attempt');
+    }
+    const retryEvents = execution.events.filter(
+      ({ kind }) => kind === 'retry',
+    ).length;
+    if (execution.metrics.retryCount !== retryEvents)
+      throw new Error('Temporal retry metric disagrees with the timeline');
+    const duplicatePreventionLogs = execution.logs.filter(
+      ({ event }) => event === 'duplicate_effect_prevented',
+    ).length;
+    if (execution.metrics.duplicateEffectsPrevented !== duplicatePreventionLogs)
+      throw new Error(
+        'Temporal duplicate-effect metric disagrees with operation logs',
+      );
+    const failClosedStartupLogs = execution.logs.filter(
+      ({ event }) => event === 'fail_closed_startup',
+    ).length;
+    if (execution.metrics.failClosedStartupCount !== failClosedStartupLogs)
+      throw new Error(
+        'Temporal fail-closed startup metric disagrees with operation logs',
+      );
   }
 }
 

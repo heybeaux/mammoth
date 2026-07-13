@@ -157,7 +157,7 @@ describe('ObservatoryProjectionV1', () => {
       'terminal',
     ]);
     expect(projection.integrity.canonicalDigest).toBe(
-      'sha256:c0fe3c69951f2ad3c3e87064ad9dc023ae66a5c9a48d3c6374338209591ff4e1',
+      'sha256:9b55e685f9811a3278a7d39fd7414798784369a31b5c33b66ffd52e00bf639b9',
     );
 
     const reordered = {
@@ -199,5 +199,45 @@ describe('ObservatoryProjectionV1', () => {
         },
       }),
     ).toThrow(/future authoritative revision/);
+    expect(() =>
+      buildObservatoryProjectionV1({
+        ...input,
+        temporalExecution: {
+          ...temporalExecution,
+          runChain: [
+            ...(temporalExecution.runChain as Record<string, unknown>[]),
+            {
+              runId: 'continued-run',
+              continuedFromRunId: 'wrong-parent',
+            },
+          ],
+          runId: 'continued-run',
+        },
+      }),
+    ).toThrow(/continue-as-new chain/);
+    expect(() =>
+      buildObservatoryProjectionV1({
+        ...input,
+        temporalExecution: {
+          ...temporalExecution,
+          metrics: {
+            ...(temporalExecution.metrics as Record<string, unknown>),
+            retryCount: 2,
+          },
+        },
+      }),
+    ).toThrow(/retry metric/);
+    expect(() =>
+      buildObservatoryProjectionV1({
+        ...input,
+        temporalExecution: {
+          ...temporalExecution,
+          metrics: {
+            ...(temporalExecution.metrics as Record<string, unknown>),
+            duplicateEffectsPrevented: 0,
+          },
+        },
+      }),
+    ).toThrow(/duplicate-effect metric/);
   });
 });

@@ -2,24 +2,34 @@
 
 ## Acceptance boundaries
 
-`@mammoth/temporal-adapter` includes two live SDK probes. The readiness probe
+`@mammoth/temporal-adapter` includes live SDK probes. The readiness probe
 executes signals, queries, timers, retries, cancellation, `continueAsNew`,
 history download, and replay. The recovery probe starts an open workflow on one
 worker, drains that poller, resumes the same run on a replacement worker, ignores
 a stale signal, injects a failure after a simulated provider commit, and proves
 the redelivered Activity returns one completed receipt for one provider effect.
+The process matrix starts clients, workflow pollers, and Activity pollers in
+separate OS processes. It uses `SIGKILL` at an open workflow boundary, while a
+CLI is awaiting a result, and immediately after an Activity has durably created
+its stable effect receipt. Replacement processes recover the same workflow ID
+and run, the receipt records one provider call, history remains bounded, and the
+downloaded history replays with the recorded workflow bundle.
 
-Run both with:
+Run the complete code-owned acceptance set with:
 
 ```sh
-pnpm --filter @mammoth/temporal-adapter test:live
+pnpm verify:p3
 ```
 
-The full production-profile P3 verifier must additionally kill separate API/CLI,
-workflow-worker, and Activity-worker processes, restart the persistent Temporal
-service, and compare Postgres/CAS/outbox/receipt integrity before and after every
-injected boundary. A graceful SDK worker drain is evidence for poller replacement,
-not a claim that `SIGKILL` or service recovery was exercised.
+The package gate now kills separate CLI, workflow-worker, and Activity-worker
+processes. The service lifecycle suite also proves stop/start reuses the same
+configured persistent database path. The live recovery suite stops a real local
+Temporal service backed by its SQLite persistence file, reconnects replacement
+workers to the restarted service, and proves the same open run ID completes with
+the same opaque authoritative revision and digest reference. The combined
+production-profile P3 verifier must additionally compare the actual
+Postgres/CAS/outbox/receipt state before and after each boundary; preserving an
+opaque authority reference does not by itself certify those stores.
 
 ## Recovery diagnostics
 
