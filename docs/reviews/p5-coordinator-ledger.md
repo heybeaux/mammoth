@@ -458,3 +458,80 @@ Remaining before release: independent re-review must run again against the new
 candidate. Then rerun a clean-checkout ladder, open PR, repair CI if needed,
 merge, verify main CI, merge exact receipt, and create annotated
 `v0.5.0-isolated-divergence`.
+
+### Second Independent Re-Review
+
+State: completed.
+
+Agent id: `019f5dd0-ac7e-7682-b29c-358665b99924`
+
+Reviewed candidate: `d54d68715113684c68a7426785479ade34ddea7f`
+(`fix: prove P5 recovery and database gates`).
+
+Reviewer result: no blocking findings and no nonblocking findings. The reviewer
+verified that the prior Temporal P5 blocker is resolved by live P5 workflow,
+cancellation, duplicate Activity delivery, and worker/client recovery tests; the
+prior Postgres blocker is resolved by migration version `6` database-boundary
+guards plus live production-profile fixtures for nested leakage, budget
+overspend, release-after-settlement, and cancellation accounting; and
+`verify:p5` is non-recursive with executable production-boundary gates.
+
+Reviewer commands and results:
+
+```text
+git status --short --branch: inspected dirty checkout; only tracked diff was a mode-bit change on packages/temporal-adapter/src/research-cli.ts plus untracked local OpenClaw/workspace files
+git rev-parse HEAD: d54d68715113684c68a7426785479ade34ddea7f
+pnpm verify:p5: passed, 7/7 gates
+pnpm lint: passed
+pnpm typecheck: passed
+```
+
+Coordinator response: restored the local mode bit on
+`packages/temporal-adapter/src/research-cli.ts` to the tracked `100644` mode
+without changing file content. Untracked OpenClaw/workspace metadata remains
+preserved and unstaged.
+
+### Clean-Checkout Ladder
+
+Candidate head: `d54d68715113684c68a7426785479ade34ddea7f`.
+
+Clean worktree: `/private/tmp/mammoth-p5-clean-d54d687`.
+
+Result: passed.
+
+Setup:
+
+```text
+git worktree add --detach /private/tmp/mammoth-p5-clean-d54d687 d54d68715113684c68a7426785479ade34ddea7f
+pnpm install --frozen-lockfile: passed
+export MAMMOTH_PROFILE_ROOT="$(mktemp -d /tmp/mammoth-p5-clean-profile.XXXXXX)"
+export MAMMOTH_PG_PASSWORD="$(openssl rand -hex 24)"
+```
+
+Commands and results:
+
+```text
+pnpm format:check: passed
+pnpm lint: passed
+pnpm typecheck: passed
+pnpm test: passed
+pnpm build: passed
+pnpm verify:evidence: passed
+pnpm verify:audit: passed
+pnpm verify:phase-1: passed
+pnpm verify:phase-2: passed
+pnpm verify:adapters: passed
+pnpm verify:m2: passed
+pnpm verify:m3: passed
+pnpm verify:mvp: passed
+pnpm verify:p2: passed
+pnpm verify:p3: passed
+pnpm verify:p4: passed
+pnpm verify:p5: passed, 7/7 gates with production-profile verify:p5 and live Temporal P5 execution/recovery
+pnpm eval:offline: passed
+```
+
+Note: the first clean-worktree `pnpm format:check` attempt failed before this
+ladder because dependencies had not yet been installed in the fresh checkout
+(`prettier: command not found`). After `pnpm install --frozen-lockfile`, the full
+ladder above passed.
