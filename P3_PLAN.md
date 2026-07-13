@@ -27,15 +27,15 @@ Observatory UI. It creates the durable control plane those later systems require
 
 Before Temporal implementation begins:
 
-- [ ] Reconfirm `v0.2.0-production-data` from a clean checkout.
-- [ ] Record any contract change required by Temporal as an ADR before code
+- [x] Reconfirm `v0.2.0-production-data` from a clean checkout.
+- [x] Record any contract change required by Temporal as an ADR before code
       depends on it.
-- [ ] Freeze the workflow adapter capability descriptor for Temporal under
+- [x] Freeze the workflow adapter capability descriptor for Temporal under
       contract major `1`, or explicitly version the contract if that is
       impossible.
-- [ ] Define the local Temporal service lifecycle for development and CI without
+- [x] Define the local Temporal service lifecycle for development and CI without
       embedded credentials.
-- [ ] Identify every side-effecting Activity and map it to a provider-idempotency
+- [x] Identify every side-effecting Activity and map it to a provider-idempotency
       key, attributable work item, and completed-effect receipt.
 
 Entry evidence belongs in `evals/reports/p3-entry-temporal.md`.
