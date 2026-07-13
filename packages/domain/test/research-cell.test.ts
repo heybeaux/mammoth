@@ -2,12 +2,17 @@ import { describe, expect, it } from 'vitest';
 import {
   MODEL_LINEAGE_POLICY_VERSION,
   RESEARCH_CELL_CONTRACT_VERSION,
+  CorrelationAssessmentSchema,
+  DissentReportSchema,
   ResearchPositionSchema,
+  admitCorrelationAssessment,
   admitResearchPosition,
   admitResearchReview,
   admitSynthesis,
   assessModelCorrelation,
   cellInputDigest,
+  correlationAssessmentDigest,
+  dissentReportDigest,
   evaluatePositionProposals,
   modelProfileVersionDigest,
   researchPositionDigest,
@@ -16,7 +21,9 @@ import {
   unsupportedAgreementCannotPromote,
   validateModelLineageGraph,
   type CellInput,
+  type CorrelationAssessment,
   type CriterionReference,
+  type DissentReport,
   type ModelProfileVersion,
   type ReferenceUniverse,
   type ResearchPosition,
@@ -288,6 +295,46 @@ function synthesis(
   return { ...base, canonicalDigest: synthesisArtifactDigest(base) };
 }
 
+function dissentReport(overrides: Partial<DissentReport> = {}): DissentReport {
+  const base: DissentReport = {
+    id: 'dissent-1',
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    programId: 'program-1',
+    cellPlanId: 'cell-plan-1',
+    criterionRef,
+    positionIds: ['position-1'],
+    claimIds: ['claim-unsupported'],
+    evidenceIds: ['evidence-1'],
+    unresolvedReasonCodes: ['minority-position-retained'],
+    canonicalDigest: digestA,
+    createdAt: now,
+    ...overrides,
+  };
+  return { ...base, canonicalDigest: dissentReportDigest(base) };
+}
+
+function correlationAssessment(
+  overrides: Partial<CorrelationAssessment> = {},
+): CorrelationAssessment {
+  const base: CorrelationAssessment = {
+    id: 'correlation-1',
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    policyVersion: MODEL_LINEAGE_POLICY_VERSION,
+    subjectModelProfileVersionId: authorModel.id,
+    candidateModelProfileVersionId: crossFamilyModel.id,
+    independent: true,
+    correlationScore: 0,
+    reasonCodes: ['different_known_family'],
+    assessedAt: now,
+    canonicalDigest: digestA,
+    ...overrides,
+  };
+  return {
+    ...base,
+    canonicalDigest: correlationAssessmentDigest(base),
+  };
+}
+
 describe('P4 research-cell contract schemas', () => {
   it('rejects unknown schema versions and noncanonical digests', () => {
     expect(
@@ -311,6 +358,12 @@ describe('P4 research-cell contract schemas', () => {
       evidenceIds: ['evidence-missing'],
       hypothesisIds: ['hypothesis-missing'],
       artifactIds: ['artifact-missing'],
+      proposalRefs: [
+        { kind: 'claim', id: 'claim-missing' },
+        { kind: 'evidence', id: 'evidence-missing' },
+        { kind: 'hypothesis', id: 'hypothesis-missing' },
+        { kind: 'artifact', id: 'artifact-missing' },
+      ],
     });
     const result = evaluatePositionProposals([position(), missing], universe);
 
@@ -325,6 +378,64 @@ describe('P4 research-cell contract schemas', () => {
       'missing_evidence_ref',
       'missing_hypothesis_ref',
     ]);
+  });
+
+  it('binds typed proposal references to their matching universe and parallel ID arrays', () => {
+    expect(
+      admitResearchPosition(
+        position({
+          proposalRefs: [
+            { kind: 'claim', id: 'claim-unsupported' },
+            { kind: 'evidence', id: 'evidence-1' },
+            { kind: 'hypothesis', id: 'hypothesis-1' },
+            { kind: 'artifact', id: 'artifact-1' },
+          ],
+        }),
+        universe,
+      ),
+    ).toMatchObject({ ok: true });
+
+    expect(
+      admitResearchPosition(
+        position({
+          evidenceIds: [],
+          proposalRefs: [{ kind: 'evidence', id: 'evidence-1' }],
+        }),
+        universe,
+      ),
+    ).toMatchObject({ ok: false, reasonCodes: ['schema_invalid'] });
+
+    expect(
+      admitResearchPosition(
+        position({
+          evidenceIds: ['claim-unsupported'],
+          proposalRefs: [{ kind: 'evidence', id: 'claim-unsupported' }],
+        }),
+        universe,
+      ),
+    ).toMatchObject({
+      ok: false,
+      reasonCodes: ['missing_evidence_ref'],
+    });
+  });
+
+  it('enforces canonical dissent and correlation assessment digests', () => {
+    expect(DissentReportSchema.safeParse(dissentReport()).success).toBe(true);
+    expect(
+      DissentReportSchema.safeParse({
+        ...dissentReport(),
+        claimIds: ['claim-supported'],
+      }).success,
+    ).toBe(false);
+    expect(
+      CorrelationAssessmentSchema.safeParse(correlationAssessment()).success,
+    ).toBe(true);
+    expect(
+      CorrelationAssessmentSchema.safeParse({
+        ...correlationAssessment(),
+        correlationScore: 0.5,
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -404,6 +515,14 @@ describe('model lineage and correlation policy', () => {
     });
     expect(unknownCorrelation.independent).toBe(false);
     expect(unknownCorrelation.reasonCodes).toContain('unknown_lineage');
+
+    expect(
+      assessModelCorrelation({
+        subject: authorModel,
+        candidate: unknownModel,
+        registry: modelVersions,
+      }).independent,
+    ).toBe(false);
   });
 });
 
@@ -500,6 +619,28 @@ describe('admission and review policy', () => {
     ).toMatchObject({ ok: true });
   });
 
+  it('binds every immutable review field to the resolved assignment', () => {
+    const mismatches: Partial<ResearchReview>[] = [
+      { assignmentId: 'assignment-other' },
+      { programId: 'program-other' },
+      { workItemId: 'work-other' },
+      { reviewerAgentId: 'agent-other' },
+      { reviewerModelProfileVersionId: correlatedPeerModel.id },
+      { reviewerRole: 'other-role' },
+      { targetPositionId: 'position-other' },
+      { criterionRef: criterionBranch },
+    ];
+    for (const mismatch of mismatches) {
+      const result = admitResearchReview({
+        raw: review(mismatch),
+        assignment: assignment(),
+        universe,
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.reasonCodes).toContain('schema_invalid');
+    }
+  });
+
   it('distinguishes silent criterion drift from an explicit criterion branch', () => {
     expect(
       admitResearchPosition(
@@ -525,8 +666,8 @@ describe('admission and review policy', () => {
         allowedCriterionBranches: [criterionBranch],
       }),
     ).toMatchObject({
-      ok: false,
-      reasonCodes: ['unapproved_criterion_branch'],
+      ok: true,
+      reasonCodes: ['admitted_on_branch'],
     });
 
     expect(
@@ -565,5 +706,23 @@ describe('admission and review policy', () => {
 
   it('records correlation assessment policy version as immutable contract data', () => {
     expect(MODEL_LINEAGE_POLICY_VERSION).toBe('1.0.0');
+    expect(
+      admitCorrelationAssessment({
+        raw: correlationAssessment(),
+        modelVersions,
+      }),
+    ).toMatchObject({ ok: true });
+
+    const forged = correlationAssessment({
+      independent: false,
+      correlationScore: 0.5,
+      reasonCodes: ['shared_derivation'],
+    });
+    expect(
+      admitCorrelationAssessment({ raw: forged, modelVersions }),
+    ).toMatchObject({
+      ok: false,
+      reasonCodes: ['correlation_policy_drift'],
+    });
   });
 });

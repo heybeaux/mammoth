@@ -350,7 +350,16 @@ export const DissentReportSchema = z
     canonicalDigest: DigestSchema,
     createdAt: TimestampSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((report, ctx) => {
+    if (report.canonicalDigest !== dissentReportDigest(report)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['canonicalDigest'],
+        message: 'dissent report digest is not canonical',
+      });
+    }
+  });
 
 export const SynthesisArtifactSchema = z
   .object({
@@ -392,7 +401,18 @@ export const CorrelationAssessmentSchema = z
     assessedAt: TimestampSchema,
     canonicalDigest: DigestSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((assessment, ctx) => {
+    if (
+      assessment.canonicalDigest !== correlationAssessmentDigest(assessment)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['canonicalDigest'],
+        message: 'correlation assessment digest is not canonical',
+      });
+    }
+  });
 
 export const CellOutcomeSchema = z
   .object({
@@ -477,6 +497,16 @@ export function researchPositionDigest(position: ResearchPosition): Digest {
 
 export function researchReviewDigest(review: ResearchReview): Digest {
   return digestWithoutMutableDigest('research-review', review);
+}
+
+export function dissentReportDigest(report: DissentReport): Digest {
+  return digestWithoutMutableDigest('dissent-report', report);
+}
+
+export function correlationAssessmentDigest(
+  assessment: CorrelationAssessment,
+): Digest {
+  return digestWithoutMutableDigest('correlation-assessment', assessment);
 }
 
 export function synthesisArtifactDigest(artifact: SynthesisArtifact): Digest {
@@ -571,6 +601,7 @@ export interface CorrelationPolicyInput {
   subject: ModelProfileVersion;
   candidate: ModelProfileVersion;
   registry: ReadonlyMap<string, ModelProfileVersion>;
+  /** @deprecated Frozen v1 always treats unknown lineage as non-independent. */
   requireKnownLineageForIndependence?: boolean;
 }
 
@@ -650,9 +681,7 @@ export function assessModelCorrelation(
       'shared_derivation',
       'ancestral_derivation',
     ].some((reason) => reasons.has(reason as CorrelationReason)) &&
-    !(
-      input.requireKnownLineageForIndependence && reasons.has('unknown_lineage')
-    );
+    !reasons.has('unknown_lineage');
 
   return {
     independent,
@@ -684,13 +713,19 @@ export type AdmissionReason =
   | 'unknown_model_lineage'
   | 'self_review'
   | 'correlated_review'
+  | 'correlation_policy_drift'
   | 'noncanonical_digest'
   | 'synthesis_non_admitted_claim'
   | 'synthesis_unknown_position'
+  | 'admitted_on_branch'
   | 'admitted';
 
 export type PolicyDecision<T> =
-  | { ok: true; value: T; reasonCodes: ['admitted'] }
+  | {
+      ok: true;
+      value: T;
+      reasonCodes: ['admitted'] | ['admitted_on_branch'];
+    }
   | { ok: false; rejected: unknown; reasonCodes: AdmissionReason[] };
 
 export interface ReferenceUniverse {
@@ -719,11 +754,45 @@ export function admitResearchPosition(
   }
   const position = parsed.data;
   const reasons = commonProposalReasons(position, universe);
+  const typedIds = {
+    claim: new Set(position.claimIds),
+    evidence: new Set(position.evidenceIds),
+    hypothesis: new Set(position.hypothesisIds),
+    artifact: new Set(position.artifactIds),
+  };
+  for (const proposal of position.proposalRefs) {
+    const known =
+      proposal.kind === 'claim'
+        ? universe.claimIds.has(proposal.id)
+        : proposal.kind === 'evidence'
+          ? universe.evidenceIds.has(proposal.id)
+          : proposal.kind === 'hypothesis'
+            ? universe.hypothesisIds.has(proposal.id)
+            : universe.artifactIds.has(proposal.id);
+    if (!known) {
+      reasons.push(
+        proposal.kind === 'claim'
+          ? 'missing_claim_ref'
+          : proposal.kind === 'evidence'
+            ? 'missing_evidence_ref'
+            : proposal.kind === 'hypothesis'
+              ? 'missing_hypothesis_ref'
+              : 'missing_artifact_ref',
+      );
+    }
+    if (!typedIds[proposal.kind].has(proposal.id)) {
+      reasons.push('schema_invalid');
+    }
+  }
   if (!universe.modelVersions.has(position.modelProfileVersionId)) {
     reasons.push('unknown_model_lineage');
   }
   return reasons.length === 0
-    ? { ok: true, value: position, reasonCodes: ['admitted'] }
+    ? {
+        ok: true,
+        value: position,
+        reasonCodes: admissionSuccessReasons(position, universe),
+      }
     : { ok: false, rejected: position, reasonCodes: uniqueReasons(reasons) };
 }
 
@@ -764,10 +833,15 @@ export function admitResearchReview(input: {
     reasons.push('self_review');
   }
   if (
+    review.assignmentId !== assignment.id ||
+    review.programId !== assignment.programId ||
+    review.workItemId !== assignment.workItemId ||
     review.reviewerAgentId !== assignment.reviewerAgentId ||
     review.reviewerModelProfileVersionId !==
       assignment.reviewerModelProfileVersionId ||
-    review.targetPositionId !== assignment.targetPositionId
+    review.reviewerRole !== assignment.reviewerRole ||
+    review.targetPositionId !== assignment.targetPositionId ||
+    !criterionRefsEqual(review.criterionRef, assignment.criterionRef)
   ) {
     reasons.push('schema_invalid');
   }
@@ -789,8 +863,58 @@ export function admitResearchReview(input: {
     if (!correlation.independent) reasons.push('correlated_review');
   }
   return reasons.length === 0
-    ? { ok: true, value: review, reasonCodes: ['admitted'] }
+    ? {
+        ok: true,
+        value: review,
+        reasonCodes: admissionSuccessReasons(review, input.universe),
+      }
     : { ok: false, rejected: review, reasonCodes: uniqueReasons(reasons) };
+}
+
+export function admitCorrelationAssessment(input: {
+  raw: unknown;
+  modelVersions: ReadonlyMap<string, ModelProfileVersion>;
+}): PolicyDecision<CorrelationAssessment> {
+  const parsed = CorrelationAssessmentSchema.safeParse(input.raw);
+  if (!parsed.success) {
+    const reasonCodes: AdmissionReason[] = parsed.error.issues.some((issue) =>
+      issue.message.includes('digest'),
+    )
+      ? ['schema_invalid', 'noncanonical_digest']
+      : ['schema_invalid'];
+    return { ok: false, rejected: input.raw, reasonCodes };
+  }
+  const assessment = parsed.data;
+  const subject = input.modelVersions.get(
+    assessment.subjectModelProfileVersionId,
+  );
+  const candidate = input.modelVersions.get(
+    assessment.candidateModelProfileVersionId,
+  );
+  if (!subject || !candidate) {
+    return {
+      ok: false,
+      rejected: assessment,
+      reasonCodes: ['unknown_model_lineage'],
+    };
+  }
+  const recomputed = assessModelCorrelation({
+    subject,
+    candidate,
+    registry: input.modelVersions,
+  });
+  if (
+    assessment.independent !== recomputed.independent ||
+    assessment.correlationScore !== recomputed.correlationScore ||
+    !sameStringSet(assessment.reasonCodes, recomputed.reasonCodes)
+  ) {
+    return {
+      ok: false,
+      rejected: assessment,
+      reasonCodes: ['correlation_policy_drift'],
+    };
+  }
+  return { ok: true, value: assessment, reasonCodes: ['admitted'] };
 }
 
 export function admitSynthesis(input: {
@@ -831,7 +955,11 @@ export function admitSynthesis(input: {
     }
   }
   return reasons.length === 0
-    ? { ok: true, value: artifact, reasonCodes: ['admitted'] }
+    ? {
+        ok: true,
+        value: artifact,
+        reasonCodes: admissionSuccessReasons(artifact, input.universe),
+      }
     : { ok: false, rejected: artifact, reasonCodes: uniqueReasons(reasons) };
 }
 
@@ -899,9 +1027,7 @@ function commonRefsReasons(
     const allowedBranch = (universe.allowedCriterionBranches ?? []).some(
       (branch) => criterionRefsEqual(value.criterionRef, branch),
     );
-    reasons.push(
-      allowedBranch ? 'unapproved_criterion_branch' : 'criterion_drift',
-    );
+    if (!allowedBranch) reasons.push('criterion_drift');
   }
   for (const claimId of claimIds) {
     if (!universe.claimIds.has(claimId)) reasons.push('missing_claim_ref');
@@ -919,6 +1045,15 @@ function commonRefsReasons(
       reasons.push('missing_artifact_ref');
   }
   return reasons;
+}
+
+function admissionSuccessReasons(
+  value: { criterionRef: CriterionReference },
+  universe: ReferenceUniverse,
+): ['admitted'] | ['admitted_on_branch'] {
+  return criterionRefsEqual(value.criterionRef, universe.criterionRef)
+    ? ['admitted']
+    : ['admitted_on_branch'];
 }
 
 function criterionRefsEqual(
@@ -939,6 +1074,16 @@ function intersects(
 ): boolean {
   const rightSet = new Set(right);
   return left.some((entry) => rightSet.has(entry));
+}
+
+function sameStringSet(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  if (left.length !== right.length) return false;
+  const sortedLeft = [...left].sort();
+  const sortedRight = [...right].sort();
+  return sortedLeft.every((value, index) => value === sortedRight[index]);
 }
 
 function hasModelAncestry(
