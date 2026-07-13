@@ -5,6 +5,18 @@ import {
 } from '../src/cli-command.js';
 
 describe('production profile CLI command boundary', () => {
+  it('runs the P4 authority verifier without constructing the Temporal profile', async () => {
+    const operations = fixture();
+    const evidence = { migrationVersion: 5, ready: true };
+    operations.verifyP4.mockResolvedValue(evidence);
+
+    await executeProfileCommand('verify-p4', operations);
+
+    expect(operations.createProfile).not.toHaveBeenCalled();
+    expect(operations.verifyP4).toHaveBeenCalledOnce();
+    expect(operations.write).toHaveBeenCalledWith(evidence);
+  });
+
   it.each([
     ['verify-lifecycle', 'verifyLifecycle'],
     ['verify-backup', 'verifyBackup'],
@@ -58,6 +70,7 @@ function fixture() {
     profile,
     createProfile: vi.fn(() => profile),
     verifyLifecycle: vi.fn<() => Promise<unknown>>(() => Promise.resolve()),
+    verifyP4: vi.fn<() => Promise<unknown>>(() => Promise.resolve()),
     verifyBackup: vi.fn<() => Promise<unknown>>(() => Promise.resolve()),
     write: vi.fn<(value: unknown) => void>(),
   } satisfies ProfileCommandOperations & { readonly profile: typeof profile };

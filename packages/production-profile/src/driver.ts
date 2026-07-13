@@ -1,4 +1,9 @@
-import { Pool, type PoolClient, type QueryResult as PgQueryResult } from 'pg';
+import {
+  Pool,
+  types as postgresTypes,
+  type PoolClient,
+  type QueryResult as PgQueryResult,
+} from 'pg';
 import type {
   PostgresConnection,
   PostgresConnectionOptions,
@@ -6,6 +11,12 @@ import type {
   QueryResult,
   TransactionOptions,
 } from '@mammoth/postgres-adapter';
+
+// Authority contracts carry RFC 3339 timestamps. Normalize timestamptz to that
+// string form at the production-driver boundary instead of returning a Date.
+postgresTypes.setTypeParser(1184, (value: string) =>
+  new Date(value).toISOString(),
+);
 
 export class NodePostgresDriver implements PostgresDriver {
   #pool: Pool | undefined;
