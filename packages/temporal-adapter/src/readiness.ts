@@ -1,6 +1,5 @@
 import { Socket } from 'node:net';
 import {
-  ADAPTER_CAPABILITIES,
   ADAPTER_CONTRACT_MAJOR,
   ADAPTER_CONTRACT_VERSION,
   TEMPORAL_WORKFLOW_CAPABILITIES,
@@ -394,7 +393,7 @@ function uniqueCapabilities(
 function isAdapterCapability(value: unknown): value is AdapterCapability {
   return (
     typeof value === 'string' &&
-    (ADAPTER_CAPABILITIES as readonly string[]).includes(value)
+    (TEMPORAL_WORKFLOW_CAPABILITIES as readonly string[]).includes(value)
   );
 }
 

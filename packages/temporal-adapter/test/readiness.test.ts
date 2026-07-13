@@ -178,6 +178,19 @@ describe('Temporal adapter descriptor and readiness', () => {
         config,
       ).valid,
     ).toBe(false);
+    expect(
+      evaluateWorkerBundleManifestEvidence(
+        {
+          manifest: {
+            ...exactManifest(),
+            capabilities: ['atomic-transactions'],
+          },
+          probedCapabilities: ['atomic-transactions'],
+          live: true,
+        },
+        config,
+      ).valid,
+    ).toBe(false);
   });
 
   it('fails false capability claims that were not independently probed', () => {
