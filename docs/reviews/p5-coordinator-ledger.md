@@ -33,8 +33,7 @@ Its dirty state at entry inspection was:
 
 ### T1/T2 Contracts And Policy
 
-State: spawn requested; fresh worktree artifacts observed. Not active by Mammoth's
-live-registry definition.
+State: integrated.
 
 Worker runtime: Codex worker fallback. Durable OpenClaw `sessions_spawn` and live
 registry tools were not exposed in this turn's tool surface, so this worker must
@@ -83,6 +82,18 @@ non-owned modification to `packages/temporal-adapter/src/research-cli.ts`.
 Coordinator interruption `019f5d97-2828-7451-b606-c1d13ca01175` instructed the
 worker to stop touching the non-owned path, revert that file if the change was
 theirs, or return a conflict note.
+
+Completion handoff: worker returned completed status with commit
+`1bd6a59b69fc6e7318fe649d09bc06b4c973072e`. It reported
+`pnpm install --frozen-lockfile`, `pnpm --filter @mammoth/domain test`, and
+`pnpm typecheck` passing in its worktree. It reported the non-owned
+`packages/temporal-adapter/src/research-cli.ts` diff remained unstaged and was
+not committed.
+
+Integration: coordinator cherry-picked the owned commit as
+`40bd17b` on `feat/p5-isolated-divergence`. Integration verification:
+`pnpm install --frozen-lockfile` passed; `pnpm --filter @mammoth/domain test`
+passed with 3 files and 38 tests; `pnpm typecheck` passed.
 
 ### T3 Persistence And Budget
 
