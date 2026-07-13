@@ -81,22 +81,26 @@ pnpm verify:p2:backup
 pnpm verify:p2:profile
 ```
 
-The lifecycle and backup commands enter through the combined profile gate. They
-produce no manifest until the Temporal service, namespace, and compatible worker
-are ready. The lifecycle operation then proves unready Postgres startup, bounded
-start, schema readiness, immediate process stop, restart, durable
+The P2 lifecycle and backup commands retain their Postgres/CAS-only acceptance
+boundary; they do not start or require Temporal. The lifecycle operation proves
+unready Postgres startup, bounded start, schema readiness, immediate process
+stop, restart, durable
 ledger/audit/outbox state, CAS byte integrity, and bounded clean shutdown. The
 backup operation creates a custom-format `pg_dump`, copies content-addressed
 bytes, restores into a distinct database and directory, then compares the
 migration ledger, authoritative revision, audit and outbox counts, artifact
 digests, and sizes.
 
-These commands do not prove that a live Temporal workflow executed. P3 workflow,
-Activity, and recovery evidence belongs to `verify:p3`.
+The combined operational `bootstrap`, `start`, `status`, `stop`, and `kill`
+commands remain Temporal-aware and fail closed unless the configured service,
+namespace, and compatible worker are ready. The P2 verifier commands do not
+prove that a live Temporal workflow executed; P3 workflow, Activity, and recovery
+evidence belongs to `verify:p3`.
 
-Missing binaries, ports already in use, invalid credentials, absent namespace or
-worker, startup/shutdown timeouts, dump/restore failures, and manifest mismatches
-are hard failures with the failing command or prerequisite in the diagnostic.
+Missing binaries, ports already in use, invalid credentials, startup/shutdown
+timeouts, dump/restore failures, and manifest mismatches are hard failures with
+the failing command or prerequisite in the diagnostic. Combined Temporal
+operations also fail on an absent namespace or compatible worker.
 Inspect `$MAMMOTH_PROFILE_ROOT/postgres.log` and
 `$MAMMOTH_PROFILE_ROOT/temporal.log` for service startup failures. Data is
 persistent and is never automatically deleted by these commands.
