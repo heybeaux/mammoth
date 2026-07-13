@@ -15,28 +15,36 @@ import {
 } from '@mammoth/work-queue';
 import type { PostgresConnection, TransactionOptions } from './driver.js';
 
-export const activityEffectAdapterDescriptor = Object.freeze({
-  id: 'postgres-activity-effect-v2',
-  kind: 'activity-effect',
-  contractVersion: '2.0.0',
-  implementationVersion: '0.1.0',
-  profile: 'production-like-local',
-  capabilities: Object.freeze([
-    'stable-effect-identity',
-    'attributable-attempts',
-    'effect-lifecycle',
-    'completed-effect-lookup',
-    'strict-result-mapping',
-    'provider-idempotency',
-    'delivery-independent-replay',
-    'fenced-work-completion',
-    'cooperative-cancellation',
-    'durable-restart',
-    'health-reporting',
-  ]),
-  health: 'healthy',
-  checkedAt: '2026-07-13T00:00:00.000Z',
-} satisfies AdapterDescriptor);
+const activityEffectCapabilities = Object.freeze([
+  'stable-effect-identity',
+  'attributable-attempts',
+  'effect-lifecycle',
+  'completed-effect-lookup',
+  'strict-result-mapping',
+  'provider-idempotency',
+  'delivery-independent-replay',
+  'fenced-work-completion',
+  'cooperative-cancellation',
+  'durable-restart',
+  'health-reporting',
+] as const);
+
+export function activityEffectAdapterDescriptor(input: {
+  readonly health: AdapterDescriptor['health'];
+  readonly checkedAt: string;
+  readonly implementationVersion?: string;
+}): AdapterDescriptor {
+  return Object.freeze({
+    id: 'postgres-activity-effect-v2',
+    kind: 'activity-effect',
+    contractVersion: '2.0.0',
+    implementationVersion: input.implementationVersion ?? '0.1.0',
+    profile: 'production-like-local',
+    capabilities: activityEffectCapabilities,
+    health: input.health,
+    checkedAt: input.checkedAt,
+  });
+}
 
 export interface PostgresActivityEffectOptions {
   readonly transaction: TransactionOptions;
@@ -125,6 +133,33 @@ export class PostgresActivityEffectStore implements ActivityEffectStore {
         this.options.now(),
       ],
     );
+    const stored = await this.database.query<ActivityAttemptRow>(
+      `select work_id, idempotency_key, task_queue, worker_id, lease_owner, fencing_token
+       from mammoth_activity_attempts
+       where workflow_id = $1 and run_id = $2 and activity_id = $3 and activity_attempt = $4`,
+      [
+        invocation.workflow.workflowId,
+        invocation.workflow.runId,
+        invocation.workflow.activityId,
+        invocation.workflow.attempt,
+      ],
+    );
+    const row = stored.rows[0];
+    if (
+      !row ||
+      row.work_id !== invocation.workItemId ||
+      row.idempotency_key !== input.idempotencyKey ||
+      row.task_queue !== invocation.workflow.taskQueue ||
+      row.worker_id !== (invocation.workflow.workerId ?? null) ||
+      row.lease_owner !== (invocation.lease?.owner ?? null) ||
+      row.fencing_token !== (invocation.lease?.fencingToken ?? null)
+    ) {
+      throw new ActivityFailure(
+        'attribution_mismatch',
+        'Temporal Activity attempt identity conflicts with its durable attribution',
+        false,
+      );
+    }
   }
 
   async lookup(
@@ -335,6 +370,14 @@ interface ActivityWorkRow extends Record<string, unknown> {
   contract_version: string;
   input_digest: Digest;
   status: AttributableWorkItemV1['state'];
+}
+interface ActivityAttemptRow extends Record<string, unknown> {
+  work_id: string;
+  idempotency_key: Digest;
+  task_queue: string;
+  worker_id: string | null;
+  lease_owner: string | null;
+  fencing_token: number | null;
 }
 interface EffectRow extends Record<string, unknown> {
   id: string;
