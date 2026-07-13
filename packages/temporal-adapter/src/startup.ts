@@ -10,6 +10,7 @@ import {
   probeTemporalReadiness,
   temporalAdapterDescriptor,
   type TemporalReadiness,
+  type WorkerBundleManifestProbe,
 } from './readiness.js';
 
 export class TemporalStartupError extends Error {
@@ -33,19 +34,21 @@ export async function assertTemporalStartupReady(options: {
   readonly runner: CommandRunner;
   readonly requiredCapabilities?: readonly AdapterCapability[];
   readonly requiredContractMajor?: number;
+  readonly workerManifestProbe?: WorkerBundleManifestProbe;
   readonly now?: () => Date;
 }): Promise<TemporalReadiness> {
   const probe = await probeTemporalReadiness(options);
   const readiness = evaluateTemporalReadiness(probe);
+  if (!readiness.ready) throw new TemporalStartupError(readiness);
   const descriptor = temporalAdapterDescriptor({
     config: options.config,
     checkedAt: readiness.checkedAt,
     health: 'healthy',
+    capabilities: probe.advertisedCapabilities,
   });
   assertAdapterCompatibility(
     [descriptor],
     [TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT],
   );
-  if (!readiness.ready) throw new TemporalStartupError(readiness);
   return readiness;
 }

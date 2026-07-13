@@ -1,9 +1,18 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   ensureTemporalNamespace,
   assertPinnedTemporalVersion,
   loadTemporalAdapterConfig,
   temporalDevServerArgs,
+  TemporalDevServerService,
+  TemporalProcessOwnershipError,
+  type TemporalAdapterConfig,
+  type TemporalOwnedChild,
+  type TemporalProcessControl,
+  type TemporalProcessIdentity,
   type CommandResult,
   type CommandRunner,
 } from '../src/index.js';
@@ -77,6 +86,75 @@ describe('Temporal dev service lifecycle arguments', () => {
       assertPinnedTemporalVersion(config, exact),
     ).resolves.toBeUndefined();
   });
+
+  it('removes stale ownership metadata without signalling', async () => {
+    await withProfile(async (config) => {
+      await writeOwnership(config, ownership(config, 401));
+      const control = new FakeProcessControl();
+      const service = new TemporalDevServerService(
+        config,
+        new LifecycleRunner(),
+        control,
+      );
+      await service.stop();
+      expect(control.signals).toEqual([]);
+      await expect(readOwnership(config)).resolves.toBeUndefined();
+    });
+  });
+
+  it('refuses malformed ownership metadata without signalling', async () => {
+    await withProfile(async (config) => {
+      await writeFile(ownershipPath(config), '{"pid":"oops"}', {
+        mode: 0o600,
+      });
+      const control = new FakeProcessControl();
+      const service = new TemporalDevServerService(
+        config,
+        new LifecycleRunner(),
+        control,
+      );
+      await expect(service.stop()).rejects.toBeInstanceOf(
+        TemporalProcessOwnershipError,
+      );
+      expect(control.signals).toEqual([]);
+    });
+  });
+
+  it('refuses a reused pid whose process identity no longer matches', async () => {
+    await withProfile(async (config) => {
+      const saved = ownership(config, 402);
+      await writeOwnership(config, saved);
+      const control = new FakeProcessControl();
+      control.identities.set(402, {
+        pid: 402,
+        startTime: 'later',
+        command: saved.command,
+      });
+      const service = new TemporalDevServerService(
+        config,
+        new LifecycleRunner(),
+        control,
+      );
+      await expect(service.stop()).rejects.toThrow('reused pid');
+      expect(control.signals).toEqual([]);
+      await expect(readOwnership(config)).resolves.toBeDefined();
+    });
+  });
+
+  it('stops an owned child handle and is idempotent', async () => {
+    await withProfile(async (config) => {
+      const runner = new LifecycleRunner();
+      const control = new FakeProcessControl(runner);
+      const service = new TemporalDevServerService(config, runner, control);
+      await service.start();
+      expect(control.spawned).toBe(1);
+      await service.stop();
+      expect(control.childKills).toBe(1);
+      expect(control.signals).toEqual([]);
+      await expect(service.stop()).resolves.toBeUndefined();
+      expect(control.childKills).toBe(1);
+    });
+  });
 });
 
 class VersionRunner implements CommandRunner {
@@ -89,4 +167,115 @@ class VersionRunner implements CommandRunner {
       exitCode: 0,
     });
   }
+}
+
+class LifecycleRunner implements CommandRunner {
+  running = false;
+
+  run(_command: string, args: readonly string[]): Promise<CommandResult> {
+    if (args.includes('--version')) {
+      return Promise.resolve({
+        stdout: 'Temporal CLI 1.8.0',
+        stderr: '',
+        exitCode: 0,
+      });
+    }
+    if (args.includes('health')) {
+      return Promise.resolve({
+        stdout: '',
+        stderr: '',
+        exitCode: this.running ? 0 : 1,
+      });
+    }
+    return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 });
+  }
+}
+
+class FakeProcessControl implements TemporalProcessControl {
+  readonly identities = new Map<number, TemporalProcessIdentity>();
+  readonly signals: { pid: number; signal: 'SIGTERM' }[] = [];
+  spawned = 0;
+  childKills = 0;
+
+  constructor(private readonly runner?: LifecycleRunner) {}
+
+  spawn(command: string, args: readonly string[]): TemporalOwnedChild {
+    this.spawned += 1;
+    const pid = 777;
+    if (this.runner) this.runner.running = true;
+    this.identities.set(pid, {
+      pid,
+      startTime: 'Mon Jul 13 00:00:00 2026',
+      command: [command, ...args].join(' '),
+    });
+    return {
+      pid,
+      kill: () => {
+        this.childKills += 1;
+        if (this.runner) this.runner.running = false;
+        return true;
+      },
+      onceExit: () => undefined,
+    };
+  }
+
+  inspect(pid: number): Promise<TemporalProcessIdentity | undefined> {
+    return Promise.resolve(this.identities.get(pid));
+  }
+
+  signal(pid: number, signal: 'SIGTERM'): void {
+    this.signals.push({ pid, signal });
+    if (this.runner) this.runner.running = false;
+  }
+}
+
+async function withProfile(
+  operation: (config: TemporalAdapterConfig) => Promise<void>,
+): Promise<void> {
+  const root = await mkdtemp(join(tmpdir(), 'mammoth-temporal-service-'));
+  const config = loadTemporalAdapterConfig({ MAMMOTH_PROFILE_ROOT: root });
+  try {
+    await operation(config);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+function ownership(
+  config: TemporalAdapterConfig,
+  pid: number,
+): {
+  readonly schemaVersion: 1;
+  readonly pid: number;
+  readonly startTime: string;
+  readonly command: string;
+  readonly commandFingerprint: string;
+} {
+  const args = temporalDevServerArgs(config);
+  return {
+    schemaVersion: 1,
+    pid,
+    startTime: 'Mon Jul 13 00:00:00 2026',
+    command: [config.cliPath, ...args].join(' '),
+    commandFingerprint: JSON.stringify([config.cliPath, ...args]),
+  };
+}
+
+function ownershipPath(config: TemporalAdapterConfig): string {
+  return join(config.root, 'temporal-process.json');
+}
+
+function writeOwnership(
+  config: TemporalAdapterConfig,
+  value: ReturnType<typeof ownership>,
+): Promise<void> {
+  return writeFile(ownershipPath(config), JSON.stringify(value), {
+    mode: 0o600,
+  });
+}
+
+async function readOwnership(
+  config: TemporalAdapterConfig,
+): Promise<string | undefined> {
+  return readFile(ownershipPath(config), 'utf8').catch(() => undefined);
 }

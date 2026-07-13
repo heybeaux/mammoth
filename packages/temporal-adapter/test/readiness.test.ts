@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ADAPTER_CONTRACT_VERSION,
   TEMPORAL_WORKFLOW_CAPABILITIES,
-  verifyWorkflowRuntimeConformance,
   type WorkflowRuntimeDescriptor,
 } from '@mammoth/adapter-contracts';
 import {
@@ -13,10 +12,14 @@ import {
   TemporalWorkflowRuntimeAdapter,
   assertTemporalStartupReady,
   evaluateTemporalReadiness,
+  evaluateWorkerBundleManifestEvidence,
   loadTemporalAdapterConfig,
   temporalAdapterDescriptor,
+  probeTemporalReadiness,
   type CommandRunner,
   type CommandResult,
+  type WorkerBundleManifest,
+  type WorkerBundleManifestProbe,
 } from '../src/index.js';
 
 class FakeRunner implements CommandRunner {
@@ -49,7 +52,7 @@ describe('Temporal adapter descriptor and readiness', () => {
       contractVersion: ADAPTER_CONTRACT_VERSION,
       implementationVersion: '0.1.0',
       profile: 'production-like-local',
-      capabilities: TEMPORAL_WORKFLOW_CAPABILITIES,
+      capabilities: ['clean-shutdown', 'health-reporting'],
       health: 'healthy',
       checkedAt: '2026-07-13T00:00:00.000Z',
       namespace: 'mammoth-local',
@@ -67,8 +70,12 @@ describe('Temporal adapter descriptor and readiness', () => {
         namespaceAvailable: false,
         namespaceRetentionMatches: false,
         taskQueueAvailable: false,
+        pollerIdentityCompatible: false,
+        workerManifestValid: false,
+        workerManifestLive: false,
         workerCompatible: false,
         contractCompatible: false,
+        advertisedCapabilities: ['clean-shutdown', 'health-reporting'],
         missingCapabilities: ['signals'],
         checkedAt: '2026-07-13T00:00:00.000Z',
       }),
@@ -129,21 +136,82 @@ describe('Temporal adapter descriptor and readiness', () => {
     });
   });
 
-  it('passes shared lifecycle conformance with compatible namespace and poller', async () => {
+  it('does not accept a compatible-looking poller identity without a worker manifest', async () => {
     await withTcpServer(async (port) => {
       const config = loadTemporalAdapterConfig({
         MAMMOTH_TEMPORAL_PORT: String(port),
         MAMMOTH_TEMPORAL_READINESS_TIMEOUT_MS: '500',
       });
-      await verifyWorkflowRuntimeConformance({
-        open: () =>
-          new TemporalWorkflowRuntimeAdapter(
-            config,
-            metadataRunner('retention:7d', compatiblePoller()),
-            undefined,
-            () => new Date('2026-07-13T00:00:00.000Z'),
-          ),
+      const probe = await probeTemporalReadiness({
+        config,
+        runner: metadataRunner('retention:7d', compatiblePoller()),
       });
+      expect(probe.pollerIdentityCompatible).toBe(true);
+      expect(probe.workerManifestValid).toBe(false);
+      expect(probe.workerCompatible).toBe(false);
+      expect(probe.advertisedCapabilities).toEqual([
+        'clean-shutdown',
+        'health-reporting',
+      ]);
+      const readiness = evaluateTemporalReadiness(probe);
+      expect(readiness.ready).toBe(false);
+      expect(readiness.failures).toContain('worker-incompatible');
+      expect(readiness.failures).toContain('missing-capability');
+    });
+  });
+
+  it('rejects malformed and extra-field worker manifests', () => {
+    const config = loadTemporalAdapterConfig({});
+    expect(
+      evaluateWorkerBundleManifestEvidence(
+        { manifest: '{not-json}', probedCapabilities: [], live: true },
+        config,
+      ).valid,
+    ).toBe(false);
+    expect(
+      evaluateWorkerBundleManifestEvidence(
+        {
+          manifest: { ...exactManifest(), unexpected: true },
+          probedCapabilities: TEMPORAL_WORKFLOW_CAPABILITIES,
+          live: true,
+        },
+        config,
+      ).valid,
+    ).toBe(false);
+  });
+
+  it('fails false capability claims that were not independently probed', () => {
+    const evaluation = evaluateWorkerBundleManifestEvidence(
+      {
+        manifest: exactManifest(),
+        probedCapabilities: ['clean-shutdown', 'health-reporting'],
+        live: true,
+      },
+      loadTemporalAdapterConfig({}),
+    );
+    expect(evaluation.valid).toBe(true);
+    expect(evaluation.unprovenClaims).toContain('deterministic-replay');
+    expect(evaluation.advertisedCapabilities).toEqual([
+      'clean-shutdown',
+      'health-reporting',
+    ]);
+  });
+
+  it('evaluates an exact offline manifest without treating it as live readiness', () => {
+    const evaluation = evaluateWorkerBundleManifestEvidence(
+      {
+        manifest: exactManifest(),
+        probedCapabilities: TEMPORAL_WORKFLOW_CAPABILITIES,
+        live: false,
+      },
+      loadTemporalAdapterConfig({}),
+    );
+    expect(evaluation).toMatchObject({
+      valid: true,
+      live: false,
+      identityMatches: true,
+      unprovenClaims: [],
+      advertisedCapabilities: ['clean-shutdown', 'health-reporting'],
     });
   });
 
@@ -154,7 +222,9 @@ describe('Temporal adapter descriptor and readiness', () => {
         MAMMOTH_TEMPORAL_READINESS_TIMEOUT_MS: '500',
       });
       const runner = metadataRunner('retention:7d', compatiblePoller());
-      await assertTemporalStartupReady({ config, runner });
+      await expect(
+        assertTemporalStartupReady({ config, runner }),
+      ).rejects.toThrow(TemporalStartupError);
       expect(runner.calls.some((call) => call.includes(' create '))).toBe(
         false,
       );
@@ -182,6 +252,8 @@ describe('Temporal adapter descriptor and readiness', () => {
         config,
         runner,
         service,
+        () => new Date('2026-07-13T00:00:00.000Z'),
+        liveManifestProbe(),
       );
       await adapter.start();
       await expect(adapter.shutdown()).rejects.toBeInstanceOf(
@@ -215,6 +287,28 @@ function compatiblePoller(): string {
   return JSON.stringify({
     pollers: [{ identity: 'mammoth-probe-v1', workerBuildId: 'mammoth-p3-t1' }],
   });
+}
+
+function exactManifest(): WorkerBundleManifest {
+  return {
+    schemaVersion: 1,
+    bundleId: 'mammoth-probe-v1',
+    workerBuildId: 'mammoth-p3-t1',
+    taskQueue: 'mammoth-research-control-v1',
+    contractMajor: 1,
+    capabilities: TEMPORAL_WORKFLOW_CAPABILITIES,
+  };
+}
+
+function liveManifestProbe(): WorkerBundleManifestProbe {
+  return {
+    probe: () =>
+      Promise.resolve({
+        manifest: exactManifest(),
+        probedCapabilities: TEMPORAL_WORKFLOW_CAPABILITIES,
+        live: true,
+      }),
+  };
 }
 
 async function withTcpServer<T>(operation: (port: number) => Promise<T>) {

@@ -1,5 +1,6 @@
 import { Socket } from 'node:net';
 import {
+  ADAPTER_CAPABILITIES,
   ADAPTER_CONTRACT_MAJOR,
   ADAPTER_CONTRACT_VERSION,
   TEMPORAL_WORKFLOW_CAPABILITIES,
@@ -10,6 +11,12 @@ import {
 } from '@mammoth/adapter-contracts';
 import type { CommandResult, CommandRunner } from './commands.js';
 import type { TemporalAdapterConfig } from './config.js';
+
+/** Capabilities implemented by this lifecycle package without an SDK worker. */
+export const LOCAL_TEMPORAL_ADAPTER_CAPABILITIES = [
+  'clean-shutdown',
+  'health-reporting',
+] as const satisfies readonly AdapterCapability[];
 
 export const TEMPORAL_READINESS_FAILURES = [
   'service-unavailable',
@@ -26,13 +33,53 @@ export type TemporalReadinessFailure =
 
 export type TemporalReadiness = WorkflowRuntimeReadiness;
 
+export interface WorkerBundleManifest {
+  readonly schemaVersion: 1;
+  readonly bundleId: string;
+  readonly workerBuildId: string;
+  readonly taskQueue: string;
+  readonly contractMajor: number;
+  readonly capabilities: readonly AdapterCapability[];
+}
+
+/**
+ * Evidence returned by a worker-specific probe. `live` may be true only after
+ * the probe challenged the running worker; a checked-in manifest alone is not
+ * live readiness evidence.
+ */
+export interface WorkerBundleManifestEvidence {
+  readonly manifest: unknown;
+  readonly probedCapabilities: readonly AdapterCapability[];
+  readonly live: boolean;
+}
+
+export interface WorkerBundleManifestProbe {
+  probe(options: {
+    readonly config: TemporalAdapterConfig;
+    readonly taskQueueDescription: CommandResult;
+  }): Promise<WorkerBundleManifestEvidence | undefined>;
+}
+
+export interface WorkerBundleManifestEvaluation {
+  readonly manifest?: WorkerBundleManifest;
+  readonly valid: boolean;
+  readonly live: boolean;
+  readonly identityMatches: boolean;
+  readonly unprovenClaims: readonly AdapterCapability[];
+  readonly advertisedCapabilities: readonly AdapterCapability[];
+}
+
 export interface TemporalReadinessProbe {
   readonly serviceReachable: boolean;
   readonly namespaceAvailable: boolean;
   readonly namespaceRetentionMatches: boolean;
   readonly taskQueueAvailable: boolean;
+  readonly pollerIdentityCompatible: boolean;
+  readonly workerManifestValid: boolean;
+  readonly workerManifestLive: boolean;
   readonly workerCompatible: boolean;
   readonly contractCompatible: boolean;
+  readonly advertisedCapabilities: readonly AdapterCapability[];
   readonly missingCapabilities: readonly AdapterCapability[];
   readonly checkedAt: string;
 }
@@ -40,6 +87,7 @@ export interface TemporalReadinessProbe {
 export interface TemporalProbeOptions {
   readonly config: TemporalAdapterConfig;
   readonly runner: CommandRunner;
+  readonly workerManifestProbe?: WorkerBundleManifestProbe;
   readonly requiredCapabilities?: readonly AdapterCapability[];
   readonly requiredContractMajor?: number;
   readonly now?: () => Date;
@@ -50,33 +98,35 @@ export async function probeTemporalReadiness(
 ): Promise<TemporalReadinessProbe> {
   const requiredCapabilities =
     options.requiredCapabilities ?? TEMPORAL_WORKFLOW_CAPABILITIES;
-  const descriptor = temporalAdapterDescriptor({
-    config: options.config,
-    checkedAt: timestamp(options.now),
-    health: 'healthy',
-  });
+  const checkedAt = timestamp(options.now);
+  const contractCompatible =
+    parseMajor(ADAPTER_CONTRACT_VERSION) ===
+    (options.requiredContractMajor ?? ADAPTER_CONTRACT_MAJOR);
+  const unavailable = {
+    serviceReachable: false,
+    namespaceAvailable: false,
+    namespaceRetentionMatches: false,
+    taskQueueAvailable: false,
+    pollerIdentityCompatible: false,
+    workerManifestValid: false,
+    workerManifestLive: false,
+    workerCompatible: false,
+    contractCompatible,
+    advertisedCapabilities: LOCAL_TEMPORAL_ADAPTER_CAPABILITIES,
+    missingCapabilities: missingCapabilities(
+      LOCAL_TEMPORAL_ADAPTER_CAPABILITIES,
+      requiredCapabilities,
+    ),
+    checkedAt,
+  } satisfies TemporalReadinessProbe;
+
   const serviceReachable = await tcpReachable(
     options.config.host,
     options.config.port,
     options.config.readinessTimeoutMs,
   );
-  if (!serviceReachable) {
-    return {
-      serviceReachable,
-      namespaceAvailable: false,
-      namespaceRetentionMatches: false,
-      taskQueueAvailable: false,
-      workerCompatible: false,
-      contractCompatible:
-        parseMajor(descriptor.contractVersion) ===
-        (options.requiredContractMajor ?? ADAPTER_CONTRACT_MAJOR),
-      missingCapabilities: missingCapabilities(
-        descriptor.capabilities,
-        requiredCapabilities,
-      ),
-      checkedAt: descriptor.checkedAt,
-    };
-  }
+  if (!serviceReachable) return unavailable;
+
   const namespace = await temporalCommand(
     options.config.cliPath,
     options.runner,
@@ -117,27 +167,127 @@ export async function probeTemporalReadiness(
       )
     : undefined;
   const taskQueueAvailable = taskQueue?.exitCode === 0;
-  const workerCompatible =
+  const pollerIdentityCompatible =
     taskQueueAvailable &&
     outputContainsWorkerIdentity(
       taskQueue.stdout,
       options.config.workflowBundleId,
       options.config.workerBuildId,
     );
+  const evidence =
+    taskQueueAvailable && pollerIdentityCompatible
+      ? await options.workerManifestProbe?.probe({
+          config: options.config,
+          taskQueueDescription: taskQueue,
+        })
+      : undefined;
+  const manifest = evaluateWorkerBundleManifestEvidence(
+    evidence,
+    options.config,
+  );
+  const advertisedCapabilities = manifest.advertisedCapabilities;
+  const workerCompatible =
+    pollerIdentityCompatible &&
+    manifest.valid &&
+    manifest.live &&
+    manifest.identityMatches &&
+    manifest.unprovenClaims.length === 0;
+
   return {
     serviceReachable,
     namespaceAvailable,
     namespaceRetentionMatches,
     taskQueueAvailable,
+    pollerIdentityCompatible,
+    workerManifestValid: manifest.valid,
+    workerManifestLive: manifest.live,
     workerCompatible,
-    contractCompatible:
-      parseMajor(descriptor.contractVersion) ===
-      (options.requiredContractMajor ?? ADAPTER_CONTRACT_MAJOR),
+    contractCompatible,
+    advertisedCapabilities,
     missingCapabilities: missingCapabilities(
-      descriptor.capabilities,
+      advertisedCapabilities,
       requiredCapabilities,
     ),
-    checkedAt: descriptor.checkedAt,
+    checkedAt,
+  };
+}
+
+export function evaluateWorkerBundleManifestEvidence(
+  evidence: WorkerBundleManifestEvidence | undefined,
+  config: TemporalAdapterConfig,
+): WorkerBundleManifestEvaluation {
+  if (evidence === undefined) return invalidManifestEvaluation();
+  const manifest = parseWorkerBundleManifest(evidence.manifest);
+  if (manifest === undefined) return invalidManifestEvaluation();
+  const identityMatches =
+    manifest.bundleId === config.workflowBundleId &&
+    manifest.workerBuildId === config.workerBuildId &&
+    manifest.taskQueue === config.taskQueue &&
+    manifest.contractMajor === ADAPTER_CONTRACT_MAJOR;
+  const unprovenClaims = manifest.capabilities.filter(
+    (capability) => !evidence.probedCapabilities.includes(capability),
+  );
+  const live = evidence.live;
+  const workerCapabilities =
+    live && identityMatches && unprovenClaims.length === 0
+      ? evidence.probedCapabilities.filter((capability) =>
+          manifest.capabilities.includes(capability),
+        )
+      : [];
+  return {
+    manifest,
+    valid: true,
+    live,
+    identityMatches,
+    unprovenClaims,
+    advertisedCapabilities: uniqueCapabilities([
+      ...LOCAL_TEMPORAL_ADAPTER_CAPABILITIES,
+      ...workerCapabilities,
+    ]),
+  };
+}
+
+export function parseWorkerBundleManifest(
+  value: unknown,
+): WorkerBundleManifest | undefined {
+  if (!isRecord(value)) return undefined;
+  const keys = Object.keys(value).sort();
+  const expected = [
+    'bundleId',
+    'capabilities',
+    'contractMajor',
+    'schemaVersion',
+    'taskQueue',
+    'workerBuildId',
+  ];
+  if (
+    keys.length !== expected.length ||
+    keys.some((key, i) => key !== expected[i])
+  ) {
+    return undefined;
+  }
+  if (
+    value.schemaVersion !== 1 ||
+    typeof value.bundleId !== 'string' ||
+    value.bundleId.length === 0 ||
+    typeof value.workerBuildId !== 'string' ||
+    value.workerBuildId.length === 0 ||
+    typeof value.taskQueue !== 'string' ||
+    value.taskQueue.length === 0 ||
+    !Number.isSafeInteger(value.contractMajor) ||
+    !Array.isArray(value.capabilities) ||
+    !value.capabilities.every(isAdapterCapability) ||
+    new Set(value.capabilities).size !== value.capabilities.length
+  ) {
+    return undefined;
+  }
+  return {
+    schemaVersion: 1,
+    bundleId: value.bundleId,
+    workerBuildId: value.workerBuildId,
+    taskQueue: value.taskQueue,
+    contractMajor: value.contractMajor as number,
+    capabilities: value.capabilities,
   };
 }
 
@@ -175,7 +325,7 @@ export function temporalAdapterDescriptor(options: {
     contractVersion: ADAPTER_CONTRACT_VERSION,
     implementationVersion: '0.1.0',
     profile: 'production-like-local',
-    capabilities: options.capabilities ?? TEMPORAL_WORKFLOW_CAPABILITIES,
+    capabilities: options.capabilities ?? LOCAL_TEMPORAL_ADAPTER_CAPABILITIES,
     health: options.health,
     checkedAt: options.checkedAt,
     namespace: options.config.namespace,
@@ -186,16 +336,23 @@ export function temporalAdapterDescriptor(options: {
   };
 }
 
-async function temporalCommand(
+function invalidManifestEvaluation(): WorkerBundleManifestEvaluation {
+  return {
+    valid: false,
+    live: false,
+    identityMatches: false,
+    unprovenClaims: [],
+    advertisedCapabilities: LOCAL_TEMPORAL_ADAPTER_CAPABILITIES,
+  };
+}
+
+function temporalCommand(
   command: string,
   runner: CommandRunner,
   args: readonly string[],
   timeoutMs: number,
 ): Promise<CommandResult> {
-  return runner.run(command, args, {
-    timeoutMs,
-    allowFailure: true,
-  });
+  return runner.run(command, args, { timeoutMs, allowFailure: true });
 }
 
 function outputContainsRetention(output: string, days: number): boolean {
@@ -226,6 +383,23 @@ function missingCapabilities(
   required: readonly AdapterCapability[],
 ): AdapterCapability[] {
   return required.filter((capability) => !actual.includes(capability));
+}
+
+function uniqueCapabilities(
+  capabilities: readonly AdapterCapability[],
+): readonly AdapterCapability[] {
+  return [...new Set(capabilities)];
+}
+
+function isAdapterCapability(value: unknown): value is AdapterCapability {
+  return (
+    typeof value === 'string' &&
+    (ADAPTER_CAPABILITIES as readonly string[]).includes(value)
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function tcpReachable(
