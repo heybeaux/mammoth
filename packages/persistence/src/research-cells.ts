@@ -24,6 +24,12 @@ export type CellPlanStatus =
   | 'failed'
   | 'cancelled';
 
+export const P4_ADMISSION_POLICY_VERSION = '1.0.0';
+export const P4_ADMISSION_POLICY_DIGEST = canonicalDigest({
+  policy: 'research-cell-admission',
+  version: P4_ADMISSION_POLICY_VERSION,
+});
+
 const OperationalMetadataSchema = z
   .object({
     revision: z.number().int().nonnegative(),
@@ -35,8 +41,8 @@ const OperationalMetadataSchema = z
 export const AdmissionDecisionRecordSchema = z
   .object({
     decision: z.literal('admitted'),
-    policyVersion: z.string().min(1),
-    policyDigest: DigestSchema,
+    policyVersion: z.literal(P4_ADMISSION_POLICY_VERSION),
+    policyDigest: z.literal(P4_ADMISSION_POLICY_DIGEST),
     subjectDigest: DigestSchema,
     reasonCodes: z.array(z.string().min(1)).min(1),
     decidedAt: z.string().datetime(),
@@ -489,6 +495,13 @@ export type RejectedAuditResidueRecord = z.infer<
 >;
 export type CellReceiptRecord = z.infer<typeof CellReceiptRecordSchema>;
 
+export type AdmissionPersistenceResult<T> =
+  | { readonly decision: 'admitted'; readonly record: T }
+  | {
+      readonly decision: 'rejected';
+      readonly residue: RejectedAuditResidueRecord;
+    };
+
 export interface ModelProfileWrite {
   readonly id: string;
   readonly provider: string;
@@ -546,11 +559,13 @@ export interface ResearchCellRepository {
   updateCellPlanStatus(input: CellPlanStatusUpdate): Promise<CellPlanRecord>;
   recordPosition(
     input: ResearchPositionRecord,
-  ): Promise<ResearchPositionRecord>;
+  ): Promise<AdmissionPersistenceResult<ResearchPositionRecord>>;
   recordReviewAssignment(
     input: ReviewAssignmentRecord,
   ): Promise<ReviewAssignmentRecord>;
-  recordReview(input: ResearchReviewRecord): Promise<ResearchReviewRecord>;
+  recordReview(
+    input: ResearchReviewRecord,
+  ): Promise<AdmissionPersistenceResult<ResearchReviewRecord>>;
   recordDissent(input: DissentReportRecord): Promise<DissentReportRecord>;
   recordCorrelation(
     input: CorrelationAssessmentRecord,

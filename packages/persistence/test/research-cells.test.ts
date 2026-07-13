@@ -7,6 +7,8 @@ import {
 } from '@mammoth/domain';
 import {
   AdmissionDecisionRecordSchema,
+  P4_ADMISSION_POLICY_DIGEST,
+  P4_ADMISSION_POLICY_VERSION,
   PersistenceIntegrityError,
   RejectedAuditResidueRecordSchema,
   ReviewAssignmentRecordSchema,
@@ -21,8 +23,8 @@ describe('research-cell persistence ports', () => {
   it('requires an integrity-bearing admitted decision envelope', () => {
     const admitted = {
       decision: 'admitted',
-      policyVersion: 'admission@1',
-      policyDigest: canonicalDigest({ policy: 'admission@1' }),
+      policyVersion: P4_ADMISSION_POLICY_VERSION,
+      policyDigest: P4_ADMISSION_POLICY_DIGEST,
       subjectDigest: canonicalDigest({ position: 'one' }),
       reasonCodes: ['admitted'],
       decidedAt: now,
@@ -32,6 +34,18 @@ describe('research-cell persistence ports', () => {
       AdmissionDecisionRecordSchema.parse({
         ...admitted,
         decision: 'rejected',
+      }),
+    ).toThrow();
+    expect(() =>
+      AdmissionDecisionRecordSchema.parse({
+        ...admitted,
+        policyVersion: 'caller-authored',
+      }),
+    ).toThrow();
+    expect(() =>
+      AdmissionDecisionRecordSchema.parse({
+        ...admitted,
+        policyDigest: canonicalDigest({ policy: 'caller-authored' }),
       }),
     ).toThrow();
   });

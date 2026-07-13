@@ -1,4 +1,8 @@
 import { createHash } from 'node:crypto';
+import {
+  P4_ADMISSION_POLICY_DIGEST,
+  P4_ADMISSION_POLICY_VERSION,
+} from '@mammoth/persistence';
 
 export interface Migration {
   readonly version: number;
@@ -347,8 +351,8 @@ create table mammoth_research_positions (
   failure_codes jsonb not null,
   body jsonb not null,
   admission_decision text not null check (admission_decision = 'admitted'),
-  admission_policy_version text not null,
-  admission_policy_digest text not null check (admission_policy_digest ~ '^sha256:[0-9a-f]{64}$'),
+  admission_policy_version text not null check (admission_policy_version = '${P4_ADMISSION_POLICY_VERSION}'),
+  admission_policy_digest text not null check (admission_policy_digest = '${P4_ADMISSION_POLICY_DIGEST}'),
   admission_subject_digest text not null check (admission_subject_digest = position_digest),
   admission_reason_codes jsonb not null check (
     jsonb_typeof(admission_reason_codes) = 'array' and jsonb_array_length(admission_reason_codes) > 0
@@ -408,8 +412,8 @@ create table mammoth_research_reviews (
   reasons jsonb not null,
   body jsonb not null,
   admission_decision text not null check (admission_decision = 'admitted'),
-  admission_policy_version text not null,
-  admission_policy_digest text not null check (admission_policy_digest ~ '^sha256:[0-9a-f]{64}$'),
+  admission_policy_version text not null check (admission_policy_version = '${P4_ADMISSION_POLICY_VERSION}'),
+  admission_policy_digest text not null check (admission_policy_digest = '${P4_ADMISSION_POLICY_DIGEST}'),
   admission_subject_digest text not null check (admission_subject_digest = review_digest),
   admission_reason_codes jsonb not null check (
     jsonb_typeof(admission_reason_codes) = 'array' and jsonb_array_length(admission_reason_codes) > 0

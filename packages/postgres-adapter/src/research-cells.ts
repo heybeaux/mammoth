@@ -14,6 +14,8 @@ import {
   ModelProfileRecordSchema as ModelProfileSchema,
   ModelProfileVersionRecordSchema as ModelProfileVersionSchema,
   ModelLineageEdgeRecordSchema as ModelLineageEdgeSchema,
+  P4_ADMISSION_POLICY_DIGEST,
+  P4_ADMISSION_POLICY_VERSION,
   PersistenceConflictError,
   PersistenceIntegrityError,
   ResearchPositionRecordSchema as ResearchPositionSchema,
@@ -23,6 +25,7 @@ import {
   assertPayloadDigest,
   parseResearchCellState,
   type CellPlanRecord as CellPlan,
+  type AdmissionPersistenceResult,
   type CellPlanStatusUpdate,
   type CellReceiptRecord as CellReceipt,
   type CorrelationAssessmentRecord as CorrelationAssessment,
@@ -404,7 +407,9 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
     return toCellPlan(row);
   }
 
-  async recordPosition(input: ResearchPosition): Promise<ResearchPosition> {
+  async recordPosition(
+    input: ResearchPosition,
+  ): Promise<AdmissionPersistenceResult<ResearchPosition>> {
     const parsed = ResearchPositionSchema.parse(input);
     return this.database.transaction(this.options.transaction, async (tx) => {
       const planRow = (
@@ -436,17 +441,29 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         inputDigest: plan.inputDigest,
         outputSchemaVersion: plan.outputContractVersion,
         criterionRef: plan.contract.criterionRef,
-        claimIds: new Set(parsed.contract.claimIds),
-        evidenceIds: new Set(parsed.contract.evidenceIds),
-        hypothesisIds: new Set(parsed.contract.hypothesisIds),
-        artifactIds: new Set(parsed.contract.artifactIds),
+        claimIds: new Set(plan.contract.input.claimIds),
+        evidenceIds: new Set(plan.contract.input.evidenceIds),
+        hypothesisIds: new Set(plan.contract.input.hypothesisIds),
+        artifactIds: new Set(plan.contract.input.artifactIds),
         receiptRefs,
         modelVersions,
       });
       if (!admission.ok) {
-        throw new PersistenceIntegrityError(
-          `position ${parsed.id} rejected by frozen policy: ${admission.reasonCodes.join(', ')}`,
+        const residue = rejectedAdmissionResidue(
+          'position',
+          parsed,
+          admission.reasonCodes,
         );
+        await insertImmutable(
+          tx,
+          'mammoth_rejected_audit_residue',
+          residue.id,
+          rejectedResidueInsertSql,
+          rejectedResidueParameters(residue),
+          residue,
+          toRejected,
+        );
+        return { decision: 'rejected', residue };
       }
       if (
         !sameStringValues(parsed.admission.reasonCodes, admission.reasonCodes)
@@ -455,7 +472,7 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
           `position ${parsed.id} admission provenance drifts from frozen policy`,
         );
       }
-      return insertImmutable(
+      const record = await insertImmutable(
         tx,
         'mammoth_research_positions',
         parsed.id,
@@ -471,6 +488,7 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         parsed,
         toPosition,
       );
+      return { decision: 'admitted', record };
     });
   }
 
@@ -511,9 +529,11 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
     );
   }
 
-  async recordReview(input: ResearchReview): Promise<ResearchReview> {
+  async recordReview(
+    input: ResearchReview,
+  ): Promise<AdmissionPersistenceResult<ResearchReview>> {
     const parsed = ResearchReviewSchema.parse(input);
-    await this.database.transaction(this.options.transaction, async (tx) => {
+    return this.database.transaction(this.options.transaction, async (tx) => {
       const assignmentRow = (
         await tx.query<ReviewAssignmentRow>(
           'select * from mammoth_review_assignments where id = $1 for share',
@@ -575,9 +595,21 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         },
       });
       if (!admission.ok) {
-        throw new PersistenceIntegrityError(
-          `review ${parsed.id} rejected by frozen policy: ${admission.reasonCodes.join(', ')}`,
+        const residue = rejectedAdmissionResidue(
+          'review',
+          parsed,
+          admission.reasonCodes,
         );
+        await insertImmutable(
+          tx,
+          'mammoth_rejected_audit_residue',
+          residue.id,
+          rejectedResidueInsertSql,
+          rejectedResidueParameters(residue),
+          residue,
+          toRejected,
+        );
+        return { decision: 'rejected', residue };
       }
       if (
         !sameStringValues(parsed.admission.reasonCodes, admission.reasonCodes)
@@ -586,7 +618,7 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
           `review ${parsed.id} admission provenance drifts from frozen policy`,
         );
       }
-      await insertImmutable(
+      const record = await insertImmutable(
         tx,
         'mammoth_research_reviews',
         parsed.id,
@@ -635,8 +667,8 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         parsed,
         toReview,
       );
+      return { decision: 'admitted', record };
     });
-    return parsed;
   }
 
   async recordDissent(input: DissentReport): Promise<DissentReport> {
@@ -1405,6 +1437,60 @@ function sameStringValues(
     left.length === right.length &&
     [...left].sort().every((value, index) => value === [...right].sort()[index])
   );
+}
+
+const rejectedResidueInsertSql = `insert into mammoth_rejected_audit_residue
+  (id, program_id, subject_type, subject_id, reason_code, policy_version,
+   policy_digest, reason_codes, decision, payload_digest, payload, recorded_at)
+ values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11::jsonb,$12::timestamptz)`;
+
+function rejectedResidueParameters(
+  residue: RejectedAuditResidue,
+): readonly unknown[] {
+  return [
+    residue.id,
+    residue.programId,
+    residue.subjectType,
+    residue.subjectId,
+    residue.reasonCode,
+    residue.policyVersion,
+    residue.policyDigest,
+    JSON.stringify(residue.reasonCodes),
+    residue.decision,
+    residue.payloadDigest,
+    JSON.stringify(residue.payload),
+    residue.recordedAt,
+  ];
+}
+
+function rejectedAdmissionResidue(
+  subjectType: 'position' | 'review',
+  subject: ResearchPosition | ResearchReview,
+  reasonCodes: readonly string[],
+): RejectedAuditResidue {
+  const payload = subject.contract;
+  const payloadDigest = canonicalDigest(payload);
+  const identityDigest = canonicalDigest({
+    subjectType,
+    subjectId: subject.id,
+    policyVersion: P4_ADMISSION_POLICY_VERSION,
+    payloadDigest,
+    reasonCodes: [...reasonCodes].sort(),
+  });
+  return RejectedAuditResidueSchema.parse({
+    id: `rejected-${identityDigest.slice('sha256:'.length)}`,
+    decision: 'rejected',
+    programId: subject.programId,
+    subjectType,
+    subjectId: subject.id,
+    reasonCode: reasonCodes[0] ?? 'schema_invalid',
+    policyVersion: P4_ADMISSION_POLICY_VERSION,
+    policyDigest: P4_ADMISSION_POLICY_DIGEST,
+    reasonCodes,
+    payloadDigest,
+    payload,
+    recordedAt: subject.recordedAt,
+  });
 }
 
 async function insertImmutable<

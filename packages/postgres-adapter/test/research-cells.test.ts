@@ -13,13 +13,15 @@ import {
   type ResearchPosition as DomainResearchPosition,
   type ResearchReview as DomainResearchReview,
 } from '@mammoth/domain';
-import type {
-  CellPlanRecord,
-  CorrelationAssessmentRecord,
-  ModelProfileVersionRecord,
-  ResearchPositionRecord,
-  ResearchReviewRecord,
-  ReviewAssignmentRecord,
+import {
+  P4_ADMISSION_POLICY_DIGEST,
+  P4_ADMISSION_POLICY_VERSION,
+  type CellPlanRecord,
+  type CorrelationAssessmentRecord,
+  type ModelProfileVersionRecord,
+  type ResearchPositionRecord,
+  type ResearchReviewRecord,
+  type ReviewAssignmentRecord,
 } from '@mammoth/persistence';
 import type {
   PostgresConnection,
@@ -167,6 +169,12 @@ describe('research-cell migration', () => {
     );
     expect(migration?.sql).toContain(
       "admission_decision text not null check (admission_decision = 'admitted')",
+    );
+    expect(migration?.sql).toContain(
+      `admission_policy_version text not null check (admission_policy_version = '${P4_ADMISSION_POLICY_VERSION}')`,
+    );
+    expect(migration?.sql).toContain(
+      `admission_policy_digest text not null check (admission_policy_digest = '${P4_ADMISSION_POLICY_DIGEST}')`,
     );
     expect(migration?.sql).toContain(
       "decision text not null check (decision = 'rejected')",
@@ -490,10 +498,11 @@ describe('Postgres research-cell repositories', () => {
   });
 
   it('rejects duplicated position references and admission provenance that drift', async () => {
-    const repository = new PostgresResearchCellRepository(
-      new RecordingDatabase(),
-      { transaction, now: () => now },
-    );
+    const database = new RecordingDatabase();
+    const repository = new PostgresResearchCellRepository(database, {
+      transaction,
+      now: () => now,
+    });
     await expect(
       repository.recordPosition({
         ...position(),
@@ -509,6 +518,16 @@ describe('Postgres research-cell repositories', () => {
         },
       }),
     ).rejects.toThrow(/drifts from domain contract/);
+    await expect(
+      repository.recordPosition({
+        ...position(),
+        admission: {
+          ...position().admission,
+          policyVersion: 'caller-authored',
+        },
+      } as unknown as ResearchPositionRecord),
+    ).rejects.toThrow();
+    expect(database.calls).toHaveLength(0);
   });
 
   it('records immutable positions with claim and evidence IDs as typed references', async () => {
@@ -542,6 +561,61 @@ describe('Postgres research-cell repositories', () => {
     );
   });
 
+  it('persists deterministic residue when a position proposes references outside the locked plan input', async () => {
+    const database = new RecordingDatabase();
+    database.handler = (sql) => {
+      if (sql.includes('from mammoth_cell_plans where id'))
+        return result(cellPlanRow());
+      if (sql.includes('with recursive lineage_closure'))
+        return result(modelVersionRow());
+      return empty(1);
+    };
+    const original = positionContract();
+    const base: DomainResearchPosition = {
+      ...original,
+      claimIds: ['claim-outside-plan'],
+      proposalRefs: [{ kind: 'claim', id: 'claim-outside-plan' }],
+      canonicalDigest: canonicalDigest('placeholder'),
+    };
+    const contract = {
+      ...base,
+      canonicalDigest: researchPositionDigest(base),
+    };
+    const candidate: ResearchPositionRecord = {
+      ...position(),
+      contract,
+      admission: {
+        ...position().admission,
+        subjectDigest: contract.canonicalDigest,
+      },
+      positionDigest: contract.canonicalDigest,
+      claimIds: contract.claimIds,
+      proposalRefs: contract.proposalRefs,
+      body: contract,
+    };
+    const first = await new PostgresResearchCellRepository(database, {
+      transaction,
+      now: () => now,
+    }).recordPosition(candidate);
+    expect(first).toMatchObject({
+      decision: 'rejected',
+      residue: {
+        subjectId: candidate.id,
+        reasonCodes: expect.arrayContaining(['missing_claim_ref']),
+      },
+    });
+    expect(
+      database.calls.some((call) =>
+        call.sql.includes('insert into mammoth_rejected_audit_residue'),
+      ),
+    ).toBe(true);
+    expect(
+      database.calls.some((call) =>
+        call.sql.includes('insert into mammoth_research_positions'),
+      ),
+    ).toBe(false);
+  });
+
   it('replays identical immutable writes and rejects conflicting reuse of an ID', async () => {
     const database = new RecordingDatabase();
     database.handler = (sql) => {
@@ -559,15 +633,16 @@ describe('Postgres research-cell repositories', () => {
       transaction,
       now: () => now,
     });
-    await expect(repository.recordPosition(position())).resolves.toEqual(
-      position(),
-    );
+    await expect(repository.recordPosition(position())).resolves.toEqual({
+      decision: 'admitted',
+      record: position(),
+    });
     await expect(
       repository.recordPosition({
         ...position(),
         admission: {
           ...position().admission,
-          policyVersion: 'different-policy',
+          decidedAt: '2026-07-13T18:01:00.000Z',
         },
       }),
     ).rejects.toThrow(/conflicts with existing content/);
@@ -649,17 +724,27 @@ describe('Postgres research-cell repositories', () => {
         };
       return empty(1);
     };
-    await expect(
-      new PostgresResearchCellRepository(reviewDatabase, {
+    const rejectedReview = await new PostgresResearchCellRepository(
+      reviewDatabase,
+      {
         transaction,
         now: () => now,
-      }).recordReview(researchReview()),
-    ).rejects.toThrow(/correlated_review/);
+      },
+    ).recordReview(researchReview());
+    expect(rejectedReview).toMatchObject({
+      decision: 'rejected',
+      residue: { reasonCodes: expect.arrayContaining(['correlated_review']) },
+    });
     expect(
       reviewDatabase.calls.some((call) =>
         call.sql.includes('insert into mammoth_research_reviews'),
       ),
     ).toBe(false);
+    expect(
+      reviewDatabase.calls.some((call) =>
+        call.sql.includes('insert into mammoth_rejected_audit_residue'),
+      ),
+    ).toBe(true);
 
     const correlationDatabase = new RecordingDatabase();
     correlationDatabase.handler = (sql) =>
@@ -949,8 +1034,8 @@ function researchReview(): ResearchReviewRecord {
     contract,
     admission: {
       decision: 'admitted',
-      policyVersion: 'review-admission@1',
-      policyDigest: canonicalDigest({ policy: 'review-admission@1' }),
+      policyVersion: P4_ADMISSION_POLICY_VERSION,
+      policyDigest: P4_ADMISSION_POLICY_DIGEST,
       subjectDigest: contract.canonicalDigest,
       reasonCodes: ['admitted'],
       decidedAt: now,
@@ -1076,8 +1161,8 @@ function position(): ResearchPositionRecord {
     contract,
     admission: {
       decision: 'admitted',
-      policyVersion: 'admission@1',
-      policyDigest: canonicalDigest({ policy: 'admission@1' }),
+      policyVersion: P4_ADMISSION_POLICY_VERSION,
+      policyDigest: P4_ADMISSION_POLICY_DIGEST,
       subjectDigest: contract.canonicalDigest,
       reasonCodes: ['admitted'],
       decidedAt: now,
