@@ -6,6 +6,7 @@ export const ADAPTER_KINDS = [
   'artifact-store',
   'side-effect-executor',
   'receipt-writer',
+  'activity-effect',
 ] as const;
 
 export type AdapterKind = (typeof ADAPTER_KINDS)[number];
@@ -26,6 +27,13 @@ export const ADAPTER_CAPABILITIES = [
   'provider-idempotency',
   'cooperative-cancellation',
   'health-reporting',
+  'stable-effect-identity',
+  'attributable-attempts',
+  'effect-lifecycle',
+  'completed-effect-lookup',
+  'strict-result-mapping',
+  'delivery-independent-replay',
+  'fenced-work-completion',
 ] as const;
 
 export type AdapterCapability = (typeof ADAPTER_CAPABILITIES)[number];

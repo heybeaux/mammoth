@@ -197,9 +197,15 @@ importers:
 
   packages/postgres-adapter:
     dependencies:
+      '@mammoth/adapter-contracts':
+        specifier: workspace:*
+        version: link:../adapter-contracts
       '@mammoth/persistence':
         specifier: workspace:*
         version: link:../persistence
+      '@mammoth/work-queue':
+        specifier: workspace:*
+        version: link:../work-queue
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -325,7 +331,16 @@ importers:
       '@mammoth/adapter-contracts':
         specifier: workspace:*
         version: link:../adapter-contracts
+      '@mammoth/work-queue':
+        specifier: workspace:*
+        version: link:../work-queue
+      '@temporalio/activity':
+        specifier: 1.20.2
+        version: 1.20.2
       '@temporalio/client':
+        specifier: 1.20.2
+        version: 1.20.2
+      '@temporalio/common':
         specifier: 1.20.2
         version: 1.20.2
       '@temporalio/worker':
