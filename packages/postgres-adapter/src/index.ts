@@ -1,3 +1,4 @@
+export * from './activity-effects.js';
 export * from './driver.js';
 export * from './errors.js';
 export * from './lifecycle.js';

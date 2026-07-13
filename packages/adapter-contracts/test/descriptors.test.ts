@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   ADAPTER_CONTRACT_MAJOR,
   ADAPTER_CONTRACT_VERSION,
+  ACTIVITY_EFFECT_CAPABILITIES,
+  ACTIVITY_EFFECT_CONTRACT_MAJOR,
+  ACTIVITY_EFFECT_CONTRACT_VERSION,
+  ACTIVITY_EFFECT_REQUIREMENT,
   evaluateProductionLikeReadiness,
   LOCAL_ADAPTER_DESCRIPTORS,
   LOCAL_ADAPTER_ROLES,
@@ -44,8 +48,8 @@ describe('frozen adapter descriptors', () => {
       capabilities: TEMPORAL_WORKFLOW_CAPABILITIES,
       requireProductionProfile: true,
     });
-    expect(P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS).toHaveLength(7);
-    expect(P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS.at(-1)).toBe(
+    expect(P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS).toHaveLength(8);
+    expect(P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS.at(-2)).toBe(
       TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT,
     );
     expect(TEMPORAL_WORKFLOW_CAPABILITIES).toEqual([
@@ -61,6 +65,20 @@ describe('frozen adapter descriptors', () => {
       'cooperative-cancellation',
       'health-reporting',
     ]);
+  });
+
+  it('requires the separately versioned Activity-effect major-2 contract', () => {
+    expect(ACTIVITY_EFFECT_CONTRACT_MAJOR).toBe(2);
+    expect(ACTIVITY_EFFECT_CONTRACT_VERSION).toBe('2.0.0');
+    expect(ACTIVITY_EFFECT_REQUIREMENT).toEqual({
+      kind: 'activity-effect',
+      contractMajor: 2,
+      capabilities: ACTIVITY_EFFECT_CAPABILITIES,
+      requireProductionProfile: true,
+    });
+    expect(P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS.at(-1)).toBe(
+      ACTIVITY_EFFECT_REQUIREMENT,
+    );
   });
 });
 

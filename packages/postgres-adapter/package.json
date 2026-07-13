@@ -19,7 +19,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mammoth/persistence": "workspace:*"
+    "@mammoth/adapter-contracts": "workspace:*",
+    "@mammoth/persistence": "workspace:*",
+    "@mammoth/work-queue": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
