@@ -6,7 +6,7 @@ import type {
 } from './capabilities.js';
 
 export const ADAPTER_CONTRACT_MAJOR = 1 as const;
-export const ADAPTER_CONTRACT_VERSION = '1.0.0' as const;
+export const ADAPTER_CONTRACT_VERSION = '1.1.0' as const;
 
 export const LOCAL_ADAPTER_ROLES = [
   'workflow-state',
@@ -20,15 +20,14 @@ export const LOCAL_ADAPTER_ROLES = [
 export type LocalAdapterRole = (typeof LOCAL_ADAPTER_ROLES)[number];
 
 export const TEMPORAL_WORKFLOW_CAPABILITIES = [
-  'workflow-history',
-  'workflow-signals',
-  'workflow-queries',
-  'workflow-timers',
-  'workflow-retries',
-  'workflow-versioning',
+  'deterministic-replay',
+  'durable-timers',
+  'signals',
+  'queries',
+  'retry-scheduling',
   'continue-as-new',
-  'namespace-readiness',
-  'task-queue-readiness',
+  'task-queue-polling',
+  'clean-shutdown',
   'durable-restart',
   'cooperative-cancellation',
   'health-reporting',
@@ -143,14 +142,14 @@ export const PRODUCTION_LIKE_LOCAL_REQUIREMENTS = [
   ]),
 ] as const satisfies readonly AdapterRequirement[];
 
-export const TEMPORAL_WORKFLOW_REQUIREMENT = requirement(
-  'workflow-orchestrator',
+export const TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT = requirement(
+  'workflow-runtime',
   TEMPORAL_WORKFLOW_CAPABILITIES,
 );
 
 export const P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS = [
   ...PRODUCTION_LIKE_LOCAL_REQUIREMENTS,
-  TEMPORAL_WORKFLOW_REQUIREMENT,
+  TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT,
 ] as const satisfies readonly AdapterRequirement[];
 
 function requirement(

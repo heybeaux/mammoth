@@ -28,7 +28,7 @@ Temporal uses explicit local profile settings and no managed account:
 
 ```sh
 export MAMMOTH_TEMPORAL_NAMESPACE="mammoth-local"
-export MAMMOTH_TEMPORAL_TASK_QUEUE="research-control"
+export MAMMOTH_TEMPORAL_TASK_QUEUE="mammoth-research-control-v1"
 pnpm --filter @mammoth/temporal-adapter start
 pnpm --filter @mammoth/temporal-adapter status
 pnpm --filter @mammoth/temporal-adapter stop
@@ -37,8 +37,12 @@ pnpm --filter @mammoth/temporal-adapter stop
 Do not place the password in `infra/production-profile.env.example`, shell
 history, logs, or committed files. Override the host, port, user, database and
 timeouts only through the documented `MAMMOTH_*` variables in that example.
-Temporal host, port, namespace, task queue, retention, CLI path, and bounded
-timeouts are also configured only through `MAMMOTH_TEMPORAL_*` variables.
+Temporal host, port, namespace, task queue, retention, pinned service version,
+workflow bundle/build identity, CLI path, and bounded timeouts are configured
+only through `MAMMOTH_TEMPORAL_*` variables. Adapter startup never creates a
+namespace; creation belongs to the explicit local-profile bootstrap/start action.
+Temporal workflow queries are orchestration diagnostics, not product authority.
+Postgres/CAS remain the source of truth for product state and artifacts.
 
 ## Acceptance and recovery
 

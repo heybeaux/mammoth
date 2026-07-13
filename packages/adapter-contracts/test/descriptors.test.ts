@@ -8,13 +8,13 @@ import {
   P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS,
   PRODUCTION_LIKE_LOCAL_REQUIREMENTS,
   TEMPORAL_WORKFLOW_CAPABILITIES,
-  TEMPORAL_WORKFLOW_REQUIREMENT,
+  TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT,
 } from '../src/index.js';
 
 describe('frozen adapter descriptors', () => {
   it('publishes one contract-major-1 descriptor for every concrete local role', () => {
     expect(ADAPTER_CONTRACT_MAJOR).toBe(1);
-    expect(ADAPTER_CONTRACT_VERSION).toBe('1.0.0');
+    expect(ADAPTER_CONTRACT_VERSION).toBe('1.1.0');
     expect(LOCAL_ADAPTER_DESCRIPTORS.map(({ role }) => role)).toEqual(
       LOCAL_ADAPTER_ROLES,
     );
@@ -37,27 +37,26 @@ describe('frozen adapter descriptors', () => {
     }
   });
 
-  it('freezes the Temporal workflow orchestrator descriptor under contract major 1', () => {
-    expect(TEMPORAL_WORKFLOW_REQUIREMENT).toEqual({
-      kind: 'workflow-orchestrator',
+  it('freezes the Temporal workflow-runtime descriptor under contract major 1', () => {
+    expect(TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT).toEqual({
+      kind: 'workflow-runtime',
       contractMajor: 1,
       capabilities: TEMPORAL_WORKFLOW_CAPABILITIES,
       requireProductionProfile: true,
     });
     expect(P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS).toHaveLength(7);
     expect(P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS.at(-1)).toBe(
-      TEMPORAL_WORKFLOW_REQUIREMENT,
+      TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT,
     );
     expect(TEMPORAL_WORKFLOW_CAPABILITIES).toEqual([
-      'workflow-history',
-      'workflow-signals',
-      'workflow-queries',
-      'workflow-timers',
-      'workflow-retries',
-      'workflow-versioning',
+      'deterministic-replay',
+      'durable-timers',
+      'signals',
+      'queries',
+      'retry-scheduling',
       'continue-as-new',
-      'namespace-readiness',
-      'task-queue-readiness',
+      'task-queue-polling',
+      'clean-shutdown',
       'durable-restart',
       'cooperative-cancellation',
       'health-reporting',

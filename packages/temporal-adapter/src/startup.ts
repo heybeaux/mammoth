@@ -1,6 +1,6 @@
 import {
   assertAdapterCompatibility,
-  TEMPORAL_WORKFLOW_REQUIREMENT,
+  TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT,
   type AdapterCapability,
 } from '@mammoth/adapter-contracts';
 import type { CommandRunner } from './commands.js';
@@ -41,11 +41,11 @@ export async function assertTemporalStartupReady(options: {
     config: options.config,
     checkedAt: readiness.checkedAt,
     health: 'healthy',
-    ...(options.requiredCapabilities === undefined
-      ? {}
-      : { capabilities: options.requiredCapabilities }),
   });
-  assertAdapterCompatibility([descriptor], [TEMPORAL_WORKFLOW_REQUIREMENT]);
+  assertAdapterCompatibility(
+    [descriptor],
+    [TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT],
+  );
   if (!readiness.ready) throw new TemporalStartupError(readiness);
   return readiness;
 }

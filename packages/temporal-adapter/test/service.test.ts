@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ensureTemporalNamespace,
+  assertPinnedTemporalVersion,
   loadTemporalAdapterConfig,
   temporalDevServerArgs,
   type CommandResult,
@@ -37,8 +38,6 @@ describe('Temporal dev service lifecycle arguments', () => {
       '127.0.0.2',
       '--port',
       '17233',
-      '--namespace',
-      'mammoth-ci',
       '--db-filename',
       '/tmp/mammoth-profile/temporal-dev.db',
     ]);
@@ -64,4 +63,30 @@ describe('Temporal dev service lifecycle arguments', () => {
       '9d',
     ]);
   });
+
+  it('fails closed unless the installed CLI matches the pinned version', async () => {
+    const config = loadTemporalAdapterConfig({
+      MAMMOTH_TEMPORAL_SERVICE_VERSION: '1.8.0',
+    });
+    const wrong = new VersionRunner('Temporal CLI 1.5.0');
+    await expect(assertPinnedTemporalVersion(config, wrong)).rejects.toThrow(
+      'expected 1.8.0',
+    );
+    const exact = new VersionRunner('Temporal CLI 1.8.0');
+    await expect(
+      assertPinnedTemporalVersion(config, exact),
+    ).resolves.toBeUndefined();
+  });
 });
+
+class VersionRunner implements CommandRunner {
+  constructor(private readonly versionOutput: string) {}
+
+  run(): Promise<CommandResult> {
+    return Promise.resolve({
+      stdout: this.versionOutput,
+      stderr: '',
+      exitCode: 0,
+    });
+  }
+}

@@ -4,32 +4,34 @@ import {
   ADAPTER_CONTRACT_VERSION,
   TEMPORAL_WORKFLOW_CAPABILITIES,
   type AdapterCapability,
-  type AdapterDescriptor,
+  type WorkflowRuntimeDescriptor,
+  type WorkflowRuntimeReadiness,
+  type WorkflowRuntimeReadinessFailure,
 } from '@mammoth/adapter-contracts';
-import type { CommandRunner } from './commands.js';
+import type { CommandResult, CommandRunner } from './commands.js';
 import type { TemporalAdapterConfig } from './config.js';
 
 export const TEMPORAL_READINESS_FAILURES = [
-  'service-unreachable',
+  'service-unavailable',
   'namespace-unavailable',
+  'namespace-retention-mismatch',
   'task-queue-unavailable',
-  'contract-incompatible',
+  'worker-incompatible',
+  'contract-version-mismatch',
   'missing-capability',
-] as const;
+] as const satisfies readonly WorkflowRuntimeReadinessFailure[];
 
 export type TemporalReadinessFailure =
   (typeof TEMPORAL_READINESS_FAILURES)[number];
 
-export interface TemporalReadiness {
-  readonly ready: boolean;
-  readonly checkedAt: string;
-  readonly failures: readonly TemporalReadinessFailure[];
-}
+export type TemporalReadiness = WorkflowRuntimeReadiness;
 
 export interface TemporalReadinessProbe {
   readonly serviceReachable: boolean;
   readonly namespaceAvailable: boolean;
+  readonly namespaceRetentionMatches: boolean;
   readonly taskQueueAvailable: boolean;
+  readonly workerCompatible: boolean;
   readonly contractCompatible: boolean;
   readonly missingCapabilities: readonly AdapterCapability[];
   readonly checkedAt: string;
@@ -62,7 +64,9 @@ export async function probeTemporalReadiness(
     return {
       serviceReachable,
       namespaceAvailable: false,
+      namespaceRetentionMatches: false,
       taskQueueAvailable: false,
+      workerCompatible: false,
       contractCompatible:
         parseMajor(descriptor.contractVersion) ===
         (options.requiredContractMajor ?? ADAPTER_CONTRACT_MAJOR),
@@ -73,7 +77,7 @@ export async function probeTemporalReadiness(
       checkedAt: descriptor.checkedAt,
     };
   }
-  const namespaceAvailable = await temporalCommandSucceeds(
+  const namespace = await temporalCommand(
     options.config.cliPath,
     options.runner,
     [
@@ -84,24 +88,48 @@ export async function probeTemporalReadiness(
       options.config.address,
       '--namespace',
       options.config.namespace,
+      '--output',
+      'json',
     ],
+    options.config.readinessTimeoutMs,
   );
-  const taskQueueAvailable = namespaceAvailable
-    ? await temporalCommandSucceeds(options.config.cliPath, options.runner, [
-        'task-queue',
-        'describe',
-        '--address',
-        options.config.address,
-        '--namespace',
-        options.config.namespace,
-        '--task-queue',
-        options.config.taskQueue,
-      ])
-    : false;
+  const namespaceAvailable = namespace.exitCode === 0;
+  const namespaceRetentionMatches =
+    namespaceAvailable &&
+    outputContainsRetention(namespace.stdout, options.config.retentionDays);
+  const taskQueue = namespaceAvailable
+    ? await temporalCommand(
+        options.config.cliPath,
+        options.runner,
+        [
+          'task-queue',
+          'describe',
+          '--address',
+          options.config.address,
+          '--namespace',
+          options.config.namespace,
+          '--task-queue',
+          options.config.taskQueue,
+          '--output',
+          'json',
+        ],
+        options.config.readinessTimeoutMs,
+      )
+    : undefined;
+  const taskQueueAvailable = taskQueue?.exitCode === 0;
+  const workerCompatible =
+    taskQueueAvailable &&
+    outputContainsWorkerIdentity(
+      taskQueue.stdout,
+      options.config.workflowBundleId,
+      options.config.workerBuildId,
+    );
   return {
     serviceReachable,
     namespaceAvailable,
+    namespaceRetentionMatches,
     taskQueueAvailable,
+    workerCompatible,
     contractCompatible:
       parseMajor(descriptor.contractVersion) ===
       (options.requiredContractMajor ?? ADAPTER_CONTRACT_MAJOR),
@@ -117,10 +145,16 @@ export function evaluateTemporalReadiness(
   probe: TemporalReadinessProbe,
 ): TemporalReadiness {
   const failures: TemporalReadinessFailure[] = [];
-  if (!probe.serviceReachable) failures.push('service-unreachable');
+  if (!probe.serviceReachable) failures.push('service-unavailable');
   if (!probe.namespaceAvailable) failures.push('namespace-unavailable');
+  if (probe.namespaceAvailable && !probe.namespaceRetentionMatches) {
+    failures.push('namespace-retention-mismatch');
+  }
   if (!probe.taskQueueAvailable) failures.push('task-queue-unavailable');
-  if (!probe.contractCompatible) failures.push('contract-incompatible');
+  if (probe.taskQueueAvailable && !probe.workerCompatible) {
+    failures.push('worker-incompatible');
+  }
+  if (!probe.contractCompatible) failures.push('contract-version-mismatch');
   if (probe.missingCapabilities.length > 0) failures.push('missing-capability');
   return {
     ready: failures.length === 0,
@@ -132,31 +166,59 @@ export function evaluateTemporalReadiness(
 export function temporalAdapterDescriptor(options: {
   readonly config: TemporalAdapterConfig;
   readonly checkedAt: string;
-  readonly health: AdapterDescriptor['health'];
+  readonly health: WorkflowRuntimeDescriptor['health'];
   readonly capabilities?: readonly AdapterCapability[];
-}): AdapterDescriptor {
+}): WorkflowRuntimeDescriptor {
   return {
     id: `temporal:${options.config.namespace}:${options.config.taskQueue}`,
-    kind: 'workflow-orchestrator',
+    kind: 'workflow-runtime',
     contractVersion: ADAPTER_CONTRACT_VERSION,
     implementationVersion: '0.1.0',
     profile: 'production-like-local',
     capabilities: options.capabilities ?? TEMPORAL_WORKFLOW_CAPABILITIES,
     health: options.health,
     checkedAt: options.checkedAt,
+    namespace: options.config.namespace,
+    taskQueue: options.config.taskQueue,
+    retentionDays: options.config.retentionDays,
+    workflowBundleId: options.config.workflowBundleId,
+    workerBuildId: options.config.workerBuildId,
   };
 }
 
-async function temporalCommandSucceeds(
+async function temporalCommand(
   command: string,
   runner: CommandRunner,
   args: readonly string[],
-): Promise<boolean> {
-  const result = await runner.run(command, args, {
-    timeoutMs: 5_000,
+  timeoutMs: number,
+): Promise<CommandResult> {
+  return runner.run(command, args, {
+    timeoutMs,
     allowFailure: true,
   });
-  return result.exitCode === 0;
+}
+
+function outputContainsRetention(output: string, days: number): boolean {
+  const normalized = output.toLowerCase().replace(/\s+/g, '');
+  const hours = days * 24;
+  const seconds = days * 24 * 60 * 60;
+  return (
+    normalized.includes(`"retentiondays":${String(days)}`) ||
+    normalized.includes(`"workflowexecutionretentionttl":"${String(hours)}h`) ||
+    normalized.includes(
+      `"workflowexecutionretentionttl":"${String(seconds)}s`,
+    ) ||
+    normalized.includes(`"retention":"${String(days)}d`) ||
+    normalized.includes(`retention:${String(days)}d`)
+  );
+}
+
+function outputContainsWorkerIdentity(
+  output: string,
+  bundleId: string,
+  buildId: string,
+): boolean {
+  return output.includes(bundleId) && output.includes(buildId);
 }
 
 function missingCapabilities(

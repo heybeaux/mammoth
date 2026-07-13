@@ -20,6 +20,7 @@ export class TemporalDevServerService {
   }
 
   async start(): Promise<void> {
+    await assertPinnedTemporalVersion(this.config, this.runner);
     if (await this.serviceReady()) {
       await ensureTemporalNamespace(this.config, this.runner);
       return;
@@ -55,9 +56,11 @@ export class TemporalDevServerService {
 
   async stop(): Promise<void> {
     const pid = await this.readPid();
+    let signalled = false;
     if (pid !== undefined) {
       try {
         process.kill(pid, 'SIGTERM');
+        signalled = true;
       } catch (error: unknown) {
         if (!isNoSuchProcess(error)) throw error;
       }
@@ -65,6 +68,18 @@ export class TemporalDevServerService {
     if (this.#child) {
       this.#child.kill('SIGTERM');
       this.#child = undefined;
+      signalled = true;
+    }
+    if (signalled) {
+      const deadline = Date.now() + this.config.shutdownTimeoutMs;
+      while (Date.now() < deadline) {
+        if (!(await this.serviceReady())) {
+          await rm(this.#pid, { force: true });
+          return;
+        }
+        await delay(100);
+      }
+      throw new TemporalShutdownError(this.config.shutdownTimeoutMs);
     }
     await rm(this.#pid, { force: true });
   }
@@ -89,6 +104,14 @@ export class TemporalDevServerService {
   }
 }
 
+export class TemporalShutdownError extends Error {
+  override readonly name = 'TemporalShutdownError';
+
+  constructor(readonly timeoutMs: number) {
+    super(`Temporal shutdown exceeded ${String(timeoutMs)}ms`);
+  }
+}
+
 export function temporalDevServerArgs(
   config: TemporalAdapterConfig,
 ): readonly string[] {
@@ -99,8 +122,6 @@ export function temporalDevServerArgs(
     config.host,
     '--port',
     String(config.port),
-    '--namespace',
-    config.namespace,
     '--db-filename',
     join(config.root, 'temporal-dev.db'),
   ];
@@ -139,6 +160,24 @@ export async function ensureTemporalNamespace(
     ],
     { timeoutMs: config.readinessTimeoutMs },
   );
+}
+
+export async function assertPinnedTemporalVersion(
+  config: TemporalAdapterConfig,
+  runner: CommandRunner,
+): Promise<void> {
+  const result = await runner.run(config.cliPath, ['--version'], {
+    timeoutMs: config.readinessTimeoutMs,
+    allowFailure: true,
+  });
+  if (
+    result.exitCode !== 0 ||
+    !`${result.stdout}\n${result.stderr}`.includes(config.serviceVersion)
+  ) {
+    throw new Error(
+      `Temporal CLI version mismatch: expected ${config.serviceVersion}`,
+    );
+  }
 }
 
 function delay(ms: number): Promise<void> {
