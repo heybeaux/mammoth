@@ -6,9 +6,10 @@
 >
 > Direction: production adapters first, then broader research-cell orchestration.
 >
-> Completed checkpoints: [`P2_PLAN.md`](P2_PLAN.md)
+> Completed checkpoints: [`P2_PLAN.md`](P2_PLAN.md), [`P3_PLAN.md`](P3_PLAN.md)
 >
-> Active checkpoint: [`P3_PLAN.md`](P3_PLAN.md) — Temporal workflow adapter
+> Active checkpoint: [`P4_PLAN.md`](P4_PLAN.md) — research-cell contracts and
+> model lineage
 
 ## Outcome
 
@@ -77,7 +78,7 @@ Exit gate:
 Killing Mammoth workers, Temporal workers, and API processes at every durable
 boundary loses no authoritative state and duplicates no external side effect.
 
-Active plan: [`P3_PLAN.md`](P3_PLAN.md).
+Completed plan: [`P3_PLAN.md`](P3_PLAN.md).
 
 ### P4 — Research-cell contracts and lineage
 
@@ -162,21 +163,9 @@ cannot become release scope until P2 and P3 pass their exit gates.
 
 ## Active implementation checkpoint
 
-The active checkpoint is P3 Temporal control plane:
-
-1. Add the Temporal adapter lifecycle and contract descriptor without weakening
-   the P1/P2 adapter gates.
-2. Move the evidence-first program onto deterministic Temporal workflows and
-   separately testable Activities.
-3. Prove stable workflow IDs, signals, queries, retries, timers, cancellation,
-   human gates, and `continueAsNew`.
-4. Kill Mammoth workers, Temporal workers, and API/CLI processes at durable
-   boundaries and prove no authoritative state is lost and no external effect is
-   duplicated.
-5. Link Temporal execution metadata into the existing read-only Observatory
-   projection without making Temporal the product query store.
-6. Add `pnpm verify:p3` and record
-   `evals/reports/v0.3.0-temporal-control-plane.md`.
+The active checkpoint is P4 research-cell contracts and lineage. Its exact entry
+gate, slices, adversarial fixtures, verifier, receipt, release label, and stopping
+condition are frozen in [`P4_PLAN.md`](P4_PLAN.md).
 
 The read-only visualization track is specified in
 [`docs/OBSERVATORY.md`](docs/OBSERVATORY.md). A high-fidelity shell and 3D

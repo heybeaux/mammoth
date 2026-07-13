@@ -2,25 +2,25 @@
 
 ## Mission and authority
 
-Build Mammoth from the completed `v0.2.0-production-data` baseline through the
-active `v0.3.0-temporal-control-plane` checkpoint in `P3_PLAN.md`.
+Build Mammoth from the completed `v0.3.0-temporal-control-plane` baseline through
+the active `v0.4.0-research-cell-contracts` checkpoint in `P4_PLAN.md`.
 `ARCHITECTURE.md` is the normative architecture, `POST_MVP_ROADMAP.md` defines
-long-range sequencing, `P3_PLAN.md` defines the current acceptance contract,
+long-range sequencing, `P4_PLAN.md` defines the current acceptance contract,
 `docs/OBSERVATORY.md` defines the read-only visualization direction, and
 `LOOP.md` defines team execution. Preserve architecture invariants if wording
 conflicts and record the conflict instead of weakening a gate.
 
 Workers may inspect, implement, test, commit, push, open or review pull requests,
 repair CI, and merge accepted work without human confirmation until the checkpoint.
-Do not send routine progress to Beaux. Contact him only when the P3 stopping
+Do not send routine progress to Beaux. Contact him only when the P4 stopping
 condition is met or an escalation condition in `LOOP.md` is unavoidable.
 
 ## Before taking work
 
-Read this file, `P3_PLAN.md`, `P2_PLAN.md`, `POST_MVP_ROADMAP.md`, `LOOP.md`,
-the relevant package tests, and `ARCHITECTURE.md` sections 6, 7, 15, 28, 38, 40,
-42, and 44. Read `docs/OBSERVATORY.md` for projection work. Every assignment
-must name:
+Read this file, `P4_PLAN.md`, `POST_MVP_ROADMAP.md`, `LOOP.md`, the P4 handover,
+the relevant package tests, and `ARCHITECTURE.md` sections 6, 11, 13-20, 24, 28,
+31-33, 38, and 40-44. Read `docs/OBSERVATORY.md` for projection work. Every
+assignment must name:
 
 - objective and acceptance evidence;
 - owned paths;
@@ -40,12 +40,12 @@ slot available for coordination and integration.
 Delegate only concrete, bounded work that can proceed independently. Prefer
 path-disjoint ownership such as:
 
-- Temporal adapter lifecycle and capability descriptor;
-- deterministic workflow definitions and versioning;
-- Activity implementation, retry policy, and idempotency receipts;
-- signal, query, cancellation, and human-gate behavior;
-- crash/restart and replay verification;
-- Temporal-linked Observatory projection fixture;
+- research-cell and model-lineage contracts;
+- deterministic admission and correlation policy;
+- authoritative Postgres persistence and migration verification;
+- workflow carriage and restart reconstruction;
+- fail-closed Observatory projection and CLI inspection;
+- adversarial acceptance fixtures and receipt audit;
 - documentation and receipt audit.
 
 Every delegated task must include objective, owned paths, non-owned paths,
@@ -155,12 +155,11 @@ pnpm eval:offline
 ```
 
 Also run every verifier introduced by the active loop, including
-`verify:phase-2`, `verify:mvp`, `verify:adapters`, `verify:p2`, and `verify:p3`.
-Never claim a check passed unless it ran; record the command and result. P3
-requires Temporal adapter startup, deterministic replay, workflow versioning,
-signals, queries, retries, timers, cancellation, `continueAsNew`, duplicate
-Activity delivery, process/service restart, and projection-linkage tests against
-the production-like local profile.
+`verify:phase-2`, `verify:mvp`, `verify:adapters`, `verify:p2`, `verify:p3`, and
+`verify:p4`. Never claim a check passed unless it ran; record the command and
+result. P4 requires unsupported-consensus, lineage/correlation, self-review,
+criterion-drift, missing-reference, rejection-residue, migration, fencing,
+restart-reconstruction, and fail-closed projection tests.
 
 ## Commits, reviews, and handoffs
 
@@ -177,6 +176,6 @@ tests and results / risks or unverified areas / blockers / next task
 ```
 
 An item is done only when its acceptance evidence exists, tests and docs are
-updated, required gates pass, the change is merged, and `P3_PLAN.md` or the P3
+updated, required gates pass, the change is merged, and `P4_PLAN.md` or the P4
 receipt reflects reality. Do not stop because one task or PR is done; claim the
-next unblocked P3 item and continue until the checkpoint is proven.
+next unblocked P4 item and continue until the checkpoint is proven.

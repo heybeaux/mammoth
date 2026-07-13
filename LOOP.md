@@ -1,175 +1,111 @@
-# Autonomous P3 Delivery Loop
+# Autonomous P4 Delivery Loop
 
 ## Mission
 
-Operate continuously and autonomously until the `v0.3.0-temporal-control-plane`
-checkpoint in `P3_PLAN.md` is merged, verified, and ready to record. Preserve the
-completed P2 Postgres/CAS authority boundary, then deliver the Temporal adapter,
-deterministic workflows, idempotent Activities, signals, queries, cancellation,
-replay, crash/restart recovery, and Temporal-linked Observatory projection
-metadata.
+Operate continuously until `v0.4.0-research-cell-contracts` is merged, verified,
+tagged, and recorded under `P4_PLAN.md`. Preserve the P2 Postgres/CAS authority
+boundary and P3 Temporal control plane while delivering deterministic research-
+cell, model-lineage, admission, persistence, carriage, and projection contracts.
 
-Routine design choices, reversible architecture decisions recorded in ADRs,
-failures with an in-scope workaround, worker delegation, PRs, reviews, CI repair,
-and sequencing do not require human contact.
+Routine reversible choices, ADR-backed decisions, delegation, PRs, reviews, CI
+repair, and sequencing do not require human contact.
 
-## Roles
+## Roles and ownership
 
-- **Coordinator/integrator:** owns priorities, contracts, live worker state,
-  integration, CI, receipts, and the checkpoint decision.
-- **Builder:** implements one path-bounded slice and its tests.
-- **Adversarial verifier:** attacks workflow replay, versioning, duplicate
-  Activity delivery, signal races, cancellation, worker/service restart,
-  idempotency, and fail-closed startup.
-- **Architecture reviewer:** checks dependency direction, authority boundaries,
-  adapter isolation, Temporal/Postgres responsibility boundaries, and Observatory
-  read-only semantics.
-- **Receipt auditor:** independently reconciles executed evidence with the active
-  checklist and final report.
+- **Coordinator/integrator:** contracts, priorities, ownership, integration, CI,
+  receipt, release, and checkpoint decision.
+- **Domain/policy builder:** schemas, identities, lineage, correlation, admission,
+  and adversarial fixtures.
+- **Persistence builder:** ports, migrations, constraints, fencing, integrity, and
+  restart evidence.
+- **Workflow/projection builder:** deterministic carriage/reconstruction and
+  read-only fail-closed projection.
+- **Adversarial reviewer:** independently attacks epistemic and authority claims;
+  an author never self-certifies the exit gate.
 
-Roles may rotate. The author of a slice does not self-certify its exit gate. Keep
-one slot for coordination/integration and parallelize only path-disjoint tasks.
+One worker owns a path at a time. Each assignment names owned/non-owned paths,
+contracts, commands, dependencies, and handoff recipient. A prepared worktree or
+accepted spawn is not liveness evidence; require a live registry entry plus fresh
+artifacts, diffs, tests, or a tied status report. Prove a run dead before replacing
+it and never assign overlapping workers to one worktree.
 
-## Worker lifecycle
+## Loop
 
-1. The coordinator writes a bounded assignment with owned paths, non-owned paths,
-   permitted contracts, acceptance commands, dependencies, and handoff recipient.
-2. Spawn the worker through the native delegation mechanism.
-3. Immediately verify the worker through the live agent-status tool.
-4. Record status precisely: spawn requested, active, completed, integrated, or
-   merged/verified.
-5. Require the handoff format in `AGENTS.md`.
-6. Review the diff and evidence before integration; never merge a worker assertion
-   on trust.
-7. Release the ownership boundary only after the handoff is accepted or abandoned.
+1. **Orient** — fetch `main`; inspect worktrees, PRs, CI, active workers,
+   `P4_PLAN.md`, ADRs, migrations, receipts, and the highest unproved predicate.
+2. **Claim** — freeze the smallest testable slice, owner, paths, dependencies,
+   contract impact, adversarial risks, commands, and independent reviewer.
+3. **Delegate** — use path-disjoint durable workers and prove actual liveness.
+4. **Build** — contracts/policy first, then persistence, workflow carriage,
+   projection/CLI, and acceptance.
+5. **Attack** — exercise unsupported consensus, aliases, unknown/correlated
+   lineage, self-review, criterion drift, missing refs, cycles, digest mismatch,
+   migration interruption, stale fencing, future authority, and restart.
+6. **Review** — inspect dependency direction, hidden stores, authority drift,
+   deleted rejection residue, direct adapter imports, Temporal shadow state,
+   projection writes, fake receipts, and claims of P5 isolation.
+7. **Verify** — run focused gates, `pnpm verify:p4`, and the full clean-checkout
+   ladder; capture exact evidence in the receipt.
+8. **Integrate** — resolve without discarding work, push, open a PR, repair CI,
+   resolve independent findings, merge, and verify `main`.
+9. **Reconcile** — update plan, roadmap, receipt, and tag only from executed proof.
+10. **Continue** — a green slice or PR is not a pause point while any stopping
+    predicate remains false.
 
-If a worker disappears or delegation fails, preserve its worktree, record the
-failure, reclaim the bounded task, and continue. A branch or commit is not a live
-worker.
+Git constraints, database state, verifier output, CI, integrity digests, and
+receipts outrank prose or worker confidence.
 
-## The loop
-
-1. **Orient** — fetch the default branch; inspect worktrees, open PRs, CI, live
-   workers, `P3_PLAN.md`, `P2_PLAN.md`, ADRs, Temporal service state, and
-   evaluation receipts. Identify the highest-value unblocked P3 predicate.
-2. **Claim** — define the smallest testable slice, owner, paths, dependencies,
-   contract impact, failure risks, acceptance command, and reviewer.
-3. **Delegate** — assign independent implementation, adversarial verification,
-   replay/version review, or projection work when ownership does not overlap.
-   Prove activity through the live status tool.
-4. **Build** — implement Temporal adapter lifecycle/plumbing first, then
-   deterministic workflow/application behavior. Keep transactions, clocks, IDs,
-   network calls, storage, workflow clients, and external effects injectable. If
-   sequencing pressure conflicts with this order, record the conflict instead of
-   weakening the architecture gate.
-5. **Attack** — test negative paths: nondeterministic workflow code, replay
-   failure, stale workflow versions, process death before/after commits, duplicate
-   Activity delivery, heartbeat timeout, stale signals, cancellation races,
-   unready services, poison Activity input, and restart.
-6. **Review** — inspect the diff independently for authority drift, cross-adapter
-   imports, hidden stores, missing constraints, unsafe retries, fake receipts, and
-   UI write paths.
-7. **Verify** — run package checks, `pnpm verify:adapters`, the active P3 slice
-   gate, and the repository ladder. Capture executed evidence under
-   `evals/reports/`.
-8. **Integrate** — sync, resolve conflicts without discarding work, commit scoped
-   paths, push, open a PR, repair CI, incorporate review, merge, then verify the
-   default branch.
-9. **Reconcile** — update `P3_PLAN.md` and the P3 receipt only from merged
-   evidence. Record exact commit, commands, results, limitations, and next
-   predicate.
-10. **Continue** — if the P3 stopping condition is false, immediately begin the
-    next loop. A green PR, completed slice, or entry-gate freeze is not a pause
-    point.
-
-Git, database constraints, migration ledgers, CI, verifier output, integrity
-checks, Temporal replay tests, and receipts outrank prose or worker confidence.
-
-## Integration order
-
-Use this dependency order unless a written ADR proves a safer alternative:
+## Dependency order
 
 ```text
-P2 reconfirmation
-  -> Temporal lifecycle + adapter descriptor
-  -> deterministic workflow definitions + versioning
-  -> idempotent Activities + receipt mapping
-  -> signals, queries, cancellation, human gates
-  -> crash/restart/replay harness
-  -> Temporal-linked Observatory projection fixture
-  -> clean-checkout P3 verifier + receipt
+P3 reconfirmation
+  -> P4 contract/policy freeze
+  -> authoritative persistence
+  -> workflow carriage and reconstruction
+  -> read-only projection and CLI inspection
+  -> adversarial verifier and clean-checkout receipt
+  -> independent review, PR, main CI, annotated tag
 ```
 
-Workflow contract and Activity ownership is serialized. Tests, adversarial
-fixtures, documentation, and projection fixture work may proceed in parallel when
-paths are disjoint.
+Tests and documentation may run in parallel only when paths and contracts are
+disjoint. The coordinator serializes cross-package reconciliation.
 
 ## Failure and recovery
 
-Classify each failure as code/test, contract mismatch, workflow nondeterminism,
-replay/versioning, Activity idempotency, signal/cancellation race, integration
-conflict, CI/environment, architecture ambiguity, security/integrity, or external
-dependency.
-
-- Retry a transient failure only with evidence that retry is safe.
+- Retry transient failures only when retry is safe.
 - After two identical failures, change strategy or assign an independent reviewer.
-- After three, quarantine the approach, document root cause, and choose an
-  alternative. Never weaken, skip, or delete a gate to get green.
-- Preserve unrelated work, failed migrations, red results, and diagnostic
-  artifacts.
-- Never repair schema or Temporal-history drift by deleting data or recreating a
-  volume unless the test explicitly owns disposable state.
-- If a service is unavailable, continue contract, fixture, documentation, or
-  in-memory work that remains valid; do not claim the production gate passed.
-- Resolve architecture ambiguity in an ADR before implementation makes it an
-  accidental contract.
+- After three, quarantine the approach, record root cause, and use an alternative;
+  never weaken or delete a gate.
+- Preserve unrelated work, failed migrations, rejected proposals, dissent, red
+  results, and diagnostics.
+- Never repair drift by deleting non-disposable data or rewriting history.
+- Continue valid offline work during external-service outages without claiming the
+  service gate passed.
+- Resolve authority ambiguity in an ADR before it becomes an accidental contract.
 
 ## Human escalation
 
-Do not send progress updates or request routine confirmation. Escalate to Beaux
-only when one of these is true:
+Do not send progress updates or request routine confirmation. Escalate only when:
 
-- the full P3 stopping condition is satisfied;
-- an irreversible or destructive action outside disposable test infrastructure is
+- the full P4 stopping condition is satisfied;
+- an irreversible/destructive action outside disposable test infrastructure is
   required;
-- missing credentials, account authority, billing, legal/licensing input, or a
-  security incident has no safe local alternative;
-- a product decision materially changes the checkpoint criterion, data authority,
-  privacy boundary, public distribution model, or Temporal deployment model and
-  cannot be resolved from the architecture or an ADR;
-- the same hard blocker remains after three documented loop strategies and no
-  useful in-scope P3 work remains;
-- acceptance genuinely requires human judgment rather than deterministic proof.
+- credentials, account authority, billing, legal/licensing input, or a security
+  incident has no safe local alternative;
+- a product decision changes checkpoint, authority, privacy, distribution, or
+  deployment boundaries and architecture cannot resolve it;
+- the same hard blocker survives three strategies and no useful work remains; or
+- acceptance genuinely requires human judgment.
 
 Otherwise choose the safest reversible option, document it, and continue.
 
 ## Stopping condition
 
-Stop the autonomous loop only when:
+Stop only when every `P4_PLAN.md` gate and fixture passes; the clean-checkout
+ladder is green; a non-author semantic/adversarial review is resolved and
+re-reviewed; `pnpm verify:p4` is enforced in default-branch CI; the PR is merged;
+post-merge `main` CI is green; the receipt is exact; and the annotated
+`v0.4.0-research-cell-contracts` tag points to the code-bearing merge.
 
-- every entry and delivery gate in `P3_PLAN.md` is true;
-- Temporal adapter descriptors, workflow versions, signal/query surface, Activity
-  retry policy, and `continueAsNew` policy are recorded;
-- `pnpm verify:p3` and the complete verification ladder pass from a clean checkout;
-- deterministic replay, duplicate Activity delivery, crash, restart, cancellation,
-  signal, query, and service-recovery evidence passes against the production-like
-  local profile;
-- the Temporal-linked Observatory projection fixture is deterministic and
-  integrity-bearing;
-- `evals/reports/v0.3.0-temporal-control-plane.md` matches executed evidence;
-- default-branch CI is green at the recorded commit;
-- `v0.3.0-temporal-control-plane` is ready to record.
-
-Then send Beaux one concise report containing:
-
-- achieved checkpoint, default-branch commit, and merged PRs;
-- exact gates and results;
-- Temporal service, worker, and recovery commands;
-- adapter descriptors, workflow versions, Activity/idempotency policy, and receipt
-  location;
-- Temporal-linked Observatory projection fixture and digest;
-- known limitations and deferred research-cell/UI/managed-deployment scope;
-- recommended P4 loop.
-
-Do not describe P3 as research-cell-complete, UI-complete, managed-hosting-complete,
-or architecture-complete.
+Then send Beaux one concise report with the PR, merge SHA, tag, receipt, CI run,
+clean-checkout commands, review findings/fixes, limitations, and P5 deferral.
