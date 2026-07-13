@@ -341,3 +341,19 @@ visibility issues, and receipt truthfulness risks.
 Owned paths: none; read-only review.
 
 Handoff recipient: P5 coordinator in `/private/tmp/mammoth-p5-integration`.
+
+Completion handoff: reviewer returned blocking findings against
+`f4a5520bef976661970f4f0cfb639653b5279637`.
+
+Findings:
+
+1. Blocking: P5 Temporal acceptance is an offline shell, not real Temporal
+   workflow/worker/Activity/service recovery at durable boundaries.
+2. Blocking: production Postgres P5 migration creates tables but lacks database
+   enforcement for key isolation, sanitized-context, budget, cancellation, and
+   lifecycle invariants.
+3. Blocking: `verify:p5` can pass by checking manifest names and broad package
+   tests rather than executable production-boundary fixtures.
+4. Blocking: `evals/reports/v0.5.0-isolated-divergence.md` is absent.
+
+Required response: fix and re-review before any PR merge or release claim.
