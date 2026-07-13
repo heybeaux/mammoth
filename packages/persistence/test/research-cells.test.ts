@@ -140,6 +140,7 @@ describe('research-cell persistence ports', () => {
       programId: 'program-1',
       modelProfiles: [],
       modelProfileVersions: [],
+      modelLineageEdges: [],
       cellPlans: [plan],
       positions: [],
       reviewAssignments: [],

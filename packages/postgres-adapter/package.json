@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@mammoth/adapter-contracts": "workspace:*",
+    "@mammoth/domain": "workspace:*",
     "@mammoth/persistence": "workspace:*",
     "@mammoth/work-queue": "workspace:*"
   },

@@ -497,6 +497,7 @@ export interface ModelProfileWrite {
   readonly contract: z.infer<typeof ModelProfileSchema>;
   readonly active: boolean;
   readonly aliases: readonly string[];
+  /** Omit only when creating a profile; updates require the observed revision. */
   readonly expectedRevision?: number;
 }
 
@@ -512,6 +513,7 @@ export interface ReconstructedResearchCellState {
   readonly programId: string;
   readonly modelProfiles: readonly ModelProfileRecord[];
   readonly modelProfileVersions: readonly ModelProfileVersionRecord[];
+  readonly modelLineageEdges: readonly ModelLineageEdgeRecord[];
   readonly cellPlans: readonly CellPlanRecord[];
   readonly positions: readonly ResearchPositionRecord[];
   readonly reviewAssignments: readonly ReviewAssignmentRecord[];
@@ -603,6 +605,9 @@ export function parseResearchCellState(
     ),
     modelProfileVersions: input.modelProfileVersions.map((row) =>
       ModelProfileVersionRecordSchema.parse(row),
+    ),
+    modelLineageEdges: input.modelLineageEdges.map((row) =>
+      ModelLineageEdgeRecordSchema.parse(row),
     ),
     cellPlans: input.cellPlans.map((row) => CellPlanRecordSchema.parse(row)),
     positions: input.positions.map((row) =>

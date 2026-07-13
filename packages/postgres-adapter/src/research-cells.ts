@@ -1,4 +1,12 @@
 import {
+  admitCorrelationAssessment,
+  admitResearchPosition,
+  admitResearchReview,
+  ReceiptReferenceSchema,
+  type ModelProfileVersion as DomainModelProfileVersion,
+  type ReceiptReference,
+} from '@mammoth/domain';
+import {
   CellPlanRecordSchema as CellPlanSchema,
   CellReceiptRecordSchema as CellReceiptSchema,
   CorrelationAssessmentRecordSchema as CorrelationAssessmentSchema,
@@ -31,6 +39,7 @@ import {
   type ResearchReviewRecord as ResearchReview,
   type ReviewAssignmentRecord as ReviewAssignment,
 } from '@mammoth/persistence';
+import { canonicalDigest } from '@mammoth/work-queue';
 import type { PostgresConnection, TransactionOptions } from './driver.js';
 
 export interface PostgresResearchCellOptions {
@@ -61,10 +70,12 @@ export class PostgresModelLineageRepository implements ModelLineageRepository {
         [input.id],
       );
       if (existing.rows[0]) {
-        if (
-          input.expectedRevision !== undefined &&
-          Number(existing.rows[0].revision) !== input.expectedRevision
-        ) {
+        if (input.expectedRevision === undefined) {
+          throw new PersistenceConflictError(
+            `model profile update ${input.id} requires expected revision`,
+          );
+        }
+        if (Number(existing.rows[0].revision) !== input.expectedRevision) {
           throw new PersistenceConflictError(
             `stale model profile revision for ${input.id}`,
           );
@@ -138,14 +149,23 @@ export class PostgresModelLineageRepository implements ModelLineageRepository {
     input: ModelProfileVersion,
   ): Promise<ModelProfileVersion> {
     const parsed = ModelProfileVersionSchema.parse(input);
+    if (
+      new Set(parsed.contract.lineage.parentVersionIds).size !==
+      parsed.contract.lineage.parentVersionIds.length
+    ) {
+      throw new PersistenceIntegrityError(
+        `duplicate model lineage parent for ${parsed.id}`,
+      );
+    }
     await this.database.transaction(this.options.transaction, async (tx) => {
-      await tx.query(
+      const inserted = await tx.query(
         `insert into mammoth_model_profile_versions
         (id, profile_id, profile_revision, provider, model_name, checkpoint, family_id,
          lineage_status, training_lineage_ids, fine_tune_lineage_ids, shared_derivation_ids,
          locality, modalities, context_window, data_policy_id, cost_profile_id, declared_at,
          metadata, authoritative_contract)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12,$13::jsonb,$14,$15,$16,$17::timestamptz,$18::jsonb,$19::jsonb)`,
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12,$13::jsonb,$14,$15,$16,$17::timestamptz,$18::jsonb,$19::jsonb)
+         on conflict (id) do nothing returning id`,
         [
           parsed.id,
           parsed.profileId,
@@ -168,6 +188,21 @@ export class PostgresModelLineageRepository implements ModelLineageRepository {
           JSON.stringify(parsed.contract),
         ],
       );
+      if (inserted.rowCount === 0) {
+        const existing = await tx.query<ModelProfileVersionRow>(
+          'select * from mammoth_model_profile_versions where id = $1',
+          [parsed.id],
+        );
+        const stored = existing.rows[0]
+          ? toModelProfileVersion(existing.rows[0])
+          : undefined;
+        if (!stored || canonicalDigest(stored) !== canonicalDigest(parsed)) {
+          throw new PersistenceConflictError(
+            `immutable model profile version ${parsed.id} conflicts with existing content`,
+          );
+        }
+        return;
+      }
       const referencedVersionIds = [
         ...parsed.contract.lineage.parentVersionIds,
         ...(parsed.contract.lineage.aliasOfVersionId
@@ -300,12 +335,13 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
 
   async createCellPlan(input: CellPlan): Promise<CellPlan> {
     const parsed = CellPlanSchema.parse(input);
-    await this.database.query(
+    const inserted = await this.database.query(
       `insert into mammoth_cell_plans
         (id, program_id, work_item_id, criterion_id, criterion_digest, plan_version,
          template_version, branch_id, role, input_digest, output_contract_version,
          status, revision, fencing_token, created_at, updated_at, authoritative_contract)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::timestamptz,$16::timestamptz,$17::jsonb)`,
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::timestamptz,$16::timestamptz,$17::jsonb)
+       on conflict (id) do nothing returning id`,
       [
         parsed.id,
         parsed.programId,
@@ -326,7 +362,21 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         JSON.stringify(parsed.contract),
       ],
     );
-    return parsed;
+    if (inserted.rowCount === 1) return parsed;
+    const existing = await this.database.query<CellPlanRow>(
+      'select * from mammoth_cell_plans where id = $1',
+      [parsed.id],
+    );
+    const stored = existing.rows[0] ? toCellPlan(existing.rows[0]) : undefined;
+    if (
+      !stored ||
+      canonicalDigest(stored.contract) !== canonicalDigest(parsed.contract)
+    ) {
+      throw new PersistenceConflictError(
+        `cell plan ${parsed.id} conflicts with existing content`,
+      );
+    }
+    return stored;
   }
 
   async updateCellPlanStatus(input: CellPlanStatusUpdate): Promise<CellPlan> {
@@ -356,8 +406,60 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
 
   async recordPosition(input: ResearchPosition): Promise<ResearchPosition> {
     const parsed = ResearchPositionSchema.parse(input);
-    await this.database.query(
-      `insert into mammoth_research_positions
+    return this.database.transaction(this.options.transaction, async (tx) => {
+      const planRow = (
+        await tx.query<CellPlanRow>(
+          'select * from mammoth_cell_plans where id = $1 for share',
+          [parsed.cellPlanId],
+        )
+      ).rows[0];
+      if (!planRow) {
+        throw new PersistenceIntegrityError(
+          `position ${parsed.id} references missing cell plan`,
+        );
+      }
+      const plan = toCellPlan(planRow);
+      const versions = await loadModelVersionClosure(tx, [
+        parsed.modelProfileVersionId,
+      ]);
+      const modelVersions = new Map<string, DomainModelProfileVersion>(
+        versions.map((version) => [version.id, version.contract]),
+      );
+      const receiptRefs = await loadReceiptReferenceUniverse(
+        tx,
+        parsed.contract.receiptRefs,
+      );
+      const admission = admitResearchPosition(parsed.contract, {
+        programId: plan.programId,
+        cellPlanId: plan.id,
+        workItemId: plan.workItemId,
+        inputDigest: plan.inputDigest,
+        outputSchemaVersion: plan.outputContractVersion,
+        criterionRef: plan.contract.criterionRef,
+        claimIds: new Set(parsed.contract.claimIds),
+        evidenceIds: new Set(parsed.contract.evidenceIds),
+        hypothesisIds: new Set(parsed.contract.hypothesisIds),
+        artifactIds: new Set(parsed.contract.artifactIds),
+        receiptRefs,
+        modelVersions,
+      });
+      if (!admission.ok) {
+        throw new PersistenceIntegrityError(
+          `position ${parsed.id} rejected by frozen policy: ${admission.reasonCodes.join(', ')}`,
+        );
+      }
+      if (
+        !sameStringValues(parsed.admission.reasonCodes, admission.reasonCodes)
+      ) {
+        throw new PersistenceIntegrityError(
+          `position ${parsed.id} admission provenance drifts from frozen policy`,
+        );
+      }
+      return insertImmutable(
+        tx,
+        'mammoth_research_positions',
+        parsed.id,
+        `insert into mammoth_research_positions
         (id, cell_plan_id, program_id, work_item_id, criterion_id, criterion_digest,
          model_profile_id, model_profile_version_id, input_digest, output_schema_version,
          position_digest, claim_ids, evidence_ids, hypothesis_ids, proposal_refs,
@@ -365,16 +467,21 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
          admission_policy_version, admission_policy_digest, admission_subject_digest,
          admission_reason_codes, admission_decided_at, recorded_at, authoritative_contract)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17::jsonb,$18::jsonb,$19::jsonb,$20,$21,$22,$23,$24::jsonb,$25::timestamptz,$26::timestamptz,$27::jsonb)`,
-      positionParameters(parsed),
-    );
-    return parsed;
+        positionParameters(parsed),
+        parsed,
+        toPosition,
+      );
+    });
   }
 
   async recordReviewAssignment(
     input: ReviewAssignment,
   ): Promise<ReviewAssignment> {
     const parsed = ReviewAssignmentSchema.parse(input);
-    await this.database.query(
+    return insertImmutable(
+      this.database,
+      'mammoth_review_assignments',
+      parsed.id,
       `insert into mammoth_review_assignments
         (id, program_id, work_item_id, target_position_id, reviewer_agent_id,
          reviewer_model_profile_version_id, reviewer_role, target_author_agent_id,
@@ -399,14 +506,91 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         JSON.stringify(parsed.contract),
         parsed.recordedAt,
       ],
+      parsed,
+      toReviewAssignment,
     );
-    return parsed;
   }
 
   async recordReview(input: ResearchReview): Promise<ResearchReview> {
     const parsed = ResearchReviewSchema.parse(input);
-    await this.database.query(
-      `insert into mammoth_research_reviews
+    await this.database.transaction(this.options.transaction, async (tx) => {
+      const assignmentRow = (
+        await tx.query<ReviewAssignmentRow>(
+          'select * from mammoth_review_assignments where id = $1 for share',
+          [parsed.assignmentId],
+        )
+      ).rows[0];
+      const positionRow = (
+        await tx.query<PositionRow>(
+          'select * from mammoth_research_positions where id = $1 for share',
+          [parsed.positionId],
+        )
+      ).rows[0];
+      if (!assignmentRow || !positionRow) {
+        throw new PersistenceIntegrityError(
+          `review ${parsed.id} references missing assignment or position`,
+        );
+      }
+      const assignment = toReviewAssignment(assignmentRow);
+      const targetPosition = toPosition(positionRow);
+      const planRow = (
+        await tx.query<CellPlanRow>(
+          'select * from mammoth_cell_plans where id = $1 for share',
+          [targetPosition.cellPlanId],
+        )
+      ).rows[0];
+      if (!planRow) {
+        throw new PersistenceIntegrityError(
+          `review ${parsed.id} references missing cell plan`,
+        );
+      }
+      const plan = toCellPlan(planRow);
+      const versions = await loadModelVersionClosure(tx, [
+        assignment.reviewerModelProfileVersionId,
+        assignment.targetModelProfileVersionId,
+      ]);
+      const modelVersions = new Map<string, DomainModelProfileVersion>(
+        versions.map((version) => [version.id, version.contract]),
+      );
+      const receiptRefs = await loadReceiptReferenceUniverse(
+        tx,
+        targetPosition.contract.receiptRefs,
+      );
+      const admission = admitResearchReview({
+        raw: parsed.contract,
+        assignment: assignment.contract,
+        universe: {
+          programId: plan.programId,
+          cellPlanId: plan.id,
+          workItemId: assignment.workItemId,
+          inputDigest: plan.inputDigest,
+          outputSchemaVersion: plan.outputContractVersion,
+          criterionRef: plan.contract.criterionRef,
+          claimIds: new Set(targetPosition.contract.claimIds),
+          evidenceIds: new Set(targetPosition.contract.evidenceIds),
+          hypothesisIds: new Set(targetPosition.contract.hypothesisIds),
+          artifactIds: new Set(targetPosition.contract.artifactIds),
+          receiptRefs,
+          modelVersions,
+        },
+      });
+      if (!admission.ok) {
+        throw new PersistenceIntegrityError(
+          `review ${parsed.id} rejected by frozen policy: ${admission.reasonCodes.join(', ')}`,
+        );
+      }
+      if (
+        !sameStringValues(parsed.admission.reasonCodes, admission.reasonCodes)
+      ) {
+        throw new PersistenceIntegrityError(
+          `review ${parsed.id} admission provenance drifts from frozen policy`,
+        );
+      }
+      await insertImmutable(
+        tx,
+        'mammoth_research_reviews',
+        parsed.id,
+        `insert into mammoth_research_reviews
         (id, assignment_id, position_id, cell_plan_id, program_id, work_item_id, criterion_id, criterion_digest,
          model_profile_id, model_profile_version_id, reviewer_role, input_digest,
          output_schema_version, review_digest, verdict, claim_ids, evidence_ids,
@@ -415,46 +599,52 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
          admission_subject_digest, admission_reason_codes, admission_decided_at,
          recorded_at, authoritative_contract)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17::jsonb,$18::jsonb,$19::jsonb,$20::jsonb,$21::jsonb,$22::jsonb,$23::jsonb,$24,$25,$26,$27,$28::jsonb,$29::timestamptz,$30::timestamptz,$31::jsonb)`,
-      [
-        parsed.id,
-        parsed.assignmentId,
-        parsed.positionId,
-        parsed.cellPlanId,
-        parsed.programId,
-        parsed.workItemId,
-        parsed.criterionId,
-        parsed.criterionDigest,
-        parsed.modelProfileId,
-        parsed.modelProfileVersionId,
-        parsed.reviewerRole,
-        parsed.inputDigest,
-        parsed.outputSchemaVersion,
-        parsed.reviewDigest,
-        parsed.verdict,
-        JSON.stringify(parsed.claimIds),
-        JSON.stringify(parsed.evidenceIds),
-        JSON.stringify(parsed.hypothesisIds),
-        JSON.stringify(parsed.usage),
-        JSON.stringify(parsed.uncertaintyCodes),
-        JSON.stringify(parsed.failureCodes),
-        JSON.stringify(parsed.reasons),
-        JSON.stringify(parsed.body),
-        parsed.admission.decision,
-        parsed.admission.policyVersion,
-        parsed.admission.policyDigest,
-        parsed.admission.subjectDigest,
-        JSON.stringify(parsed.admission.reasonCodes),
-        parsed.admission.decidedAt,
-        parsed.recordedAt,
-        JSON.stringify(parsed.contract),
-      ],
-    );
+        [
+          parsed.id,
+          parsed.assignmentId,
+          parsed.positionId,
+          parsed.cellPlanId,
+          parsed.programId,
+          parsed.workItemId,
+          parsed.criterionId,
+          parsed.criterionDigest,
+          parsed.modelProfileId,
+          parsed.modelProfileVersionId,
+          parsed.reviewerRole,
+          parsed.inputDigest,
+          parsed.outputSchemaVersion,
+          parsed.reviewDigest,
+          parsed.verdict,
+          JSON.stringify(parsed.claimIds),
+          JSON.stringify(parsed.evidenceIds),
+          JSON.stringify(parsed.hypothesisIds),
+          JSON.stringify(parsed.usage),
+          JSON.stringify(parsed.uncertaintyCodes),
+          JSON.stringify(parsed.failureCodes),
+          JSON.stringify(parsed.reasons),
+          JSON.stringify(parsed.body),
+          parsed.admission.decision,
+          parsed.admission.policyVersion,
+          parsed.admission.policyDigest,
+          parsed.admission.subjectDigest,
+          JSON.stringify(parsed.admission.reasonCodes),
+          parsed.admission.decidedAt,
+          parsed.recordedAt,
+          JSON.stringify(parsed.contract),
+        ],
+        parsed,
+        toReview,
+      );
+    });
     return parsed;
   }
 
   async recordDissent(input: DissentReport): Promise<DissentReport> {
     const parsed = DissentReportSchema.parse(input);
-    await this.database.query(
+    return insertImmutable(
+      this.database,
+      'mammoth_dissent_reports',
+      parsed.id,
       `insert into mammoth_dissent_reports
         (id, cell_plan_id, program_id, criterion_id, criterion_digest,
          author_model_profile_version_id, report_digest, claim_ids, evidence_ids,
@@ -475,33 +665,57 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         parsed.recordedAt,
         JSON.stringify(parsed.contract),
       ],
+      parsed,
+      toDissent,
     );
-    return parsed;
   }
 
   async recordCorrelation(
     input: CorrelationAssessment,
   ): Promise<CorrelationAssessment> {
     const parsed = CorrelationAssessmentSchema.parse(input);
-    await this.database.query(
-      `insert into mammoth_correlation_assessments
+    await this.database.transaction(this.options.transaction, async (tx) => {
+      const versions = await loadModelVersionClosure(tx, [
+        parsed.leftModelProfileVersionId,
+        parsed.rightModelProfileVersionId,
+      ]);
+      const modelVersions = new Map<string, DomainModelProfileVersion>(
+        versions.map((version) => [version.id, version.contract]),
+      );
+      const admission = admitCorrelationAssessment({
+        raw: parsed.contract,
+        modelVersions,
+      });
+      if (!admission.ok) {
+        throw new PersistenceIntegrityError(
+          `correlation ${parsed.id} rejected by frozen policy: ${admission.reasonCodes.join(', ')}`,
+        );
+      }
+      await insertImmutable(
+        tx,
+        'mammoth_correlation_assessments',
+        parsed.id,
+        `insert into mammoth_correlation_assessments
         (id, left_model_profile_version_id, right_model_profile_version_id,
          policy_version, correlation_score, independence_verdict, reasons,
          assessment_digest, assessed_at, authoritative_contract)
        values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9::timestamptz,$10::jsonb)`,
-      [
-        parsed.id,
-        parsed.leftModelProfileVersionId,
-        parsed.rightModelProfileVersionId,
-        parsed.policyVersion,
-        parsed.correlationScore,
-        parsed.independenceVerdict,
-        JSON.stringify(parsed.reasons),
-        parsed.assessmentDigest,
-        parsed.assessedAt,
-        JSON.stringify(parsed.contract),
-      ],
-    );
+        [
+          parsed.id,
+          parsed.leftModelProfileVersionId,
+          parsed.rightModelProfileVersionId,
+          parsed.policyVersion,
+          parsed.correlationScore,
+          parsed.independenceVerdict,
+          JSON.stringify(parsed.reasons),
+          parsed.assessmentDigest,
+          parsed.assessedAt,
+          JSON.stringify(parsed.contract),
+        ],
+        parsed,
+        toCorrelation,
+      );
+    });
     return parsed;
   }
 
@@ -514,7 +728,10 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
       parsed.payloadDigest,
       'rejected residue',
     );
-    await this.database.query(
+    return insertImmutable(
+      this.database,
+      'mammoth_rejected_audit_residue',
+      parsed.id,
       `insert into mammoth_rejected_audit_residue
         (id, program_id, subject_type, subject_id, reason_code, policy_version,
          policy_digest, reason_codes, decision, payload_digest, payload, recorded_at)
@@ -533,14 +750,18 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         JSON.stringify(parsed.payload),
         parsed.recordedAt,
       ],
+      parsed,
+      toRejected,
     );
-    return parsed;
   }
 
   async recordReceipt(input: CellReceipt): Promise<CellReceipt> {
     const parsed = CellReceiptSchema.parse(input);
     assertPayloadDigest(parsed.payload, parsed.receiptDigest, 'cell receipt');
-    await this.database.query(
+    return insertImmutable(
+      this.database,
+      'mammoth_cell_receipts',
+      parsed.id,
       `insert into mammoth_cell_receipts
         (id, program_id, subject_type, subject_id, work_item_id, receipt_kind,
          receipt_digest, payload, created_at)
@@ -556,120 +777,144 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         JSON.stringify(parsed.payload),
         parsed.createdAt,
       ],
+      parsed,
+      toReceipt,
     );
-    return parsed;
   }
 
   async reconstructProgram(
     programId: string,
   ): Promise<ReconstructedResearchCellState> {
-    const [
-      profiles,
-      versions,
-      plans,
-      positions,
-      reviewAssignments,
-      reviews,
-      dissentReports,
-      correlations,
-      rejected,
-      receipts,
-    ] = await Promise.all([
-      this.database.query<ModelProfileRow>(
-        `select profile.*,
+    return this.database.transaction(this.options.transaction, async (tx) => {
+      await tx.query(
+        'set transaction isolation level repeatable read read only',
+      );
+      const [
+        profiles,
+        versions,
+        plans,
+        positions,
+        reviewAssignments,
+        reviews,
+        dissentReports,
+        correlations,
+        rejected,
+        receipts,
+      ] = await Promise.all([
+        tx.query<ModelProfileRow>(
+          `with recursive used_versions(id) as (
+           select model_profile_version_id from mammoth_research_positions where program_id = $1
+           union select model_profile_version_id from mammoth_research_reviews where program_id = $1
+           union select author_model_profile_version_id from mammoth_dissent_reports where program_id = $1
+           union select reviewer_model_profile_version_id from mammoth_review_assignments where program_id = $1
+           union select target_model_profile_version_id from mammoth_review_assignments where program_id = $1
+         ), lineage_closure(id) as (
+           select id from used_versions
+           union
+           select edge.parent_version_id from lineage_closure closure
+             join mammoth_model_lineage_edges edge on edge.child_version_id = closure.id
+         )
+         select profile.*,
                 coalesce(jsonb_agg(alias.alias order by alias.first_seen_at, alias.alias)
                   filter (where alias.alias is not null), '[]'::jsonb) as aliases
            from mammoth_model_profiles profile
            join mammoth_model_profile_versions version on version.profile_id = profile.id
            left join mammoth_model_profile_aliases alias on alias.profile_id = profile.id
-          where version.id in (
-            select model_profile_version_id from mammoth_research_positions where program_id = $1
-            union
-            select model_profile_version_id from mammoth_research_reviews where program_id = $1
-            union
-            select author_model_profile_version_id from mammoth_dissent_reports where program_id = $1
-            union
-            select reviewer_model_profile_version_id from mammoth_review_assignments where program_id = $1
-            union
-            select target_model_profile_version_id from mammoth_review_assignments where program_id = $1
-          )
+          where version.id in (select id from lineage_closure)
           group by profile.id
           order by profile.id`,
-        [programId],
-      ),
-      this.database.query<ModelProfileVersionRow>(
-        `select version.* from mammoth_model_profile_versions version
-          where version.id in (
-            select model_profile_version_id from mammoth_research_positions where program_id = $1
-            union
-            select model_profile_version_id from mammoth_research_reviews where program_id = $1
-            union
-            select author_model_profile_version_id from mammoth_dissent_reports where program_id = $1
-            union
-            select reviewer_model_profile_version_id from mammoth_review_assignments where program_id = $1
-            union
-            select target_model_profile_version_id from mammoth_review_assignments where program_id = $1
-          )
+          [programId],
+        ),
+        tx.query<ModelProfileVersionRow>(
+          `with recursive used_versions(id) as (
+           select model_profile_version_id from mammoth_research_positions where program_id = $1
+           union select model_profile_version_id from mammoth_research_reviews where program_id = $1
+           union select author_model_profile_version_id from mammoth_dissent_reports where program_id = $1
+           union select reviewer_model_profile_version_id from mammoth_review_assignments where program_id = $1
+           union select target_model_profile_version_id from mammoth_review_assignments where program_id = $1
+         ), lineage_closure(id) as (
+           select id from used_versions
+           union
+           select edge.parent_version_id
+             from lineage_closure closure
+             join mammoth_model_lineage_edges edge on edge.child_version_id = closure.id
+         )
+         select version.* from mammoth_model_profile_versions version
+          where version.id in (select id from lineage_closure)
           order by version.profile_id, version.profile_revision`,
-        [programId],
-      ),
-      this.database.query<CellPlanRow>(
-        'select * from mammoth_cell_plans where program_id = $1 order by created_at, id',
-        [programId],
-      ),
-      this.database.query<PositionRow>(
-        'select * from mammoth_research_positions where program_id = $1 order by recorded_at, id',
-        [programId],
-      ),
-      this.database.query<ReviewAssignmentRow>(
-        'select * from mammoth_review_assignments where program_id = $1 order by recorded_at, id',
-        [programId],
-      ),
-      this.database.query<ReviewRow>(
-        'select * from mammoth_research_reviews where program_id = $1 order by recorded_at, id',
-        [programId],
-      ),
-      this.database.query<DissentRow>(
-        'select * from mammoth_dissent_reports where program_id = $1 order by recorded_at, id',
-        [programId],
-      ),
-      this.database.query<CorrelationRow>(
-        `select distinct corr.* from mammoth_correlation_assessments corr
+          [programId],
+        ),
+        tx.query<CellPlanRow>(
+          'select * from mammoth_cell_plans where program_id = $1 order by created_at, id',
+          [programId],
+        ),
+        tx.query<PositionRow>(
+          'select * from mammoth_research_positions where program_id = $1 order by recorded_at, id',
+          [programId],
+        ),
+        tx.query<ReviewAssignmentRow>(
+          'select * from mammoth_review_assignments where program_id = $1 order by recorded_at, id',
+          [programId],
+        ),
+        tx.query<ReviewRow>(
+          'select * from mammoth_research_reviews where program_id = $1 order by recorded_at, id',
+          [programId],
+        ),
+        tx.query<DissentRow>(
+          'select * from mammoth_dissent_reports where program_id = $1 order by recorded_at, id',
+          [programId],
+        ),
+        tx.query<CorrelationRow>(
+          `select distinct corr.* from mammoth_correlation_assessments corr
           join mammoth_model_profile_versions left_version on left_version.id = corr.left_model_profile_version_id
           join mammoth_model_profile_versions right_version on right_version.id = corr.right_model_profile_version_id
          where corr.left_model_profile_version_id in (
-           select model_profile_version_id from mammoth_research_positions where program_id = $1
-           union select model_profile_version_id from mammoth_research_reviews where program_id = $1
+            select model_profile_version_id from mammoth_research_positions where program_id = $1
+            union
+            select model_profile_version_id from mammoth_research_reviews where program_id = $1
          )
             or corr.right_model_profile_version_id in (
            select model_profile_version_id from mammoth_research_positions where program_id = $1
            union select model_profile_version_id from mammoth_research_reviews where program_id = $1
          )
          order by corr.assessed_at, corr.id`,
-        [programId],
-      ),
-      this.database.query<RejectedRow>(
-        'select * from mammoth_rejected_audit_residue where program_id = $1 order by recorded_at, id',
-        [programId],
-      ),
-      this.database.query<ReceiptRow>(
-        'select * from mammoth_cell_receipts where program_id = $1 order by created_at, id',
-        [programId],
-      ),
-    ]);
+          [programId],
+        ),
+        tx.query<RejectedRow>(
+          'select * from mammoth_rejected_audit_residue where program_id = $1 order by recorded_at, id',
+          [programId],
+        ),
+        tx.query<ReceiptRow>(
+          'select * from mammoth_cell_receipts where program_id = $1 order by created_at, id',
+          [programId],
+        ),
+      ]);
 
-    return parseResearchCellState({
-      programId,
-      modelProfiles: profiles.rows.map(toModelProfile),
-      modelProfileVersions: versions.rows.map(toModelProfileVersion),
-      cellPlans: plans.rows.map(toCellPlan),
-      positions: positions.rows.map(toPosition),
-      reviewAssignments: reviewAssignments.rows.map(toReviewAssignment),
-      reviews: reviews.rows.map(toReview),
-      dissentReports: dissentReports.rows.map(toDissent),
-      correlationAssessments: correlations.rows.map(toCorrelation),
-      rejectedResidue: rejected.rows.map(toRejected),
-      receipts: receipts.rows.map(toReceipt),
+      const versionIds = versions.rows.map(({ id }) => id);
+      const lineageEdges =
+        versionIds.length === 0
+          ? { rows: [] as readonly ModelLineageEdgeRow[], rowCount: 0 }
+          : await tx.query<ModelLineageEdgeRow>(
+              `select child_version_id, parent_version_id, edge_kind, created_at
+               from mammoth_model_lineage_edges
+              where child_version_id = any($1::text[])
+              order by child_version_id, edge_kind, parent_version_id`,
+              [versionIds],
+            );
+      return parseResearchCellState({
+        programId,
+        modelProfiles: profiles.rows.map(toModelProfile),
+        modelProfileVersions: versions.rows.map(toModelProfileVersion),
+        modelLineageEdges: lineageEdges.rows.map(toModelLineageEdge),
+        cellPlans: plans.rows.map(toCellPlan),
+        positions: positions.rows.map(toPosition),
+        reviewAssignments: reviewAssignments.rows.map(toReviewAssignment),
+        reviews: reviews.rows.map(toReview),
+        dissentReports: dissentReports.rows.map(toDissent),
+        correlationAssessments: correlations.rows.map(toCorrelation),
+        rejectedResidue: rejected.rows.map(toRejected),
+        receipts: receipts.rows.map(toReceipt),
+      });
     });
   }
 }
@@ -1097,4 +1342,103 @@ function asArray(value: unknown): readonly string[] {
 
 function asJsonArray(value: unknown): readonly unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+async function loadModelVersionClosure(
+  database: PostgresConnection,
+  seedVersionIds: readonly string[],
+): Promise<readonly ModelProfileVersion[]> {
+  const result = await database.query<ModelProfileVersionRow>(
+    `with recursive lineage_closure(id) as (
+       select unnest($1::text[])
+       union
+       select edge.parent_version_id
+         from lineage_closure closure
+         join mammoth_model_lineage_edges edge on edge.child_version_id = closure.id
+     )
+     select version.* from mammoth_model_profile_versions version
+      where version.id in (select id from lineage_closure)
+      order by version.profile_id, version.profile_revision`,
+    [seedVersionIds],
+  );
+  return result.rows.map(toModelProfileVersion);
+}
+
+async function loadReceiptReferenceUniverse(
+  database: PostgresConnection,
+  references: readonly ReceiptReference[],
+): Promise<ReadonlyMap<string, ReceiptReference>> {
+  if (references.length === 0) return new Map();
+  const ids = references.map(({ receiptId }) => receiptId);
+  const result = await database.query<ReceiptRow>(
+    'select * from mammoth_cell_receipts where id = any($1::text[])',
+    [ids],
+  );
+  const byId = new Map(result.rows.map((row) => [row.id, row]));
+  const authoritative = new Map<string, ReceiptReference>();
+  for (const reference of references) {
+    const row = byId.get(reference.receiptId);
+    if (!row) continue;
+    const payloadReference = ReceiptReferenceSchema.safeParse(row.payload);
+    if (payloadReference.success) {
+      authoritative.set(payloadReference.data.receiptId, payloadReference.data);
+      continue;
+    }
+    const reconstructed = ReceiptReferenceSchema.safeParse({
+      receiptId: row.id,
+      kind: row.receipt_kind,
+      artifactDigest: row.receipt_digest,
+      receivedAt: row.created_at,
+    });
+    if (reconstructed.success) {
+      authoritative.set(reconstructed.data.receiptId, reconstructed.data);
+    }
+  }
+  return authoritative;
+}
+
+function sameStringValues(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    [...left].sort().every((value, index) => value === [...right].sort()[index])
+  );
+}
+
+async function insertImmutable<
+  Row extends Record<string, unknown>,
+  RecordValue,
+>(
+  database: PostgresConnection,
+  table: string,
+  id: string,
+  insertSql: string,
+  parameters: readonly unknown[],
+  expected: RecordValue,
+  fromRow: (row: Row) => RecordValue,
+): Promise<RecordValue> {
+  const inserted = await database.query(
+    `${insertSql} on conflict (id) do nothing returning id`,
+    parameters,
+  );
+  if (inserted.rowCount === 1) return expected;
+  const existing = await database.query<Row>(
+    `select * from ${table} where id = $1`,
+    [id],
+  );
+  const row = existing.rows[0];
+  if (!row) {
+    throw new PersistenceConflictError(
+      `immutable ${table} ${id} conflicted but could not be read`,
+    );
+  }
+  const stored = fromRow(row);
+  if (canonicalDigest(stored) !== canonicalDigest(expected)) {
+    throw new PersistenceConflictError(
+      `immutable ${table} ${id} conflicts with existing content`,
+    );
+  }
+  return stored;
 }

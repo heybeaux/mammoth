@@ -3,16 +3,19 @@ import { canonicalDigest } from '@mammoth/work-queue';
 import {
   RESEARCH_CELL_CONTRACT_VERSION,
   cellInputDigest,
+  correlationAssessmentDigest,
   modelProfileVersionDigest,
   researchPositionDigest,
   researchReviewDigest,
   type CellInput,
+  type CorrelationAssessment as DomainCorrelationAssessment,
   type ModelProfileVersion as DomainModelProfileVersion,
   type ResearchPosition as DomainResearchPosition,
   type ResearchReview as DomainResearchReview,
 } from '@mammoth/domain';
 import type {
   CellPlanRecord,
+  CorrelationAssessmentRecord,
   ModelProfileVersionRecord,
   ResearchPositionRecord,
   ResearchReviewRecord,
@@ -170,6 +173,10 @@ describe('research-cell migration', () => {
     );
     expect(migration?.sql).toContain(
       'parent_version_id text not null references mammoth_model_profile_versions(id)',
+    );
+    expect(migration?.sql).toContain('position cell-plan metadata mismatch');
+    expect(migration?.sql).toContain(
+      "assignment_reviewer_agent <> new.authoritative_contract->>'reviewerAgentId'",
     );
     expect(foundationMigrations.map(({ version }) => version)).toEqual([
       1, 2, 3, 4, 5,
@@ -353,7 +360,9 @@ describe('Postgres research-cell repositories', () => {
     expect(database.calls[0]?.sql).toContain(
       'insert into mammoth_model_profile_versions',
     );
-    expect(database.calls[0]?.sql).not.toContain('on conflict');
+    expect(database.calls[0]?.sql).toContain(
+      'on conflict (id) do nothing returning id',
+    );
     expect(database.calls[0]?.parameters).toEqual(
       expect.arrayContaining([
         'version-1',
@@ -504,6 +513,13 @@ describe('Postgres research-cell repositories', () => {
 
   it('records immutable positions with claim and evidence IDs as typed references', async () => {
     const database = new RecordingDatabase();
+    database.handler = (sql) => {
+      if (sql.includes('from mammoth_cell_plans where id'))
+        return result(cellPlanRow());
+      if (sql.includes('with recursive lineage_closure'))
+        return result(modelVersionRow());
+      return empty(1);
+    };
     const pos = position();
 
     await new PostgresResearchCellRepository(database, {
@@ -511,10 +527,11 @@ describe('Postgres research-cell repositories', () => {
       now: () => now,
     }).recordPosition(pos);
 
-    expect(database.calls[0]?.sql).toContain(
-      'insert into mammoth_research_positions',
+    const insert = database.calls.find((call) =>
+      call.sql.includes('insert into mammoth_research_positions'),
     );
-    expect(database.calls[0]?.parameters).toEqual(
+    expect(insert?.sql).toContain('insert into mammoth_research_positions');
+    expect(insert?.parameters).toEqual(
       expect.arrayContaining([
         'position-1',
         'cell-plan-1',
@@ -523,6 +540,37 @@ describe('Postgres research-cell repositories', () => {
         JSON.stringify(['evidence-1']),
       ]),
     );
+  });
+
+  it('replays identical immutable writes and rejects conflicting reuse of an ID', async () => {
+    const database = new RecordingDatabase();
+    database.handler = (sql) => {
+      if (sql.includes('from mammoth_cell_plans where id'))
+        return result(cellPlanRow());
+      if (sql.includes('with recursive lineage_closure'))
+        return result(modelVersionRow());
+      if (sql.includes('insert into mammoth_research_positions'))
+        return empty(0);
+      if (sql.includes('select * from mammoth_research_positions where id'))
+        return result(positionRow());
+      return empty(1);
+    };
+    const repository = new PostgresResearchCellRepository(database, {
+      transaction,
+      now: () => now,
+    });
+    await expect(repository.recordPosition(position())).resolves.toEqual(
+      position(),
+    );
+    await expect(
+      repository.recordPosition({
+        ...position(),
+        admission: {
+          ...position().admission,
+          policyVersion: 'different-policy',
+        },
+      }),
+    ).rejects.toThrow(/conflicts with existing content/);
   });
 
   it('persists immutable blind-review assignments before reviews', async () => {
@@ -549,6 +597,20 @@ describe('Postgres research-cell repositories', () => {
 
   it('writes every admitted review envelope field with stable SQL parameters', async () => {
     const database = new RecordingDatabase();
+    database.handler = (sql) => {
+      if (sql.includes('from mammoth_review_assignments where id'))
+        return result(reviewAssignmentRow());
+      if (sql.includes('from mammoth_research_positions where id'))
+        return result(positionRow());
+      if (sql.includes('from mammoth_cell_plans where id'))
+        return result(cellPlanRow());
+      if (sql.includes('with recursive lineage_closure'))
+        return {
+          rows: [modelVersionRow(), reviewerModelVersionRow()],
+          rowCount: 2,
+        };
+      return empty(1);
+    };
     const review = researchReview();
 
     await new PostgresResearchCellRepository(database, {
@@ -556,18 +618,91 @@ describe('Postgres research-cell repositories', () => {
       now: () => now,
     }).recordReview(review);
 
-    expect(database.calls[0]?.sql).toContain(
-      'insert into mammoth_research_reviews',
+    const insert = database.calls.find((call) =>
+      call.sql.includes('insert into mammoth_research_reviews'),
     );
-    expect(database.calls[0]?.sql).toContain('$31::jsonb');
-    expect(database.calls[0]?.parameters).toHaveLength(31);
-    expect(database.calls[0]?.parameters).toEqual(
+    expect(insert?.sql).toContain('insert into mammoth_research_reviews');
+    expect(insert?.sql).toContain('$31::jsonb');
+    expect(insert?.parameters).toHaveLength(31);
+    expect(insert?.parameters).toEqual(
       expect.arrayContaining([
         review.assignmentId,
         review.admission.policyDigest,
         JSON.stringify(review.admission.reasonCodes),
       ]),
     );
+  });
+
+  it('rejects correlated reviews and caller-authored independent correlation claims', async () => {
+    const reviewDatabase = new RecordingDatabase();
+    reviewDatabase.handler = (sql) => {
+      if (sql.includes('from mammoth_review_assignments where id'))
+        return result(reviewAssignmentRow());
+      if (sql.includes('from mammoth_research_positions where id'))
+        return result(positionRow());
+      if (sql.includes('from mammoth_cell_plans where id'))
+        return result(cellPlanRow());
+      if (sql.includes('with recursive lineage_closure'))
+        return {
+          rows: [modelVersionRow(), correlatedReviewerModelVersionRow()],
+          rowCount: 2,
+        };
+      return empty(1);
+    };
+    await expect(
+      new PostgresResearchCellRepository(reviewDatabase, {
+        transaction,
+        now: () => now,
+      }).recordReview(researchReview()),
+    ).rejects.toThrow(/correlated_review/);
+    expect(
+      reviewDatabase.calls.some((call) =>
+        call.sql.includes('insert into mammoth_research_reviews'),
+      ),
+    ).toBe(false);
+
+    const correlationDatabase = new RecordingDatabase();
+    correlationDatabase.handler = (sql) =>
+      sql.includes('with recursive lineage_closure')
+        ? {
+            rows: [modelVersionRow(), correlatedReviewerModelVersionRow()],
+            rowCount: 2,
+          }
+        : empty(1);
+    await expect(
+      new PostgresResearchCellRepository(correlationDatabase, {
+        transaction,
+        now: () => now,
+      }).recordCorrelation(fakeIndependentCorrelation()),
+    ).rejects.toThrow(/correlation_policy_drift/);
+  });
+
+  it('requires an expected revision for model-profile updates and rejects duplicate lineage parents', async () => {
+    const database = new RecordingDatabase();
+    database.handler = (sql) =>
+      sql.includes('select * from mammoth_model_profiles')
+        ? result(modelProfileRow())
+        : empty(1);
+    const lineage = new PostgresModelLineageRepository(database, {
+      transaction,
+      now: () => now,
+    });
+    await expect(
+      lineage.upsertModelProfile({
+        id: 'profile-1',
+        provider: 'provider-a',
+        canonicalName: 'model-a',
+        familyId: 'family-a',
+        active: true,
+        aliases: [],
+        contract: modelProfileRow().authoritative_contract as never,
+      }),
+    ).rejects.toThrow(/requires expected revision/);
+    await expect(
+      lineage.appendModelProfileVersion(
+        childModelVersion(['version-1', 'version-1']),
+      ),
+    ).rejects.toThrow(/duplicate model lineage parent/);
   });
 
   it('records rejected audit residue and receipts only after digest verification', async () => {
@@ -653,8 +788,11 @@ describe('Postgres research-cell repositories', () => {
       cellPlans: [{ id: 'cell-plan-1' }],
       positions: [{ id: 'position-1' }],
     });
+    expect(database.calls[0]?.sql).toContain('repeatable read read only');
     expect(
-      database.calls.every((call) => call.parameters[0] === 'program-1'),
+      database.calls
+        .slice(1, 11)
+        .every((call) => call.parameters[0] === 'program-1'),
     ).toBe(true);
   });
 });
@@ -1006,6 +1144,104 @@ function modelVersionRow(): Row {
     declared_at: now,
     metadata: {},
     authoritative_contract: modelVersionContract(),
+  };
+}
+function reviewerModelVersionRow(): Row {
+  const parent = modelVersionContract();
+  const base: DomainModelProfileVersion = {
+    ...parent,
+    id: 'version-reviewer',
+    profileId: 'profile-reviewer',
+    provider: 'provider-reviewer',
+    providerModelId: 'model-reviewer',
+    family: 'family-reviewer',
+    checkpoint: 'checkpoint-reviewer',
+    immutableDigest: canonicalDigest('placeholder'),
+  };
+  const contract = {
+    ...base,
+    immutableDigest: modelProfileVersionDigest(base),
+  };
+  return {
+    ...modelVersionRow(),
+    id: contract.id,
+    profile_id: contract.profileId,
+    provider: contract.provider,
+    model_name: contract.providerModelId,
+    family_id: contract.family,
+    checkpoint: contract.checkpoint,
+    authoritative_contract: contract,
+  };
+}
+function correlatedReviewerModelVersionRow(): Row {
+  const row = reviewerModelVersionRow();
+  const original = row.authoritative_contract as DomainModelProfileVersion;
+  const base: DomainModelProfileVersion = {
+    ...original,
+    family: 'family-a',
+    checkpoint: 'checkpoint-a',
+    immutableDigest: canonicalDigest('placeholder'),
+  };
+  const contract = {
+    ...base,
+    immutableDigest: modelProfileVersionDigest(base),
+  };
+  return {
+    ...row,
+    family_id: contract.family,
+    checkpoint: contract.checkpoint,
+    authoritative_contract: contract,
+  };
+}
+function fakeIndependentCorrelation(): CorrelationAssessmentRecord {
+  const base: DomainCorrelationAssessment = {
+    id: 'correlation-fake-independent',
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    policyVersion: '1.0.0',
+    subjectModelProfileVersionId: 'version-1',
+    candidateModelProfileVersionId: 'version-reviewer',
+    independent: true,
+    correlationScore: 0,
+    reasonCodes: ['different_known_family'],
+    assessedAt: now,
+    canonicalDigest: canonicalDigest('placeholder'),
+  };
+  const contract = {
+    ...base,
+    canonicalDigest: correlationAssessmentDigest(base),
+  };
+  return {
+    contract,
+    id: contract.id,
+    leftModelProfileVersionId: contract.subjectModelProfileVersionId,
+    rightModelProfileVersionId: contract.candidateModelProfileVersionId,
+    policyVersion: contract.policyVersion,
+    correlationScore: contract.correlationScore,
+    independenceVerdict: 'independent',
+    reasons: contract.reasonCodes,
+    assessmentDigest: contract.canonicalDigest,
+    assessedAt: contract.assessedAt,
+  };
+}
+function reviewAssignmentRow(): Row {
+  const assignment = reviewAssignment();
+  return {
+    id: assignment.id,
+    program_id: assignment.programId,
+    work_item_id: assignment.workItemId,
+    target_position_id: assignment.targetPositionId,
+    reviewer_agent_id: assignment.reviewerAgentId,
+    reviewer_model_profile_version_id: assignment.reviewerModelProfileVersionId,
+    reviewer_role: assignment.reviewerRole,
+    target_author_agent_id: assignment.targetAuthorAgentId,
+    target_model_profile_version_id: assignment.targetModelProfileVersionId,
+    target_role: assignment.targetRole,
+    criterion_id: assignment.criterionId,
+    criterion_digest: assignment.criterionDigest,
+    blind: assignment.blind,
+    assignment_digest: assignment.assignmentDigest,
+    authoritative_contract: assignment.contract,
+    recorded_at: assignment.recordedAt,
   };
 }
 function cellPlanRow(): Row {

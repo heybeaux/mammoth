@@ -541,6 +541,32 @@ create trigger mammoth_research_position_model
   before insert on mammoth_research_positions
   for each row execute function mammoth_guard_research_position_model();
 
+create function mammoth_guard_research_position_plan() returns trigger language plpgsql as $$
+declare
+  plan_program text;
+  plan_work text;
+  plan_criterion text;
+  plan_criterion_digest text;
+  plan_input_digest text;
+begin
+  select program_id, work_item_id, criterion_id, criterion_digest, input_digest
+    into plan_program, plan_work, plan_criterion, plan_criterion_digest, plan_input_digest
+    from mammoth_cell_plans where id = new.cell_plan_id;
+  if plan_program is null
+     or plan_program <> new.program_id
+     or plan_work <> new.work_item_id
+     or plan_criterion <> new.criterion_id
+     or plan_criterion_digest <> new.criterion_digest
+     or plan_input_digest <> new.input_digest then
+    raise exception 'position cell-plan metadata mismatch';
+  end if;
+  return new;
+end;
+$$;
+create trigger mammoth_research_position_plan
+  before insert on mammoth_research_positions
+  for each row execute function mammoth_guard_research_position_plan();
+
 create function mammoth_guard_review_assignment_target() returns trigger language plpgsql as $$
 declare
   target_program text;
@@ -589,6 +615,7 @@ declare
   assignment_work text;
   assignment_version text;
   assignment_role text;
+  assignment_reviewer_agent text;
 begin
   select model_profile_id, model_profile_version_id, cell_plan_id, program_id,
          criterion_id, criterion_digest
@@ -604,8 +631,10 @@ begin
   end if;
   select profile_id into reviewer_profile
     from mammoth_model_profile_versions where id = new.model_profile_version_id;
-  select target_position_id, work_item_id, reviewer_model_profile_version_id, reviewer_role
-    into assignment_target, assignment_work, assignment_version, assignment_role
+  select target_position_id, work_item_id, reviewer_model_profile_version_id, reviewer_role,
+         reviewer_agent_id
+    into assignment_target, assignment_work, assignment_version, assignment_role,
+         assignment_reviewer_agent
     from mammoth_review_assignments where id = new.assignment_id;
   if reviewer_profile is null
      or assignment_target is null
@@ -614,6 +643,7 @@ begin
      or assignment_work <> new.work_item_id
      or assignment_version <> new.model_profile_version_id
      or assignment_role <> new.reviewer_role
+     or assignment_reviewer_agent <> new.authoritative_contract->>'reviewerAgentId'
      or target_cell <> new.cell_plan_id
      or target_program <> new.program_id
      or target_criterion <> new.criterion_id
