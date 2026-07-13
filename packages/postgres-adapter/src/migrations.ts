@@ -234,4 +234,248 @@ create trigger mammoth_activity_effect_completion_guard
   for each row execute function mammoth_guard_activity_effect_completion();
 `.trim(),
   }),
+  defineMigration({
+    version: 5,
+    name: 'research_cell_persistence',
+    sql: `
+create table mammoth_model_profiles (
+  id text primary key,
+  provider text not null,
+  canonical_name text not null,
+  family_id text not null,
+  active boolean not null,
+  revision bigint not null default 0 check (revision >= 0),
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  unique (provider, canonical_name)
+);
+
+create table mammoth_model_profile_aliases (
+  profile_id text not null references mammoth_model_profiles(id),
+  provider text not null,
+  alias text not null,
+  first_seen_at timestamptz not null,
+  last_seen_at timestamptz not null,
+  primary key (profile_id, provider, alias),
+  unique (provider, alias),
+  check (last_seen_at >= first_seen_at)
+);
+
+create table mammoth_model_profile_versions (
+  id text primary key,
+  profile_id text not null references mammoth_model_profiles(id),
+  profile_revision bigint not null check (profile_revision > 0),
+  provider text not null,
+  model_name text not null,
+  checkpoint text not null,
+  family_id text not null,
+  lineage_status text not null check (lineage_status in ('known','partial','unknown')),
+  training_lineage_ids jsonb not null,
+  fine_tune_lineage_ids jsonb not null,
+  shared_derivation_ids jsonb not null,
+  locality text not null check (locality in ('local','cloud','unknown')),
+  modalities jsonb not null,
+  context_window integer not null check (context_window >= 0),
+  data_policy_id text not null,
+  cost_profile_id text not null,
+  declared_at timestamptz not null,
+  metadata jsonb not null,
+  unique (profile_id, profile_revision),
+  unique (profile_id, provider, model_name, checkpoint)
+);
+create index mammoth_model_profile_versions_family_idx
+  on mammoth_model_profile_versions (family_id, checkpoint);
+
+create table mammoth_cell_plans (
+  id text primary key,
+  program_id text not null,
+  work_item_id text not null references mammoth_work_items(id),
+  criterion_id text not null,
+  criterion_digest text not null check (criterion_digest ~ '^sha256:[0-9a-f]{64}$'),
+  plan_version text not null,
+  template_version text not null,
+  branch_id text not null,
+  role text not null,
+  input_digest text not null check (input_digest ~ '^sha256:[0-9a-f]{64}$'),
+  output_contract_version text not null,
+  status text not null check (status in ('planned','leased','completed','failed','cancelled')),
+  revision bigint not null default 0 check (revision >= 0),
+  fencing_token bigint not null default 0 check (fencing_token >= 0),
+  terminal_reason text,
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  unique (program_id, criterion_id, criterion_digest, plan_version, branch_id, role),
+  unique (program_id, work_item_id)
+);
+create index mammoth_cell_plans_program_idx on mammoth_cell_plans (program_id, status, id);
+create index mammoth_cell_plans_criterion_idx on mammoth_cell_plans (criterion_id, criterion_digest);
+
+create table mammoth_research_positions (
+  id text primary key,
+  cell_plan_id text not null references mammoth_cell_plans(id),
+  program_id text not null,
+  work_item_id text not null references mammoth_work_items(id),
+  criterion_id text not null,
+  criterion_digest text not null check (criterion_digest ~ '^sha256:[0-9a-f]{64}$'),
+  model_profile_id text not null references mammoth_model_profiles(id),
+  model_profile_version_id text not null references mammoth_model_profile_versions(id),
+  input_digest text not null check (input_digest ~ '^sha256:[0-9a-f]{64}$'),
+  output_schema_version text not null,
+  position_digest text not null check (position_digest ~ '^sha256:[0-9a-f]{64}$'),
+  claim_ids jsonb not null,
+  evidence_ids jsonb not null,
+  hypothesis_ids jsonb not null,
+  proposal_refs jsonb not null,
+  usage jsonb not null,
+  uncertainty_code text,
+  failure_code text,
+  body jsonb not null,
+  recorded_at timestamptz not null,
+  unique (cell_plan_id, work_item_id, model_profile_version_id, position_digest)
+);
+create index mammoth_research_positions_program_idx on mammoth_research_positions (program_id, cell_plan_id);
+create index mammoth_research_positions_model_idx on mammoth_research_positions (model_profile_version_id);
+
+create table mammoth_research_reviews (
+  id text primary key,
+  position_id text not null references mammoth_research_positions(id),
+  cell_plan_id text not null references mammoth_cell_plans(id),
+  program_id text not null,
+  work_item_id text not null references mammoth_work_items(id),
+  criterion_id text not null,
+  criterion_digest text not null check (criterion_digest ~ '^sha256:[0-9a-f]{64}$'),
+  model_profile_id text not null references mammoth_model_profiles(id),
+  model_profile_version_id text not null references mammoth_model_profile_versions(id),
+  reviewer_role text not null,
+  input_digest text not null check (input_digest ~ '^sha256:[0-9a-f]{64}$'),
+  output_schema_version text not null,
+  review_digest text not null check (review_digest ~ '^sha256:[0-9a-f]{64}$'),
+  verdict text not null check (verdict in ('admit','reject','abstain')),
+  claim_ids jsonb not null,
+  evidence_ids jsonb not null,
+  hypothesis_ids jsonb not null,
+  usage jsonb not null,
+  uncertainty_code text,
+  failure_code text,
+  reasons jsonb not null,
+  body jsonb not null,
+  recorded_at timestamptz not null,
+  unique (position_id, reviewer_role, model_profile_version_id)
+);
+create index mammoth_research_reviews_program_idx on mammoth_research_reviews (program_id, position_id);
+create index mammoth_research_reviews_model_idx on mammoth_research_reviews (model_profile_version_id);
+
+create table mammoth_dissent_reports (
+  id text primary key,
+  cell_plan_id text not null references mammoth_cell_plans(id),
+  program_id text not null,
+  criterion_id text not null,
+  criterion_digest text not null check (criterion_digest ~ '^sha256:[0-9a-f]{64}$'),
+  author_model_profile_version_id text not null references mammoth_model_profile_versions(id),
+  report_digest text not null check (report_digest ~ '^sha256:[0-9a-f]{64}$'),
+  claim_ids jsonb not null,
+  evidence_ids jsonb not null,
+  minority_position_ids jsonb not null,
+  body jsonb not null,
+  recorded_at timestamptz not null,
+  unique (cell_plan_id, author_model_profile_version_id, report_digest)
+);
+create index mammoth_dissent_reports_program_idx on mammoth_dissent_reports (program_id, cell_plan_id);
+
+create table mammoth_correlation_assessments (
+  id text primary key,
+  left_model_profile_version_id text not null references mammoth_model_profile_versions(id),
+  right_model_profile_version_id text not null references mammoth_model_profile_versions(id),
+  policy_version text not null,
+  correlation_score numeric not null check (correlation_score >= 0 and correlation_score <= 1),
+  independence_verdict text not null check (independence_verdict in ('independent','correlated','unknown')),
+  reasons jsonb not null,
+  assessment_digest text not null check (assessment_digest ~ '^sha256:[0-9a-f]{64}$'),
+  assessed_at timestamptz not null,
+  check (left_model_profile_version_id <> right_model_profile_version_id),
+  unique (left_model_profile_version_id, right_model_profile_version_id, policy_version)
+);
+create index mammoth_correlation_assessments_right_idx
+  on mammoth_correlation_assessments (right_model_profile_version_id, policy_version);
+
+create table mammoth_rejected_audit_residue (
+  id text primary key,
+  program_id text not null,
+  subject_type text not null check (subject_type in ('model-profile-version','cell-plan','position','review','dissent','correlation','receipt')),
+  subject_id text not null,
+  reason_code text not null,
+  policy_version text not null,
+  payload_digest text not null check (payload_digest ~ '^sha256:[0-9a-f]{64}$'),
+  payload jsonb not null,
+  recorded_at timestamptz not null,
+  unique (program_id, subject_type, subject_id, policy_version, reason_code)
+);
+create index mammoth_rejected_audit_residue_program_idx
+  on mammoth_rejected_audit_residue (program_id, recorded_at, id);
+
+create table mammoth_cell_receipts (
+  id text primary key,
+  program_id text not null,
+  subject_type text not null,
+  subject_id text not null,
+  work_item_id text not null references mammoth_work_items(id),
+  receipt_kind text not null,
+  receipt_digest text not null check (receipt_digest ~ '^sha256:[0-9a-f]{64}$'),
+  payload jsonb not null,
+  created_at timestamptz not null,
+  unique (program_id, subject_type, subject_id, receipt_kind)
+);
+create index mammoth_cell_receipts_program_idx on mammoth_cell_receipts (program_id, created_at, id);
+
+create function mammoth_reject_immutable_update() returns trigger language plpgsql as $$
+begin
+  raise exception 'immutable research-cell row cannot be changed';
+end;
+$$;
+
+create trigger mammoth_model_profile_versions_immutable
+  before update or delete on mammoth_model_profile_versions
+  for each row execute function mammoth_reject_immutable_update();
+create trigger mammoth_research_positions_immutable
+  before update or delete on mammoth_research_positions
+  for each row execute function mammoth_reject_immutable_update();
+create trigger mammoth_research_reviews_immutable
+  before update or delete on mammoth_research_reviews
+  for each row execute function mammoth_reject_immutable_update();
+create trigger mammoth_dissent_reports_immutable
+  before update or delete on mammoth_dissent_reports
+  for each row execute function mammoth_reject_immutable_update();
+create trigger mammoth_correlation_assessments_immutable
+  before update or delete on mammoth_correlation_assessments
+  for each row execute function mammoth_reject_immutable_update();
+create trigger mammoth_rejected_audit_residue_immutable
+  before update or delete on mammoth_rejected_audit_residue
+  for each row execute function mammoth_reject_immutable_update();
+create trigger mammoth_cell_receipts_immutable
+  before update or delete on mammoth_cell_receipts
+  for each row execute function mammoth_reject_immutable_update();
+
+create function mammoth_guard_research_review_independence() returns trigger language plpgsql as $$
+declare
+  author_profile text;
+  author_version text;
+begin
+  select model_profile_id, model_profile_version_id
+    into author_profile, author_version
+    from mammoth_research_positions
+   where id = new.position_id;
+  if author_profile is null then
+    raise exception 'review references unknown position';
+  end if;
+  if author_profile = new.model_profile_id or author_version = new.model_profile_version_id then
+    raise exception 'model profile cannot review its own position in the same role';
+  end if;
+  return new;
+end;
+$$;
+create trigger mammoth_research_review_independence
+  before insert on mammoth_research_reviews
+  for each row execute function mammoth_guard_research_review_independence();
+`.trim(),
+  }),
 ]);

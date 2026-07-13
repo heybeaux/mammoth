@@ -56,7 +56,7 @@ describe('Activity-effect v2 migration', () => {
     );
     expect(migration?.checksum).toMatch(/^[a-f0-9]{64}$/);
     expect(foundationMigrations.map(({ version }) => version)).toEqual([
-      1, 2, 3, 4,
+      1, 2, 3, 4, 5,
     ]);
   });
 
