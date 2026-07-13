@@ -5,10 +5,12 @@ import {
   DissentReportRecordSchema as DissentReportSchema,
   ModelProfileRecordSchema as ModelProfileSchema,
   ModelProfileVersionRecordSchema as ModelProfileVersionSchema,
+  ModelLineageEdgeRecordSchema as ModelLineageEdgeSchema,
   PersistenceConflictError,
   PersistenceIntegrityError,
   ResearchPositionRecordSchema as ResearchPositionSchema,
   ResearchReviewRecordSchema as ResearchReviewSchema,
+  ReviewAssignmentRecordSchema as ReviewAssignmentSchema,
   RejectedAuditResidueRecordSchema as RejectedAuditResidueSchema,
   assertPayloadDigest,
   parseResearchCellState,
@@ -18,6 +20,7 @@ import {
   type CorrelationAssessmentRecord as CorrelationAssessment,
   type DissentReportRecord as DissentReport,
   type ModelLineageRepository,
+  type ModelLineageEdgeRecord as ModelLineageEdge,
   type ModelProfileRecord as ModelProfile,
   type ModelProfileVersionRecord as ModelProfileVersion,
   type ModelProfileWrite,
@@ -26,6 +29,7 @@ import {
   type ResearchCellRepository,
   type ResearchPositionRecord as ResearchPosition,
   type ResearchReviewRecord as ResearchReview,
+  type ReviewAssignmentRecord as ReviewAssignment,
 } from '@mammoth/persistence';
 import type { PostgresConnection, TransactionOptions } from './driver.js';
 
@@ -134,35 +138,109 @@ export class PostgresModelLineageRepository implements ModelLineageRepository {
     input: ModelProfileVersion,
   ): Promise<ModelProfileVersion> {
     const parsed = ModelProfileVersionSchema.parse(input);
-    await this.database.query(
-      `insert into mammoth_model_profile_versions
+    await this.database.transaction(this.options.transaction, async (tx) => {
+      await tx.query(
+        `insert into mammoth_model_profile_versions
         (id, profile_id, profile_revision, provider, model_name, checkpoint, family_id,
          lineage_status, training_lineage_ids, fine_tune_lineage_ids, shared_derivation_ids,
          locality, modalities, context_window, data_policy_id, cost_profile_id, declared_at,
          metadata, authoritative_contract)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12,$13::jsonb,$14,$15,$16,$17::timestamptz,$18::jsonb,$19::jsonb)`,
-      [
-        parsed.id,
-        parsed.profileId,
-        parsed.profileRevision,
-        parsed.provider,
-        parsed.modelName,
-        parsed.checkpoint,
-        parsed.familyId,
-        parsed.lineageStatus,
-        JSON.stringify(parsed.trainingLineageIds),
-        JSON.stringify(parsed.fineTuneLineageIds),
-        JSON.stringify(parsed.sharedDerivationIds),
-        parsed.locality,
-        JSON.stringify(parsed.modalities),
-        parsed.contextWindow,
-        parsed.dataPolicyId,
-        parsed.costProfileId,
-        parsed.declaredAt,
-        JSON.stringify(parsed.metadata),
-        JSON.stringify(parsed.contract),
-      ],
-    );
+        [
+          parsed.id,
+          parsed.profileId,
+          parsed.profileRevision,
+          parsed.provider,
+          parsed.modelName,
+          parsed.checkpoint,
+          parsed.familyId,
+          parsed.lineageStatus,
+          JSON.stringify(parsed.trainingLineageIds),
+          JSON.stringify(parsed.fineTuneLineageIds),
+          JSON.stringify(parsed.sharedDerivationIds),
+          parsed.locality,
+          JSON.stringify(parsed.modalities),
+          parsed.contextWindow,
+          parsed.dataPolicyId,
+          parsed.costProfileId,
+          parsed.declaredAt,
+          JSON.stringify(parsed.metadata),
+          JSON.stringify(parsed.contract),
+        ],
+      );
+      const referencedVersionIds = [
+        ...parsed.contract.lineage.parentVersionIds,
+        ...(parsed.contract.lineage.aliasOfVersionId
+          ? [parsed.contract.lineage.aliasOfVersionId]
+          : []),
+      ];
+      if (referencedVersionIds.length > 0) {
+        const parents = await tx.query<{ id: string }>(
+          `select id from mammoth_model_profile_versions
+            where id = any($1::text[]) for share`,
+          [referencedVersionIds],
+        );
+        const found = new Set(parents.rows.map(({ id }) => id));
+        const missing = referencedVersionIds.filter((id) => !found.has(id));
+        if (missing.length > 0)
+          throw new PersistenceConflictError(
+            `dangling model lineage for ${parsed.id}: ${missing.join(', ')}`,
+          );
+      }
+      const edges: ModelLineageEdge[] = [
+        ...parsed.contract.lineage.parentVersionIds.map((parentVersionId) => ({
+          childVersionId: parsed.id,
+          parentVersionId,
+          edgeKind: 'parent' as const,
+          createdAt: parsed.declaredAt,
+        })),
+        ...(parsed.contract.lineage.aliasOfVersionId
+          ? [
+              {
+                childVersionId: parsed.id,
+                parentVersionId: parsed.contract.lineage.aliasOfVersionId,
+                edgeKind: 'alias' as const,
+                createdAt: parsed.declaredAt,
+              },
+            ]
+          : []),
+      ];
+      for (const edge of edges) {
+        const valid = ModelLineageEdgeSchema.parse(edge);
+        await tx.query(
+          `insert into mammoth_model_lineage_edges
+            (child_version_id, parent_version_id, edge_kind, created_at)
+           values ($1,$2,$3,$4::timestamptz)`,
+          [
+            valid.childVersionId,
+            valid.parentVersionId,
+            valid.edgeKind,
+            valid.createdAt,
+          ],
+        );
+      }
+      const cycle = await tx.query(
+        `with recursive ancestry(child_version_id, parent_version_id, path, cycle) as (
+           select child_version_id, parent_version_id,
+                  array[child_version_id, parent_version_id],
+                  child_version_id = parent_version_id
+             from mammoth_model_lineage_edges
+           union all
+           select ancestry.child_version_id, edge.parent_version_id,
+                  ancestry.path || edge.parent_version_id,
+                  edge.parent_version_id = any(ancestry.path)
+             from ancestry
+             join mammoth_model_lineage_edges edge
+               on edge.child_version_id = ancestry.parent_version_id
+            where not ancestry.cycle
+         )
+         select 1 from ancestry where cycle limit 1`,
+      );
+      if (cycle.rowCount > 0)
+        throw new PersistenceConflictError(
+          `cyclic model lineage for ${parsed.id}`,
+        );
+    });
     return parsed;
   }
 
@@ -199,6 +277,18 @@ export class PostgresModelLineageRepository implements ModelLineageRepository {
       [profileId],
     );
     return result.rows.map(toModelProfileVersion);
+  }
+
+  async listModelLineageEdges(
+    versionId: string,
+  ): Promise<readonly ModelLineageEdge[]> {
+    const result = await this.database.query<ModelLineageEdgeRow>(
+      `select child_version_id, parent_version_id, edge_kind, created_at
+         from mammoth_model_lineage_edges
+        where child_version_id = $1 order by edge_kind, parent_version_id`,
+      [versionId],
+    );
+    return result.rows.map(toModelLineageEdge);
   }
 }
 
@@ -271,9 +361,44 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         (id, cell_plan_id, program_id, work_item_id, criterion_id, criterion_digest,
          model_profile_id, model_profile_version_id, input_digest, output_schema_version,
          position_digest, claim_ids, evidence_ids, hypothesis_ids, proposal_refs,
-         usage, uncertainty_code, failure_code, body, recorded_at, authoritative_contract)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17,$18,$19::jsonb,$20::timestamptz,$21::jsonb)`,
+         usage, uncertainty_codes, failure_codes, body, admission_decision,
+         admission_policy_version, admission_policy_digest, admission_subject_digest,
+         admission_reason_codes, admission_decided_at, recorded_at, authoritative_contract)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17::jsonb,$18::jsonb,$19::jsonb,$20,$21,$22,$23,$24::jsonb,$25::timestamptz,$26::timestamptz,$27::jsonb)`,
       positionParameters(parsed),
+    );
+    return parsed;
+  }
+
+  async recordReviewAssignment(
+    input: ReviewAssignment,
+  ): Promise<ReviewAssignment> {
+    const parsed = ReviewAssignmentSchema.parse(input);
+    await this.database.query(
+      `insert into mammoth_review_assignments
+        (id, program_id, work_item_id, target_position_id, reviewer_agent_id,
+         reviewer_model_profile_version_id, reviewer_role, target_author_agent_id,
+         target_model_profile_version_id, target_role, criterion_id, criterion_digest,
+         blind, assignment_digest, authoritative_contract, recorded_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::timestamptz)`,
+      [
+        parsed.id,
+        parsed.programId,
+        parsed.workItemId,
+        parsed.targetPositionId,
+        parsed.reviewerAgentId,
+        parsed.reviewerModelProfileVersionId,
+        parsed.reviewerRole,
+        parsed.targetAuthorAgentId,
+        parsed.targetModelProfileVersionId,
+        parsed.targetRole,
+        parsed.criterionId,
+        parsed.criterionDigest,
+        parsed.blind,
+        parsed.assignmentDigest,
+        JSON.stringify(parsed.contract),
+        parsed.recordedAt,
+      ],
     );
     return parsed;
   }
@@ -282,14 +407,17 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
     const parsed = ResearchReviewSchema.parse(input);
     await this.database.query(
       `insert into mammoth_research_reviews
-        (id, position_id, cell_plan_id, program_id, work_item_id, criterion_id, criterion_digest,
+        (id, assignment_id, position_id, cell_plan_id, program_id, work_item_id, criterion_id, criterion_digest,
          model_profile_id, model_profile_version_id, reviewer_role, input_digest,
          output_schema_version, review_digest, verdict, claim_ids, evidence_ids,
-         hypothesis_ids, usage, uncertainty_code, failure_code, reasons, body, recorded_at,
-         authoritative_contract)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::jsonb,$17::jsonb,$18::jsonb,$19,$20,$21::jsonb,$22::jsonb,$23::timestamptz,$24::jsonb)`,
+         hypothesis_ids, usage, uncertainty_codes, failure_codes, reasons, body,
+         admission_decision, admission_policy_version, admission_policy_digest,
+         admission_subject_digest, admission_reason_codes, admission_decided_at,
+         recorded_at, authoritative_contract)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17::jsonb,$18::jsonb,$19::jsonb,$20::jsonb,$21::jsonb,$22::jsonb,$23::jsonb,$24,$25,$26,$27,$28::jsonb,$29::timestamptz,$30::timestamptz,$31::jsonb)`,
       [
         parsed.id,
+        parsed.assignmentId,
         parsed.positionId,
         parsed.cellPlanId,
         parsed.programId,
@@ -307,10 +435,16 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         JSON.stringify(parsed.evidenceIds),
         JSON.stringify(parsed.hypothesisIds),
         JSON.stringify(parsed.usage),
-        parsed.uncertaintyCode,
-        parsed.failureCode,
+        JSON.stringify(parsed.uncertaintyCodes),
+        JSON.stringify(parsed.failureCodes),
         JSON.stringify(parsed.reasons),
         JSON.stringify(parsed.body),
+        parsed.admission.decision,
+        parsed.admission.policyVersion,
+        parsed.admission.policyDigest,
+        parsed.admission.subjectDigest,
+        JSON.stringify(parsed.admission.reasonCodes),
+        parsed.admission.decidedAt,
         parsed.recordedAt,
         JSON.stringify(parsed.contract),
       ],
@@ -383,8 +517,8 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
     await this.database.query(
       `insert into mammoth_rejected_audit_residue
         (id, program_id, subject_type, subject_id, reason_code, policy_version,
-         payload_digest, payload, recorded_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::timestamptz)`,
+         policy_digest, reason_codes, decision, payload_digest, payload, recorded_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11::jsonb,$12::timestamptz)`,
       [
         parsed.id,
         parsed.programId,
@@ -392,6 +526,9 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         parsed.subjectId,
         parsed.reasonCode,
         parsed.policyVersion,
+        parsed.policyDigest,
+        JSON.stringify(parsed.reasonCodes),
+        parsed.decision,
         parsed.payloadDigest,
         JSON.stringify(parsed.payload),
         parsed.recordedAt,
@@ -431,6 +568,7 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
       versions,
       plans,
       positions,
+      reviewAssignments,
       reviews,
       dissentReports,
       correlations,
@@ -450,6 +588,10 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
             select model_profile_version_id from mammoth_research_reviews where program_id = $1
             union
             select author_model_profile_version_id from mammoth_dissent_reports where program_id = $1
+            union
+            select reviewer_model_profile_version_id from mammoth_review_assignments where program_id = $1
+            union
+            select target_model_profile_version_id from mammoth_review_assignments where program_id = $1
           )
           group by profile.id
           order by profile.id`,
@@ -463,6 +605,10 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
             select model_profile_version_id from mammoth_research_reviews where program_id = $1
             union
             select author_model_profile_version_id from mammoth_dissent_reports where program_id = $1
+            union
+            select reviewer_model_profile_version_id from mammoth_review_assignments where program_id = $1
+            union
+            select target_model_profile_version_id from mammoth_review_assignments where program_id = $1
           )
           order by version.profile_id, version.profile_revision`,
         [programId],
@@ -473,6 +619,10 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
       ),
       this.database.query<PositionRow>(
         'select * from mammoth_research_positions where program_id = $1 order by recorded_at, id',
+        [programId],
+      ),
+      this.database.query<ReviewAssignmentRow>(
+        'select * from mammoth_review_assignments where program_id = $1 order by recorded_at, id',
         [programId],
       ),
       this.database.query<ReviewRow>(
@@ -514,6 +664,7 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
       modelProfileVersions: versions.rows.map(toModelProfileVersion),
       cellPlans: plans.rows.map(toCellPlan),
       positions: positions.rows.map(toPosition),
+      reviewAssignments: reviewAssignments.rows.map(toReviewAssignment),
       reviews: reviews.rows.map(toReview),
       dissentReports: dissentReports.rows.map(toDissent),
       correlationAssessments: correlations.rows.map(toCorrelation),
@@ -556,6 +707,12 @@ interface ModelProfileVersionRow extends Record<string, unknown> {
   metadata: unknown;
   authoritative_contract: unknown;
 }
+interface ModelLineageEdgeRow extends Record<string, unknown> {
+  child_version_id: string;
+  parent_version_id: string;
+  edge_kind: ModelLineageEdge['edgeKind'];
+  created_at: string;
+}
 interface CellPlanRow extends Record<string, unknown> {
   id: string;
   program_id: string;
@@ -592,14 +749,39 @@ interface PositionRow extends Record<string, unknown> {
   hypothesis_ids: unknown;
   proposal_refs: unknown;
   usage: unknown;
-  uncertainty_code: string | null;
-  failure_code: string | null;
+  uncertainty_codes: unknown;
+  failure_codes: unknown;
   body: unknown;
+  admission_decision: 'admitted';
+  admission_policy_version: string;
+  admission_policy_digest: string;
+  admission_subject_digest: string;
+  admission_reason_codes: unknown;
+  admission_decided_at: string;
   recorded_at: string;
   authoritative_contract: unknown;
 }
+interface ReviewAssignmentRow extends Record<string, unknown> {
+  id: string;
+  program_id: string;
+  work_item_id: string;
+  target_position_id: string;
+  reviewer_agent_id: string;
+  reviewer_model_profile_version_id: string;
+  reviewer_role: string;
+  target_author_agent_id: string;
+  target_model_profile_version_id: string;
+  target_role: string;
+  criterion_id: string;
+  criterion_digest: ReviewAssignment['criterionDigest'];
+  blind: boolean;
+  assignment_digest: ReviewAssignment['assignmentDigest'];
+  authoritative_contract: unknown;
+  recorded_at: string;
+}
 interface ReviewRow
   extends Omit<PositionRow, 'position_digest' | 'proposal_refs'> {
+  assignment_id: string;
   position_id: string;
   reviewer_role: string;
   review_digest: ResearchReview['reviewDigest'];
@@ -640,6 +822,9 @@ interface RejectedRow extends Record<string, unknown> {
   subject_id: string;
   reason_code: string;
   policy_version: string;
+  policy_digest: RejectedAuditResidue['policyDigest'];
+  reason_codes: unknown;
+  decision: 'rejected';
   payload_digest: RejectedAuditResidue['payloadDigest'];
   payload: unknown;
   recorded_at: string;
@@ -695,6 +880,14 @@ function toModelProfileVersion(
     metadata: row.metadata,
   });
 }
+function toModelLineageEdge(row: ModelLineageEdgeRow): ModelLineageEdge {
+  return ModelLineageEdgeSchema.parse({
+    childVersionId: row.child_version_id,
+    parentVersionId: row.parent_version_id,
+    edgeKind: row.edge_kind,
+    createdAt: row.created_at,
+  });
+}
 function toCellPlan(row: CellPlanRow): CellPlan {
   return CellPlanSchema.parse({
     contract: row.authoritative_contract,
@@ -719,6 +912,14 @@ function toCellPlan(row: CellPlanRow): CellPlan {
 function toPosition(row: PositionRow): ResearchPosition {
   return ResearchPositionSchema.parse({
     contract: row.authoritative_contract,
+    admission: {
+      decision: row.admission_decision,
+      policyVersion: row.admission_policy_version,
+      policyDigest: row.admission_policy_digest,
+      subjectDigest: row.admission_subject_digest,
+      reasonCodes: asArray(row.admission_reason_codes),
+      decidedAt: row.admission_decided_at,
+    },
     id: row.id,
     cellPlanId: row.cell_plan_id,
     programId: row.program_id,
@@ -733,18 +934,47 @@ function toPosition(row: PositionRow): ResearchPosition {
     claimIds: asArray(row.claim_ids),
     evidenceIds: asArray(row.evidence_ids),
     hypothesisIds: asArray(row.hypothesis_ids),
-    proposalRefs: asArray(row.proposal_refs),
+    proposalRefs: asJsonArray(row.proposal_refs),
     usage: row.usage,
-    uncertaintyCode: row.uncertainty_code,
-    failureCode: row.failure_code,
+    uncertaintyCodes: asArray(row.uncertainty_codes),
+    failureCodes: asArray(row.failure_codes),
     body: row.body,
+    recordedAt: row.recorded_at,
+  });
+}
+function toReviewAssignment(row: ReviewAssignmentRow): ReviewAssignment {
+  return ReviewAssignmentSchema.parse({
+    contract: row.authoritative_contract,
+    id: row.id,
+    programId: row.program_id,
+    workItemId: row.work_item_id,
+    targetPositionId: row.target_position_id,
+    reviewerAgentId: row.reviewer_agent_id,
+    reviewerModelProfileVersionId: row.reviewer_model_profile_version_id,
+    reviewerRole: row.reviewer_role,
+    targetAuthorAgentId: row.target_author_agent_id,
+    targetModelProfileVersionId: row.target_model_profile_version_id,
+    targetRole: row.target_role,
+    criterionId: row.criterion_id,
+    criterionDigest: row.criterion_digest,
+    blind: row.blind,
+    assignmentDigest: row.assignment_digest,
     recordedAt: row.recorded_at,
   });
 }
 function toReview(row: ReviewRow): ResearchReview {
   return ResearchReviewSchema.parse({
     contract: row.authoritative_contract,
+    admission: {
+      decision: row.admission_decision,
+      policyVersion: row.admission_policy_version,
+      policyDigest: row.admission_policy_digest,
+      subjectDigest: row.admission_subject_digest,
+      reasonCodes: asArray(row.admission_reason_codes),
+      decidedAt: row.admission_decided_at,
+    },
     id: row.id,
+    assignmentId: row.assignment_id,
     positionId: row.position_id,
     cellPlanId: row.cell_plan_id,
     programId: row.program_id,
@@ -762,8 +992,8 @@ function toReview(row: ReviewRow): ResearchReview {
     evidenceIds: asArray(row.evidence_ids),
     hypothesisIds: asArray(row.hypothesis_ids),
     usage: row.usage,
-    uncertaintyCode: row.uncertainty_code,
-    failureCode: row.failure_code,
+    uncertaintyCodes: asArray(row.uncertainty_codes),
+    failureCodes: asArray(row.failure_codes),
     reasons: asArray(row.reasons),
     body: row.body,
     recordedAt: row.recorded_at,
@@ -808,6 +1038,9 @@ function toRejected(row: RejectedRow): RejectedAuditResidue {
     subjectId: row.subject_id,
     reasonCode: row.reason_code,
     policyVersion: row.policy_version,
+    policyDigest: row.policy_digest,
+    reasonCodes: asArray(row.reason_codes),
+    decision: row.decision,
     payloadDigest: row.payload_digest,
     payload: row.payload,
     recordedAt: row.recorded_at,
@@ -844,9 +1077,15 @@ function positionParameters(parsed: ResearchPosition): readonly unknown[] {
     JSON.stringify(parsed.hypothesisIds),
     JSON.stringify(parsed.proposalRefs),
     JSON.stringify(parsed.usage),
-    parsed.uncertaintyCode,
-    parsed.failureCode,
+    JSON.stringify(parsed.uncertaintyCodes),
+    JSON.stringify(parsed.failureCodes),
     JSON.stringify(parsed.body),
+    parsed.admission.decision,
+    parsed.admission.policyVersion,
+    parsed.admission.policyDigest,
+    parsed.admission.subjectDigest,
+    JSON.stringify(parsed.admission.reasonCodes),
+    parsed.admission.decidedAt,
     parsed.recordedAt,
     JSON.stringify(parsed.contract),
   ];
@@ -854,4 +1093,8 @@ function positionParameters(parsed: ResearchPosition): readonly unknown[] {
 function asArray(value: unknown): readonly string[] {
   if (!Array.isArray(value)) return [];
   return value.map(String);
+}
+
+function asJsonArray(value: unknown): readonly unknown[] {
+  return Array.isArray(value) ? value : [];
 }

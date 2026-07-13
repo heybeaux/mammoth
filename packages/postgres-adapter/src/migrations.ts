@@ -288,6 +288,19 @@ create table mammoth_model_profile_versions (
 create index mammoth_model_profile_versions_family_idx
   on mammoth_model_profile_versions (family_id, checkpoint);
 
+create table mammoth_model_lineage_edges (
+  child_version_id text not null references mammoth_model_profile_versions(id),
+  parent_version_id text not null references mammoth_model_profile_versions(id),
+  edge_kind text not null check (edge_kind in ('parent','alias')),
+  created_at timestamptz not null,
+  primary key (child_version_id, parent_version_id, edge_kind),
+  check (child_version_id <> parent_version_id)
+);
+create unique index mammoth_model_lineage_alias_unique_idx
+  on mammoth_model_lineage_edges (child_version_id) where edge_kind = 'alias';
+create index mammoth_model_lineage_parent_idx
+  on mammoth_model_lineage_edges (parent_version_id, child_version_id);
+
 create table mammoth_cell_plans (
   id text primary key,
   program_id text not null,
@@ -330,9 +343,17 @@ create table mammoth_research_positions (
   hypothesis_ids jsonb not null,
   proposal_refs jsonb not null,
   usage jsonb not null,
-  uncertainty_code text,
-  failure_code text,
+  uncertainty_codes jsonb not null,
+  failure_codes jsonb not null,
   body jsonb not null,
+  admission_decision text not null check (admission_decision = 'admitted'),
+  admission_policy_version text not null,
+  admission_policy_digest text not null check (admission_policy_digest ~ '^sha256:[0-9a-f]{64}$'),
+  admission_subject_digest text not null check (admission_subject_digest = position_digest),
+  admission_reason_codes jsonb not null check (
+    jsonb_typeof(admission_reason_codes) = 'array' and jsonb_array_length(admission_reason_codes) > 0
+  ),
+  admission_decided_at timestamptz not null,
   authoritative_contract jsonb not null,
   recorded_at timestamptz not null,
   unique (cell_plan_id, work_item_id, model_profile_version_id, position_digest)
@@ -340,8 +361,31 @@ create table mammoth_research_positions (
 create index mammoth_research_positions_program_idx on mammoth_research_positions (program_id, cell_plan_id);
 create index mammoth_research_positions_model_idx on mammoth_research_positions (model_profile_version_id);
 
+create table mammoth_review_assignments (
+  id text primary key,
+  program_id text not null,
+  work_item_id text not null references mammoth_work_items(id),
+  target_position_id text not null references mammoth_research_positions(id),
+  reviewer_agent_id text not null,
+  reviewer_model_profile_version_id text not null references mammoth_model_profile_versions(id),
+  reviewer_role text not null,
+  target_author_agent_id text not null,
+  target_model_profile_version_id text not null references mammoth_model_profile_versions(id),
+  target_role text not null,
+  criterion_id text not null,
+  criterion_digest text not null check (criterion_digest ~ '^sha256:[0-9a-f]{64}$'),
+  blind boolean not null,
+  assignment_digest text not null check (assignment_digest ~ '^sha256:[0-9a-f]{64}$'),
+  authoritative_contract jsonb not null,
+  recorded_at timestamptz not null,
+  unique (target_position_id, reviewer_model_profile_version_id, reviewer_role)
+);
+create index mammoth_review_assignments_program_idx
+  on mammoth_review_assignments (program_id, target_position_id);
+
 create table mammoth_research_reviews (
   id text primary key,
+  assignment_id text not null references mammoth_review_assignments(id),
   position_id text not null references mammoth_research_positions(id),
   cell_plan_id text not null references mammoth_cell_plans(id),
   program_id text not null,
@@ -359,10 +403,18 @@ create table mammoth_research_reviews (
   evidence_ids jsonb not null,
   hypothesis_ids jsonb not null,
   usage jsonb not null,
-  uncertainty_code text,
-  failure_code text,
+  uncertainty_codes jsonb not null,
+  failure_codes jsonb not null,
   reasons jsonb not null,
   body jsonb not null,
+  admission_decision text not null check (admission_decision = 'admitted'),
+  admission_policy_version text not null,
+  admission_policy_digest text not null check (admission_policy_digest ~ '^sha256:[0-9a-f]{64}$'),
+  admission_subject_digest text not null check (admission_subject_digest = review_digest),
+  admission_reason_codes jsonb not null check (
+    jsonb_typeof(admission_reason_codes) = 'array' and jsonb_array_length(admission_reason_codes) > 0
+  ),
+  admission_decided_at timestamptz not null,
   authoritative_contract jsonb not null,
   recorded_at timestamptz not null,
   unique (position_id, reviewer_role, model_profile_version_id)
@@ -412,6 +464,11 @@ create table mammoth_rejected_audit_residue (
   subject_id text not null,
   reason_code text not null,
   policy_version text not null,
+  policy_digest text not null check (policy_digest ~ '^sha256:[0-9a-f]{64}$'),
+  reason_codes jsonb not null check (
+    jsonb_typeof(reason_codes) = 'array' and jsonb_array_length(reason_codes) > 0
+  ),
+  decision text not null check (decision = 'rejected'),
   payload_digest text not null check (payload_digest ~ '^sha256:[0-9a-f]{64}$'),
   payload jsonb not null,
   recorded_at timestamptz not null,
@@ -443,8 +500,14 @@ $$;
 create trigger mammoth_model_profile_versions_immutable
   before update or delete on mammoth_model_profile_versions
   for each row execute function mammoth_reject_immutable_update();
+create trigger mammoth_model_lineage_edges_immutable
+  before update or delete on mammoth_model_lineage_edges
+  for each row execute function mammoth_reject_immutable_update();
 create trigger mammoth_research_positions_immutable
   before update or delete on mammoth_research_positions
+  for each row execute function mammoth_reject_immutable_update();
+create trigger mammoth_review_assignments_immutable
+  before update or delete on mammoth_review_assignments
   for each row execute function mammoth_reject_immutable_update();
 create trigger mammoth_research_reviews_immutable
   before update or delete on mammoth_research_reviews
@@ -462,13 +525,75 @@ create trigger mammoth_cell_receipts_immutable
   before update or delete on mammoth_cell_receipts
   for each row execute function mammoth_reject_immutable_update();
 
+create function mammoth_guard_research_position_model() returns trigger language plpgsql as $$
+declare
+  version_profile text;
+begin
+  select profile_id into version_profile
+    from mammoth_model_profile_versions where id = new.model_profile_version_id;
+  if version_profile is null or version_profile <> new.model_profile_id then
+    raise exception 'position model profile/version mismatch';
+  end if;
+  return new;
+end;
+$$;
+create trigger mammoth_research_position_model
+  before insert on mammoth_research_positions
+  for each row execute function mammoth_guard_research_position_model();
+
+create function mammoth_guard_review_assignment_target() returns trigger language plpgsql as $$
+declare
+  target_program text;
+  target_criterion text;
+  target_criterion_digest text;
+  target_author text;
+  target_version text;
+  target_role_value text;
+begin
+  select program_id, criterion_id, criterion_digest,
+         authoritative_contract->>'authorAgentId', model_profile_version_id,
+         authoritative_contract->>'role'
+    into target_program, target_criterion, target_criterion_digest,
+         target_author, target_version, target_role_value
+    from mammoth_research_positions where id = new.target_position_id;
+  if target_program is null
+     or target_author is null
+     or target_role_value is null
+     or target_program <> new.program_id
+     or target_criterion <> new.criterion_id
+     or target_criterion_digest <> new.criterion_digest
+     or target_author <> new.target_author_agent_id
+     or target_version <> new.target_model_profile_version_id
+     or target_role_value <> new.target_role
+     or target_author = new.reviewer_agent_id
+     or target_version = new.reviewer_model_profile_version_id then
+    raise exception 'review assignment target metadata mismatch';
+  end if;
+  return new;
+end;
+$$;
+create trigger mammoth_review_assignment_target
+  before insert on mammoth_review_assignments
+  for each row execute function mammoth_guard_review_assignment_target();
+
 create function mammoth_guard_research_review_independence() returns trigger language plpgsql as $$
 declare
   author_profile text;
   author_version text;
+  target_cell text;
+  target_program text;
+  target_criterion text;
+  target_criterion_digest text;
+  reviewer_profile text;
+  assignment_target text;
+  assignment_work text;
+  assignment_version text;
+  assignment_role text;
 begin
-  select model_profile_id, model_profile_version_id
-    into author_profile, author_version
+  select model_profile_id, model_profile_version_id, cell_plan_id, program_id,
+         criterion_id, criterion_digest
+    into author_profile, author_version, target_cell, target_program,
+         target_criterion, target_criterion_digest
     from mammoth_research_positions
    where id = new.position_id;
   if author_profile is null then
@@ -476,6 +601,24 @@ begin
   end if;
   if author_profile = new.model_profile_id or author_version = new.model_profile_version_id then
     raise exception 'model profile cannot review its own position in the same role';
+  end if;
+  select profile_id into reviewer_profile
+    from mammoth_model_profile_versions where id = new.model_profile_version_id;
+  select target_position_id, work_item_id, reviewer_model_profile_version_id, reviewer_role
+    into assignment_target, assignment_work, assignment_version, assignment_role
+    from mammoth_review_assignments where id = new.assignment_id;
+  if reviewer_profile is null
+     or assignment_target is null
+     or reviewer_profile <> new.model_profile_id
+     or assignment_target <> new.position_id
+     or assignment_work <> new.work_item_id
+     or assignment_version <> new.model_profile_version_id
+     or assignment_role <> new.reviewer_role
+     or target_cell <> new.cell_plan_id
+     or target_program <> new.program_id
+     or target_criterion <> new.criterion_id
+     or target_criterion_digest <> new.criterion_digest then
+    raise exception 'review relational metadata mismatch';
   end if;
   return new;
 end;

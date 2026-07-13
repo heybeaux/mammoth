@@ -5,7 +5,10 @@ import {
   DissentReportSchema,
   ModelProfileSchema,
   ModelProfileVersionSchema,
+  ModelUsageSchema,
+  ProposalReferenceSchema,
   ResearchPositionSchema,
+  ReviewAssignmentSchema,
   ResearchReviewSchema,
   canonicalDigest,
   type Digest,
@@ -28,6 +31,34 @@ const OperationalMetadataSchema = z
     updatedAt: z.string().datetime(),
   })
   .strict();
+
+export const AdmissionDecisionRecordSchema = z
+  .object({
+    decision: z.literal('admitted'),
+    policyVersion: z.string().min(1),
+    policyDigest: DigestSchema,
+    subjectDigest: DigestSchema,
+    reasonCodes: z.array(z.string().min(1)).min(1),
+    decidedAt: z.string().datetime(),
+  })
+  .strict();
+
+export const ModelLineageEdgeRecordSchema = z
+  .object({
+    childVersionId: z.string().min(1),
+    parentVersionId: z.string().min(1),
+    edgeKind: z.enum(['parent', 'alias']),
+    createdAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((edge, context) => {
+    if (edge.childVersionId === edge.parentVersionId)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['parentVersionId'],
+        message: 'model lineage edge cannot reference itself',
+      });
+  });
 
 /** Persistence records wrap, and never redefine, authoritative domain data. */
 export const ModelProfileRecordSchema = OperationalMetadataSchema.extend({
@@ -87,7 +118,20 @@ export const ModelProfileVersionRecordSchema = z
       record.checkpoint !== contract.checkpoint ||
       record.familyId !== contract.family ||
       record.lineageStatus !== contract.lineage.kind ||
+      !sameValues(
+        record.trainingLineageIds,
+        contract.lineage.trainingLineageIds,
+      ) ||
+      !sameValues(
+        record.fineTuneLineageIds,
+        contract.lineage.fineTuneLineageIds,
+      ) ||
+      !sameValues(
+        record.sharedDerivationIds,
+        contract.lineage.sharedDerivationIds,
+      ) ||
       record.locality !== contract.locality ||
+      !sameValues(record.modalities, contract.modalities) ||
       record.contextWindow !== contract.contextWindow ||
       record.dataPolicyId !== contract.dataPolicyId ||
       record.costProfileId !== contract.costProfileId ||
@@ -127,7 +171,8 @@ export const CellPlanRecordSchema = OperationalMetadataSchema.extend({
       record.criterionDigest !== contract.criterionRef.criterionDigest ||
       record.branchId !== contract.branchId ||
       record.inputDigest !== contract.inputDigest ||
-      record.templateVersion !== String(contract.templateVersion)
+      record.templateVersion !== String(contract.templateVersion) ||
+      record.outputContractVersion !== contract.outputContract.schemaVersion
     )
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -139,6 +184,7 @@ export const CellPlanRecordSchema = OperationalMetadataSchema.extend({
 export const ResearchPositionRecordSchema = z
   .object({
     contract: ResearchPositionSchema,
+    admission: AdmissionDecisionRecordSchema,
     id: z.string().min(1),
     cellPlanId: z.string().min(1),
     programId: z.string().min(1),
@@ -153,10 +199,10 @@ export const ResearchPositionRecordSchema = z
     claimIds: z.array(z.string().min(1)),
     evidenceIds: z.array(z.string().min(1)),
     hypothesisIds: z.array(z.string().min(1)),
-    proposalRefs: z.array(z.string().min(1)),
-    usage: z.unknown(),
-    uncertaintyCode: z.string().min(1).nullable(),
-    failureCode: z.string().min(1).nullable(),
+    proposalRefs: z.array(ProposalReferenceSchema),
+    usage: ModelUsageSchema,
+    uncertaintyCodes: z.array(z.string().min(1)),
+    failureCodes: z.array(z.string().min(1)),
     body: z.unknown(),
     recordedAt: z.string().datetime(),
   })
@@ -164,9 +210,25 @@ export const ResearchPositionRecordSchema = z
   .superRefine((record, context) => {
     if (
       record.id !== record.contract.id ||
+      record.admission.subjectDigest !== record.contract.canonicalDigest ||
+      record.cellPlanId !== record.contract.cellPlanId ||
+      record.programId !== record.contract.programId ||
+      record.workItemId !== record.contract.workItemId ||
       record.positionDigest !== record.contract.canonicalDigest ||
+      record.modelProfileVersionId !== record.contract.modelProfileVersionId ||
+      record.inputDigest !== record.contract.inputDigest ||
+      record.outputSchemaVersion !== record.contract.outputSchemaVersion ||
       record.criterionId !== record.contract.criterionRef.criterionId ||
-      record.criterionDigest !== record.contract.criterionRef.criterionDigest
+      record.criterionDigest !== record.contract.criterionRef.criterionDigest ||
+      !sameValues(record.claimIds, record.contract.claimIds) ||
+      !sameValues(record.evidenceIds, record.contract.evidenceIds) ||
+      !sameValues(record.hypothesisIds, record.contract.hypothesisIds) ||
+      !sameJson(record.proposalRefs, record.contract.proposalRefs) ||
+      !sameJson(record.usage, record.contract.usage) ||
+      !sameValues(record.uncertaintyCodes, record.contract.uncertaintyCodes) ||
+      !sameValues(record.failureCodes, record.contract.failureCodes) ||
+      !sameJson(record.body, record.contract) ||
+      record.recordedAt !== record.contract.createdAt
     )
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -174,10 +236,59 @@ export const ResearchPositionRecordSchema = z
         message: 'position record metadata drifts from domain contract',
       });
   });
+export const ReviewAssignmentRecordSchema = z
+  .object({
+    contract: ReviewAssignmentSchema,
+    id: z.string().min(1),
+    programId: z.string().min(1),
+    workItemId: z.string().min(1),
+    targetPositionId: z.string().min(1),
+    reviewerAgentId: z.string().min(1),
+    reviewerModelProfileVersionId: z.string().min(1),
+    reviewerRole: z.string().min(1),
+    targetAuthorAgentId: z.string().min(1),
+    targetModelProfileVersionId: z.string().min(1),
+    targetRole: z.string().min(1),
+    criterionId: z.string().min(1),
+    criterionDigest: DigestSchema,
+    blind: z.boolean(),
+    assignmentDigest: DigestSchema,
+    recordedAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((record, context) => {
+    const contract = record.contract;
+    if (
+      record.id !== contract.id ||
+      record.programId !== contract.programId ||
+      record.workItemId !== contract.workItemId ||
+      record.targetPositionId !== contract.targetPositionId ||
+      record.reviewerAgentId !== contract.reviewerAgentId ||
+      record.reviewerModelProfileVersionId !==
+        contract.reviewerModelProfileVersionId ||
+      record.reviewerRole !== contract.reviewerRole ||
+      record.targetAuthorAgentId !== contract.targetAuthorAgentId ||
+      record.targetModelProfileVersionId !==
+        contract.targetModelProfileVersionId ||
+      record.targetRole !== contract.targetRole ||
+      record.criterionId !== contract.criterionRef.criterionId ||
+      record.criterionDigest !== contract.criterionRef.criterionDigest ||
+      record.blind !== contract.blind ||
+      record.assignmentDigest !== canonicalDigest(contract) ||
+      record.recordedAt !== contract.assignedAt
+    )
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['contract'],
+        message: 'review assignment metadata drifts from domain contract',
+      });
+  });
 export const ResearchReviewRecordSchema = z
   .object({
     contract: ResearchReviewSchema,
+    admission: AdmissionDecisionRecordSchema,
     id: z.string().min(1),
+    assignmentId: z.string().min(1),
     positionId: z.string().min(1),
     cellPlanId: z.string().min(1),
     programId: z.string().min(1),
@@ -194,9 +305,9 @@ export const ResearchReviewRecordSchema = z
     claimIds: z.array(z.string().min(1)),
     evidenceIds: z.array(z.string().min(1)),
     hypothesisIds: z.array(z.string().min(1)),
-    usage: z.unknown(),
-    uncertaintyCode: z.string().min(1).nullable(),
-    failureCode: z.string().min(1).nullable(),
+    usage: ModelUsageSchema,
+    uncertaintyCodes: z.array(z.string().min(1)),
+    failureCodes: z.array(z.string().min(1)),
     reasons: z.array(z.string().min(1)),
     body: z.unknown(),
     recordedAt: z.string().datetime(),
@@ -205,13 +316,28 @@ export const ResearchReviewRecordSchema = z
   .superRefine((record, context) => {
     if (
       record.id !== record.contract.id ||
+      record.admission.subjectDigest !== record.contract.canonicalDigest ||
+      record.assignmentId !== record.contract.assignmentId ||
       record.positionId !== record.contract.targetPositionId ||
+      record.programId !== record.contract.programId ||
+      record.workItemId !== record.contract.workItemId ||
       record.reviewDigest !== record.contract.canonicalDigest ||
       record.modelProfileVersionId !==
         record.contract.reviewerModelProfileVersionId ||
       record.criterionId !== record.contract.criterionRef.criterionId ||
       record.criterionDigest !== record.contract.criterionRef.criterionDigest ||
-      record.verdict !== record.contract.verdict
+      record.inputDigest !== record.contract.inputDigest ||
+      record.outputSchemaVersion !== record.contract.outputSchemaVersion ||
+      record.verdict !== record.contract.verdict ||
+      !sameValues(record.claimIds, record.contract.checkedClaimIds) ||
+      !sameValues(record.evidenceIds, record.contract.checkedEvidenceIds) ||
+      !sameValues(record.hypothesisIds, record.contract.checkedHypothesisIds) ||
+      !sameJson(record.usage, record.contract.usage) ||
+      !sameValues(record.uncertaintyCodes, record.contract.uncertaintyCodes) ||
+      !sameValues(record.failureCodes, record.contract.failureCodes) ||
+      !sameValues(record.reasons, record.contract.reasonCodes) ||
+      !sameJson(record.body, record.contract) ||
+      record.recordedAt !== record.contract.createdAt
     )
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -243,7 +369,12 @@ export const DissentReportRecordSchema = z
       record.programId !== record.contract.programId ||
       record.reportDigest !== record.contract.canonicalDigest ||
       record.criterionId !== record.contract.criterionRef.criterionId ||
-      record.criterionDigest !== record.contract.criterionRef.criterionDigest
+      record.criterionDigest !== record.contract.criterionRef.criterionDigest ||
+      !sameValues(record.claimIds, record.contract.claimIds) ||
+      !sameValues(record.evidenceIds, record.contract.evidenceIds) ||
+      !sameValues(record.minorityPositionIds, record.contract.positionIds) ||
+      !sameJson(record.body, record.contract) ||
+      record.recordedAt !== record.contract.createdAt
     )
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -274,7 +405,11 @@ export const CorrelationAssessmentRecordSchema = z
         record.contract.candidateModelProfileVersionId ||
       record.policyVersion !== record.contract.policyVersion ||
       record.correlationScore !== record.contract.correlationScore ||
-      record.assessmentDigest !== record.contract.canonicalDigest
+      record.independenceVerdict !==
+        (record.contract.independent ? 'independent' : 'correlated') ||
+      !sameValues(record.reasons, record.contract.reasonCodes) ||
+      record.assessmentDigest !== record.contract.canonicalDigest ||
+      record.assessedAt !== record.contract.assessedAt
     )
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -286,6 +421,7 @@ export const CorrelationAssessmentRecordSchema = z
 export const RejectedAuditResidueRecordSchema = z
   .object({
     id: z.string().min(1),
+    decision: z.literal('rejected'),
     programId: z.string().min(1),
     subjectType: z.enum([
       'model-profile-version',
@@ -299,11 +435,21 @@ export const RejectedAuditResidueRecordSchema = z
     subjectId: z.string().min(1),
     reasonCode: z.string().min(1),
     policyVersion: z.string().min(1),
+    policyDigest: DigestSchema,
+    reasonCodes: z.array(z.string().min(1)).min(1),
     payloadDigest: DigestSchema,
     payload: z.unknown(),
     recordedAt: z.string().datetime(),
   })
-  .strict();
+  .strict()
+  .superRefine((record, context) => {
+    if (!record.reasonCodes.includes(record.reasonCode))
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['reasonCodes'],
+        message: 'rejected decision must retain its primary reason code',
+      });
+  });
 
 export const CellReceiptRecordSchema = z
   .object({
@@ -323,11 +469,17 @@ export type ModelProfileRecord = z.infer<typeof ModelProfileRecordSchema>;
 export type ModelProfileVersionRecord = z.infer<
   typeof ModelProfileVersionRecordSchema
 >;
+export type ModelLineageEdgeRecord = z.infer<
+  typeof ModelLineageEdgeRecordSchema
+>;
 export type CellPlanRecord = z.infer<typeof CellPlanRecordSchema>;
 export type ResearchPositionRecord = z.infer<
   typeof ResearchPositionRecordSchema
 >;
 export type ResearchReviewRecord = z.infer<typeof ResearchReviewRecordSchema>;
+export type ReviewAssignmentRecord = z.infer<
+  typeof ReviewAssignmentRecordSchema
+>;
 export type DissentReportRecord = z.infer<typeof DissentReportRecordSchema>;
 export type CorrelationAssessmentRecord = z.infer<
   typeof CorrelationAssessmentRecordSchema
@@ -362,6 +514,7 @@ export interface ReconstructedResearchCellState {
   readonly modelProfileVersions: readonly ModelProfileVersionRecord[];
   readonly cellPlans: readonly CellPlanRecord[];
   readonly positions: readonly ResearchPositionRecord[];
+  readonly reviewAssignments: readonly ReviewAssignmentRecord[];
   readonly reviews: readonly ResearchReviewRecord[];
   readonly dissentReports: readonly DissentReportRecord[];
   readonly correlationAssessments: readonly CorrelationAssessmentRecord[];
@@ -381,6 +534,9 @@ export interface ModelLineageRepository {
   listModelProfileVersions(
     profileId: string,
   ): Promise<readonly ModelProfileVersionRecord[]>;
+  listModelLineageEdges(
+    versionId: string,
+  ): Promise<readonly ModelLineageEdgeRecord[]>;
 }
 
 export interface ResearchCellRepository {
@@ -389,6 +545,9 @@ export interface ResearchCellRepository {
   recordPosition(
     input: ResearchPositionRecord,
   ): Promise<ResearchPositionRecord>;
+  recordReviewAssignment(
+    input: ReviewAssignmentRecord,
+  ): Promise<ReviewAssignmentRecord>;
   recordReview(input: ResearchReviewRecord): Promise<ResearchReviewRecord>;
   recordDissent(input: DissentReportRecord): Promise<DissentReportRecord>;
   recordCorrelation(
@@ -449,6 +608,9 @@ export function parseResearchCellState(
     positions: input.positions.map((row) =>
       ResearchPositionRecordSchema.parse(row),
     ),
+    reviewAssignments: input.reviewAssignments.map((row) =>
+      ReviewAssignmentRecordSchema.parse(row),
+    ),
     reviews: input.reviews.map((row) => ResearchReviewRecordSchema.parse(row)),
     dissentReports: input.dissentReports.map((row) =>
       DissentReportRecordSchema.parse(row),
@@ -461,4 +623,17 @@ export function parseResearchCellState(
     ),
     receipts: input.receipts.map((row) => CellReceiptRecordSchema.parse(row)),
   };
+}
+
+function sameValues(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length && left.every((value, i) => value === right[i])
+  );
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return canonicalDigest(left) === canonicalDigest(right);
 }

@@ -5,14 +5,18 @@ import {
   cellInputDigest,
   modelProfileVersionDigest,
   researchPositionDigest,
+  researchReviewDigest,
   type CellInput,
   type ModelProfileVersion as DomainModelProfileVersion,
   type ResearchPosition as DomainResearchPosition,
+  type ResearchReview as DomainResearchReview,
 } from '@mammoth/domain';
 import type {
   CellPlanRecord,
   ModelProfileVersionRecord,
   ResearchPositionRecord,
+  ResearchReviewRecord,
+  ReviewAssignmentRecord,
 } from '@mammoth/persistence';
 import type {
   PostgresConnection,
@@ -131,8 +135,12 @@ describe('research-cell migration', () => {
     expect(migration?.sql).toContain(
       'create table mammoth_model_profile_versions',
     );
+    expect(migration?.sql).toContain(
+      'create table mammoth_model_lineage_edges',
+    );
     expect(migration?.sql).toContain('create table mammoth_cell_plans');
     expect(migration?.sql).toContain('create table mammoth_research_positions');
+    expect(migration?.sql).toContain('create table mammoth_review_assignments');
     expect(migration?.sql).toContain('create table mammoth_research_reviews');
     expect(migration?.sql).toContain('create table mammoth_dissent_reports');
     expect(migration?.sql).toContain(
@@ -153,6 +161,15 @@ describe('research-cell migration', () => {
     );
     expect(migration?.sql).toContain(
       'immutable research-cell row cannot be changed',
+    );
+    expect(migration?.sql).toContain(
+      "admission_decision text not null check (admission_decision = 'admitted')",
+    );
+    expect(migration?.sql).toContain(
+      "decision text not null check (decision = 'rejected')",
+    );
+    expect(migration?.sql).toContain(
+      'parent_version_id text not null references mammoth_model_profile_versions(id)',
     );
     expect(foundationMigrations.map(({ version }) => version)).toEqual([
       1, 2, 3, 4, 5,
@@ -324,6 +341,8 @@ describe('Postgres research-cell repositories', () => {
 
   it('appends immutable model-profile versions without rewriting historical lineage', async () => {
     const database = new RecordingDatabase();
+    database.handler = (sql) =>
+      sql.includes('with recursive ancestry') ? empty(0) : empty(1);
     const version = modelVersion();
 
     await new PostgresModelLineageRepository(database, {
@@ -345,6 +364,55 @@ describe('Postgres research-cell repositories', () => {
         'checkpoint-a',
       ]),
     );
+  });
+
+  it('persists typed lineage edges only after every parent exists', async () => {
+    const database = new RecordingDatabase();
+    database.handler = (sql) => {
+      if (sql.includes('where id = any')) return result({ id: 'version-1' });
+      if (sql.includes('with recursive ancestry')) return empty(0);
+      return empty(1);
+    };
+
+    await new PostgresModelLineageRepository(database, {
+      transaction,
+      now: () => now,
+    }).appendModelProfileVersion(childModelVersion(['version-1']));
+
+    const edge = database.calls.find((call) =>
+      call.sql.includes('insert into mammoth_model_lineage_edges'),
+    );
+    expect(edge?.parameters).toEqual([
+      'version-child',
+      'version-1',
+      'parent',
+      now,
+    ]);
+  });
+
+  it('fails the append transaction on dangling or cyclic model lineage', async () => {
+    const dangling = new RecordingDatabase();
+    dangling.handler = (sql) =>
+      sql.includes('where id = any') ? empty(0) : empty(1);
+    await expect(
+      new PostgresModelLineageRepository(dangling, {
+        transaction,
+        now: () => now,
+      }).appendModelProfileVersion(childModelVersion(['missing'])),
+    ).rejects.toThrow(/dangling model lineage/);
+
+    const cyclic = new RecordingDatabase();
+    cyclic.handler = (sql) => {
+      if (sql.includes('where id = any')) return result({ id: 'version-1' });
+      if (sql.includes('with recursive ancestry')) return result({ cycle: 1 });
+      return empty(1);
+    };
+    await expect(
+      new PostgresModelLineageRepository(cyclic, {
+        transaction,
+        now: () => now,
+      }).appendModelProfileVersion(childModelVersion(['version-1'])),
+    ).rejects.toThrow(/cyclic model lineage/);
   });
 
   it('uses revision and fencing predicates when updating cell-plan state', async () => {
@@ -412,6 +480,28 @@ describe('Postgres research-cell repositories', () => {
     expect(database.calls).toHaveLength(0);
   });
 
+  it('rejects duplicated position references and admission provenance that drift', async () => {
+    const repository = new PostgresResearchCellRepository(
+      new RecordingDatabase(),
+      { transaction, now: () => now },
+    );
+    await expect(
+      repository.recordPosition({
+        ...position(),
+        claimIds: ['claim-not-in-contract'],
+      }),
+    ).rejects.toThrow(/drifts from domain contract/);
+    await expect(
+      repository.recordPosition({
+        ...position(),
+        admission: {
+          ...position().admission,
+          subjectDigest: canonicalDigest({ wrong: 'subject' }),
+        },
+      }),
+    ).rejects.toThrow(/drifts from domain contract/);
+  });
+
   it('records immutable positions with claim and evidence IDs as typed references', async () => {
     const database = new RecordingDatabase();
     const pos = position();
@@ -431,6 +521,51 @@ describe('Postgres research-cell repositories', () => {
         'program-1',
         JSON.stringify(['claim-1']),
         JSON.stringify(['evidence-1']),
+      ]),
+    );
+  });
+
+  it('persists immutable blind-review assignments before reviews', async () => {
+    const database = new RecordingDatabase();
+    const assignment = reviewAssignment();
+
+    await new PostgresResearchCellRepository(database, {
+      transaction,
+      now: () => now,
+    }).recordReviewAssignment(assignment);
+
+    expect(database.calls[0]?.sql).toContain(
+      'insert into mammoth_review_assignments',
+    );
+    expect(database.calls[0]?.parameters).toEqual(
+      expect.arrayContaining([
+        assignment.id,
+        assignment.targetPositionId,
+        assignment.reviewerModelProfileVersionId,
+        assignment.assignmentDigest,
+      ]),
+    );
+  });
+
+  it('writes every admitted review envelope field with stable SQL parameters', async () => {
+    const database = new RecordingDatabase();
+    const review = researchReview();
+
+    await new PostgresResearchCellRepository(database, {
+      transaction,
+      now: () => now,
+    }).recordReview(review);
+
+    expect(database.calls[0]?.sql).toContain(
+      'insert into mammoth_research_reviews',
+    );
+    expect(database.calls[0]?.sql).toContain('$31::jsonb');
+    expect(database.calls[0]?.parameters).toHaveLength(31);
+    expect(database.calls[0]?.parameters).toEqual(
+      expect.arrayContaining([
+        review.assignmentId,
+        review.admission.policyDigest,
+        JSON.stringify(review.admission.reasonCodes),
       ]),
     );
   });
@@ -457,6 +592,9 @@ describe('Postgres research-cell repositories', () => {
       subjectId: 'position-1',
       reasonCode: 'criterion-drift',
       policyVersion: 'admission@1',
+      policyDigest: canonicalDigest({ policy: 'admission@1' }),
+      reasonCodes: ['criterion-drift'],
+      decision: 'rejected',
       payloadDigest: canonicalDigest(residuePayload),
       payload: residuePayload,
       recordedAt: now,
@@ -571,6 +709,140 @@ function modelVersion(): ModelProfileVersionRecord {
     metadata: {},
   };
 }
+function childModelVersion(
+  parentVersionIds: readonly string[],
+): ModelProfileVersionRecord {
+  const parent = modelVersion();
+  const base: DomainModelProfileVersion = {
+    ...parent.contract,
+    id: 'version-child',
+    providerModelId: 'model-child',
+    checkpoint: 'checkpoint-child',
+    lineage: {
+      ...parent.contract.lineage,
+      parentVersionIds: [...parentVersionIds],
+    },
+    immutableDigest: canonicalDigest('placeholder'),
+  };
+  const contract = {
+    ...base,
+    immutableDigest: modelProfileVersionDigest(base),
+  };
+  return {
+    ...parent,
+    contract,
+    id: contract.id,
+    profileRevision: 2,
+    modelName: contract.providerModelId,
+    checkpoint: contract.checkpoint,
+  };
+}
+function reviewAssignment(): ReviewAssignmentRecord {
+  const contract: ReviewAssignmentRecord['contract'] = {
+    id: 'assignment-1',
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    programId: 'program-1',
+    workItemId: 'work-review-1',
+    targetPositionId: 'position-1',
+    reviewerAgentId: 'agent-reviewer',
+    reviewerModelProfileVersionId: 'version-reviewer',
+    reviewerRole: 'falsifier',
+    targetAuthorAgentId: 'agent-1',
+    targetModelProfileVersionId: 'version-1',
+    targetRole: 'lateralist',
+    criterionRef: cellPlan().contract.criterionRef,
+    blind: true,
+    assignedAt: now,
+  };
+  return {
+    contract,
+    id: contract.id,
+    programId: contract.programId,
+    workItemId: contract.workItemId,
+    targetPositionId: contract.targetPositionId,
+    reviewerAgentId: contract.reviewerAgentId,
+    reviewerModelProfileVersionId: contract.reviewerModelProfileVersionId,
+    reviewerRole: contract.reviewerRole,
+    targetAuthorAgentId: contract.targetAuthorAgentId,
+    targetModelProfileVersionId: contract.targetModelProfileVersionId,
+    targetRole: contract.targetRole,
+    criterionId: contract.criterionRef.criterionId,
+    criterionDigest: contract.criterionRef.criterionDigest,
+    blind: contract.blind,
+    assignmentDigest: canonicalDigest(contract),
+    recordedAt: contract.assignedAt,
+  };
+}
+function researchReview(): ResearchReviewRecord {
+  const assignment = reviewAssignment();
+  const base: DomainResearchReview = {
+    id: 'review-1',
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    assignmentId: assignment.id,
+    programId: assignment.programId,
+    workItemId: assignment.workItemId,
+    targetPositionId: assignment.targetPositionId,
+    reviewerAgentId: assignment.reviewerAgentId,
+    reviewerModelProfileVersionId: assignment.reviewerModelProfileVersionId,
+    reviewerRole: assignment.reviewerRole,
+    criterionRef: assignment.contract.criterionRef,
+    inputDigest: canonicalDigest({ review: assignment.id }),
+    outputSchemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    verdict: 'reject',
+    reasonCodes: ['unsupported-claim'],
+    checkedClaimIds: ['claim-1'],
+    checkedEvidenceIds: ['evidence-1'],
+    checkedHypothesisIds: ['hypothesis-1'],
+    checkedArtifactIds: [],
+    usage: {
+      inputTokens: 2,
+      outputTokens: 3,
+      costUsd: 0.02,
+      latencyMs: 20,
+    },
+    uncertaintyCodes: [],
+    failureCodes: [],
+    receiptRefs: [],
+    canonicalDigest: canonicalDigest('placeholder'),
+    createdAt: now,
+  };
+  const contract = { ...base, canonicalDigest: researchReviewDigest(base) };
+  return {
+    contract,
+    admission: {
+      decision: 'admitted',
+      policyVersion: 'review-admission@1',
+      policyDigest: canonicalDigest({ policy: 'review-admission@1' }),
+      subjectDigest: contract.canonicalDigest,
+      reasonCodes: ['admitted'],
+      decidedAt: now,
+    },
+    id: contract.id,
+    assignmentId: contract.assignmentId,
+    positionId: contract.targetPositionId,
+    cellPlanId: 'cell-plan-1',
+    programId: contract.programId,
+    workItemId: contract.workItemId,
+    criterionId: contract.criterionRef.criterionId,
+    criterionDigest: contract.criterionRef.criterionDigest,
+    modelProfileId: 'profile-reviewer',
+    modelProfileVersionId: contract.reviewerModelProfileVersionId,
+    reviewerRole: contract.reviewerRole,
+    inputDigest: contract.inputDigest,
+    outputSchemaVersion: contract.outputSchemaVersion,
+    reviewDigest: contract.canonicalDigest,
+    verdict: contract.verdict,
+    claimIds: contract.checkedClaimIds,
+    evidenceIds: contract.checkedEvidenceIds,
+    hypothesisIds: contract.checkedHypothesisIds,
+    usage: contract.usage,
+    uncertaintyCodes: contract.uncertaintyCodes,
+    failureCodes: contract.failureCodes,
+    reasons: contract.reasonCodes,
+    body: contract,
+    recordedAt: contract.createdAt,
+  };
+}
 function cellPlan(): CellPlanRecord {
   const input: CellInput = {
     schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
@@ -614,7 +886,7 @@ function cellPlan(): CellPlanRecord {
     branchId: 'main',
     role: 'lateralist',
     inputDigest: authoritativeInputDigest,
-    outputContractVersion: 'position@1',
+    outputContractVersion: RESEARCH_CELL_CONTRACT_VERSION,
     status: 'planned',
     revision: 1,
     fencingToken: 5,
@@ -661,10 +933,17 @@ function positionContract(): DomainResearchPosition {
   return { ...base, canonicalDigest: researchPositionDigest(base) };
 }
 function position(): ResearchPositionRecord {
-  const body = { answer: 'candidate', claimIds: ['claim-1'] };
   const contract = positionContract();
   return {
     contract,
+    admission: {
+      decision: 'admitted',
+      policyVersion: 'admission@1',
+      policyDigest: canonicalDigest({ policy: 'admission@1' }),
+      subjectDigest: contract.canonicalDigest,
+      reasonCodes: ['admitted'],
+      decidedAt: now,
+    },
     id: 'position-1',
     cellPlanId: 'cell-plan-1',
     programId: 'program-1',
@@ -674,16 +953,16 @@ function position(): ResearchPositionRecord {
     modelProfileId: 'profile-1',
     modelProfileVersionId: 'version-1',
     inputDigest: contract.inputDigest,
-    outputSchemaVersion: 'position@1',
+    outputSchemaVersion: contract.outputSchemaVersion,
     positionDigest: contract.canonicalDigest,
     claimIds: ['claim-1'],
     evidenceIds: ['evidence-1'],
     hypothesisIds: ['hypothesis-1'],
-    proposalRefs: ['proposal-1'],
-    usage: { inputTokens: 1, outputTokens: 2, costUsd: 0.01 },
-    uncertaintyCode: null,
-    failureCode: null,
-    body,
+    proposalRefs: contract.proposalRefs,
+    usage: contract.usage,
+    uncertaintyCodes: contract.uncertaintyCodes,
+    failureCodes: contract.failureCodes,
+    body: contract,
     recordedAt: now,
   };
 }
@@ -770,9 +1049,15 @@ function positionRow(): Row {
     hypothesis_ids: pos.hypothesisIds,
     proposal_refs: pos.proposalRefs,
     usage: pos.usage,
-    uncertainty_code: pos.uncertaintyCode,
-    failure_code: pos.failureCode,
+    uncertainty_codes: pos.uncertaintyCodes,
+    failure_codes: pos.failureCodes,
     body: pos.body,
+    admission_decision: pos.admission.decision,
+    admission_policy_version: pos.admission.policyVersion,
+    admission_policy_digest: pos.admission.policyDigest,
+    admission_subject_digest: pos.admission.subjectDigest,
+    admission_reason_codes: pos.admission.reasonCodes,
+    admission_decided_at: pos.admission.decidedAt,
     recorded_at: pos.recordedAt,
     authoritative_contract: pos.contract,
   };
