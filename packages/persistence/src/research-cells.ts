@@ -29,6 +29,15 @@ export const P4_ADMISSION_POLICY_DIGEST = canonicalDigest({
   policy: 'research-cell-admission',
   version: P4_ADMISSION_POLICY_VERSION,
 });
+export const P5_BUDGET_CANCELLATION_CONTRACT_VERSION = '1.0.0';
+
+const BudgetAmountSchema = z
+  .object({
+    costUsd: z.number().finite().nonnegative(),
+    tokens: z.number().int().nonnegative(),
+    durationMs: z.number().int().nonnegative(),
+  })
+  .strict();
 
 const OperationalMetadataSchema = z
   .object({
@@ -471,6 +480,232 @@ export const CellReceiptRecordSchema = z
   })
   .strict();
 
+export const IsolationCommitRecordSchema = z
+  .object({
+    id: z.string().min(1),
+    positionId: z.string().min(1),
+    cellPlanId: z.string().min(1),
+    programId: z.string().min(1),
+    workItemId: z.string().min(1),
+    criterionId: z.string().min(1),
+    criterionDigest: DigestSchema,
+    inputDigest: DigestSchema,
+    outputDigest: DigestSchema,
+    positionDigest: DigestSchema,
+    isolationProtocolVersion: z.literal('1.0.0'),
+    auditSequence: z.number().int().nonnegative(),
+    committedAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((record, context) => {
+    if (record.positionDigest !== record.outputDigest)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['outputDigest'],
+        message: 'isolation commit output digest must bind the position digest',
+      });
+  });
+
+export const IsolationRevealRecordSchema = z
+  .object({
+    id: z.string().min(1),
+    positionId: z.string().min(1),
+    cellPlanId: z.string().min(1),
+    programId: z.string().min(1),
+    revealDigest: DigestSchema,
+    revealedToPositionIds: z.array(z.string().min(1)),
+    auditSequence: z.number().int().nonnegative(),
+    revealedAt: z.string().datetime(),
+  })
+  .strict();
+
+export const SanitizedReviewContextRecordSchema = z
+  .object({
+    id: z.string().min(1),
+    assignmentId: z.string().min(1),
+    targetPositionId: z.string().min(1),
+    programId: z.string().min(1),
+    contractVersion: z.literal('1.0.0'),
+    contextDigest: DigestSchema,
+    payload: z.unknown(),
+    createdAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((record, context) => {
+    if (canonicalDigest(record.payload) !== record.contextDigest)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['contextDigest'],
+        message: 'sanitized review context digest mismatch',
+      });
+  });
+
+export const CellAttemptRecordSchema = z
+  .object({
+    id: z.string().min(1),
+    cellPlanId: z.string().min(1),
+    workItemId: z.string().min(1),
+    programId: z.string().min(1),
+    attempt: z.number().int().positive(),
+    ownerId: z.string().min(1),
+    fencingToken: z.number().int().positive(),
+    state: z.enum([
+      'started',
+      'committed',
+      'revealed',
+      'settling',
+      'completed',
+      'failed',
+      'cancelled',
+    ]),
+    partialResultDigest: DigestSchema.optional(),
+    partialResult: z.unknown().optional(),
+    startedAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((record, context) => {
+    if (
+      record.partialResultDigest &&
+      canonicalDigest(record.partialResult) !== record.partialResultDigest
+    )
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['partialResultDigest'],
+        message: 'partial result digest mismatch',
+      });
+  });
+
+export const BudgetReservationRecordSchema = z
+  .object({
+    id: z.string().min(1),
+    stableIdentity: z.string().min(1),
+    programId: z.string().min(1),
+    workItemId: z.string().min(1),
+    attemptId: z.string().min(1),
+    ceiling: BudgetAmountSchema,
+    state: z.enum(['reserved', 'settled', 'released', 'cancelled']),
+    revision: z.number().int().nonnegative(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })
+  .strict();
+export type BudgetReservationRecord = z.infer<
+  typeof BudgetReservationRecordSchema
+>;
+
+export const BudgetSettlementRecordSchema = z
+  .object({
+    id: z.string().min(1),
+    stableIdentity: z.string().min(1),
+    reservationId: z.string().min(1),
+    amount: BudgetAmountSchema,
+    receiptDigest: DigestSchema,
+    payload: z.unknown(),
+    settledAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((record, context) => {
+    if (canonicalDigest(record.payload) !== record.receiptDigest)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['receiptDigest'],
+        message: 'settlement receipt digest mismatch',
+      });
+  });
+export type BudgetSettlementRecord = z.infer<
+  typeof BudgetSettlementRecordSchema
+>;
+
+export const BudgetReleaseRecordSchema = z
+  .object({
+    id: z.string().min(1),
+    stableIdentity: z.string().min(1),
+    reservationId: z.string().min(1),
+    reason: z.string().min(1),
+    receiptDigest: DigestSchema,
+    payload: z.unknown(),
+    releasedAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((record, context) => {
+    if (canonicalDigest(record.payload) !== record.receiptDigest)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['receiptDigest'],
+        message: 'release receipt digest mismatch',
+      });
+  });
+export type BudgetReleaseRecord = z.infer<typeof BudgetReleaseRecordSchema>;
+
+export const ProviderChargeRecordSchema = z
+  .object({
+    id: z.string().min(1),
+    stableIdentity: z.string().min(1),
+    reservationId: z.string().min(1),
+    provider: z.string().min(1),
+    providerReceiptId: z.string().min(1),
+    amount: BudgetAmountSchema,
+    receiptDigest: DigestSchema,
+    payload: z.unknown(),
+    chargedAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((record, context) => {
+    if (canonicalDigest(record.payload) !== record.receiptDigest)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['receiptDigest'],
+        message: 'provider charge receipt digest mismatch',
+      });
+  });
+export type ProviderChargeRecord = z.infer<typeof ProviderChargeRecordSchema>;
+
+export const CancellationReceiptRecordSchema = z
+  .object({
+    id: z.string().min(1),
+    stableIdentity: z.string().min(1),
+    reservationId: z.string().min(1).optional(),
+    attemptId: z.string().min(1),
+    programId: z.string().min(1),
+    workItemId: z.string().min(1),
+    cancellationPhase: z.enum([
+      'before_dispatch',
+      'during_generation',
+      'after_commit_before_reveal',
+      'during_review',
+      'during_settlement',
+    ]),
+    consumed: BudgetAmountSchema,
+    released: BudgetAmountSchema,
+    partialResultDigest: DigestSchema.optional(),
+    partialResult: z.unknown().optional(),
+    receiptDigest: DigestSchema,
+    payload: z.unknown(),
+    cancelledAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((record, context) => {
+    if (canonicalDigest(record.payload) !== record.receiptDigest)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['receiptDigest'],
+        message: 'cancellation receipt digest mismatch',
+      });
+    if (
+      record.partialResultDigest &&
+      canonicalDigest(record.partialResult) !== record.partialResultDigest
+    )
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['partialResultDigest'],
+        message: 'cancellation partial result digest mismatch',
+      });
+  });
+export type CancellationReceiptRecord = z.infer<
+  typeof CancellationReceiptRecordSchema
+>;
+
 export type ModelProfileRecord = z.infer<typeof ModelProfileRecordSchema>;
 export type ModelProfileVersionRecord = z.infer<
   typeof ModelProfileVersionRecordSchema
@@ -494,6 +729,12 @@ export type RejectedAuditResidueRecord = z.infer<
   typeof RejectedAuditResidueRecordSchema
 >;
 export type CellReceiptRecord = z.infer<typeof CellReceiptRecordSchema>;
+export type IsolationCommitRecord = z.infer<typeof IsolationCommitRecordSchema>;
+export type IsolationRevealRecord = z.infer<typeof IsolationRevealRecordSchema>;
+export type SanitizedReviewContextRecord = z.infer<
+  typeof SanitizedReviewContextRecordSchema
+>;
+export type CellAttemptRecord = z.infer<typeof CellAttemptRecordSchema>;
 
 export type AdmissionPersistenceResult<T> =
   | { readonly decision: 'admitted'; readonly record: T }
@@ -535,6 +776,15 @@ export interface ReconstructedResearchCellState {
   readonly correlationAssessments: readonly CorrelationAssessmentRecord[];
   readonly rejectedResidue: readonly RejectedAuditResidueRecord[];
   readonly receipts: readonly CellReceiptRecord[];
+  readonly isolationCommits?: readonly IsolationCommitRecord[];
+  readonly isolationReveals?: readonly IsolationRevealRecord[];
+  readonly sanitizedReviewContexts?: readonly SanitizedReviewContextRecord[];
+  readonly cellAttempts?: readonly CellAttemptRecord[];
+  readonly budgetReservations?: readonly BudgetReservationRecord[];
+  readonly budgetSettlements?: readonly BudgetSettlementRecord[];
+  readonly budgetReleases?: readonly BudgetReleaseRecord[];
+  readonly providerCharges?: readonly ProviderChargeRecord[];
+  readonly cancellationReceipts?: readonly CancellationReceiptRecord[];
 }
 
 export interface ModelLineageRepository {
@@ -577,6 +827,32 @@ export interface ResearchCellRepository {
   reconstructProgram(
     programId: string,
   ): Promise<ReconstructedResearchCellState>;
+}
+
+export interface P5ResearchCellRepository extends ResearchCellRepository {
+  recordIsolationCommit(
+    input: IsolationCommitRecord,
+  ): Promise<IsolationCommitRecord>;
+  recordIsolationReveal(
+    input: IsolationRevealRecord,
+  ): Promise<IsolationRevealRecord>;
+  recordSanitizedReviewContext(
+    input: SanitizedReviewContextRecord,
+  ): Promise<SanitizedReviewContextRecord>;
+  recordCellAttempt(input: CellAttemptRecord): Promise<CellAttemptRecord>;
+  recordBudgetReservation(
+    input: BudgetReservationRecord,
+  ): Promise<BudgetReservationRecord>;
+  recordBudgetSettlement(
+    input: BudgetSettlementRecord,
+  ): Promise<BudgetSettlementRecord>;
+  recordBudgetRelease(input: BudgetReleaseRecord): Promise<BudgetReleaseRecord>;
+  recordProviderCharge(
+    input: ProviderChargeRecord,
+  ): Promise<ProviderChargeRecord>;
+  recordCancellationReceipt(
+    input: CancellationReceiptRecord,
+  ): Promise<CancellationReceiptRecord>;
 }
 
 export class PersistenceConflictError extends Error {
@@ -642,7 +918,449 @@ export function parseResearchCellState(
       RejectedAuditResidueRecordSchema.parse(row),
     ),
     receipts: input.receipts.map((row) => CellReceiptRecordSchema.parse(row)),
+    isolationCommits: (input.isolationCommits ?? []).map((row) =>
+      IsolationCommitRecordSchema.parse(row),
+    ),
+    isolationReveals: (input.isolationReveals ?? []).map((row) =>
+      IsolationRevealRecordSchema.parse(row),
+    ),
+    sanitizedReviewContexts: (input.sanitizedReviewContexts ?? []).map((row) =>
+      SanitizedReviewContextRecordSchema.parse(row),
+    ),
+    cellAttempts: (input.cellAttempts ?? []).map((row) =>
+      CellAttemptRecordSchema.parse(row),
+    ),
+    budgetReservations: (input.budgetReservations ?? []).map((row) =>
+      BudgetReservationRecordSchema.parse(row),
+    ),
+    budgetSettlements: (input.budgetSettlements ?? []).map((row) =>
+      BudgetSettlementRecordSchema.parse(row),
+    ),
+    budgetReleases: (input.budgetReleases ?? []).map((row) =>
+      BudgetReleaseRecordSchema.parse(row),
+    ),
+    providerCharges: (input.providerCharges ?? []).map((row) =>
+      ProviderChargeRecordSchema.parse(row),
+    ),
+    cancellationReceipts: (input.cancellationReceipts ?? []).map((row) =>
+      CancellationReceiptRecordSchema.parse(row),
+    ),
   };
+}
+
+export class InMemoryResearchCellRepository
+  implements P5ResearchCellRepository
+{
+  readonly #cellPlans = new Map<string, CellPlanRecord>();
+  readonly #positions = new Map<string, ResearchPositionRecord>();
+  readonly #reviewAssignments = new Map<string, ReviewAssignmentRecord>();
+  readonly #reviews = new Map<string, ResearchReviewRecord>();
+  readonly #dissent = new Map<string, DissentReportRecord>();
+  readonly #correlations = new Map<string, CorrelationAssessmentRecord>();
+  readonly #residue = new Map<string, RejectedAuditResidueRecord>();
+  readonly #receipts = new Map<string, CellReceiptRecord>();
+  readonly #commits = new Map<string, IsolationCommitRecord>();
+  readonly #reveals = new Map<string, IsolationRevealRecord>();
+  readonly #contexts = new Map<string, SanitizedReviewContextRecord>();
+  readonly #attempts = new Map<string, CellAttemptRecord>();
+  readonly #reservations = new Map<string, BudgetReservationRecord>();
+  readonly #settlements = new Map<string, BudgetSettlementRecord>();
+  readonly #releases = new Map<string, BudgetReleaseRecord>();
+  readonly #charges = new Map<string, ProviderChargeRecord>();
+  readonly #cancellations = new Map<string, CancellationReceiptRecord>();
+
+  constructor(input?: ReconstructedResearchCellState) {
+    if (!input) return;
+    const parsed = parseResearchCellState(input);
+    for (const row of parsed.cellPlans) this.#cellPlans.set(row.id, copy(row));
+    for (const row of parsed.positions) this.#positions.set(row.id, copy(row));
+    for (const row of parsed.reviewAssignments)
+      this.#reviewAssignments.set(row.id, copy(row));
+    for (const row of parsed.reviews) this.#reviews.set(row.id, copy(row));
+    for (const row of parsed.dissentReports)
+      this.#dissent.set(row.id, copy(row));
+    for (const row of parsed.correlationAssessments)
+      this.#correlations.set(row.id, copy(row));
+    for (const row of parsed.rejectedResidue)
+      this.#residue.set(row.id, copy(row));
+    for (const row of parsed.receipts) this.#receipts.set(row.id, copy(row));
+    for (const row of parsed.isolationCommits ?? [])
+      this.#commits.set(row.id, copy(row));
+    for (const row of parsed.isolationReveals ?? [])
+      this.#reveals.set(row.id, copy(row));
+    for (const row of parsed.sanitizedReviewContexts ?? [])
+      this.#contexts.set(row.id, copy(row));
+    for (const row of parsed.cellAttempts ?? [])
+      this.#attempts.set(row.id, copy(row));
+    for (const row of parsed.budgetReservations ?? [])
+      this.#reservations.set(row.id, copy(row));
+    for (const row of parsed.budgetSettlements ?? [])
+      this.#settlements.set(row.id, copy(row));
+    for (const row of parsed.budgetReleases ?? [])
+      this.#releases.set(row.id, copy(row));
+    for (const row of parsed.providerCharges ?? [])
+      this.#charges.set(row.id, copy(row));
+    for (const row of parsed.cancellationReceipts ?? [])
+      this.#cancellations.set(row.id, copy(row));
+  }
+
+  async createCellPlan(input: CellPlanRecord): Promise<CellPlanRecord> {
+    const record = CellPlanRecordSchema.parse(input);
+    this.#insert(this.#cellPlans, record.id, record, 'cell plan');
+    return copy(record);
+  }
+
+  async updateCellPlanStatus(
+    input: CellPlanStatusUpdate,
+  ): Promise<CellPlanRecord> {
+    const current = this.#cellPlans.get(input.id);
+    if (!current) throw new PersistenceIntegrityError('cell plan not found');
+    if (
+      current.revision !== input.expectedRevision ||
+      current.fencingToken !== input.expectedFencingToken
+    )
+      throw new PersistenceConflictError(
+        'stale cell plan revision or fencing token',
+      );
+    const next = CellPlanRecordSchema.parse({
+      ...current,
+      status: input.nextStatus,
+      revision: current.revision + 1,
+      fencingToken: current.fencingToken + 1,
+      updatedAt: current.updatedAt,
+    });
+    this.#cellPlans.set(next.id, copy(next));
+    return copy(next);
+  }
+
+  async recordPosition(input: ResearchPositionRecord) {
+    const record = ResearchPositionRecordSchema.parse(input);
+    this.#require(this.#cellPlans, record.cellPlanId, 'cell plan');
+    return this.#idempotentInsert(this.#positions, record.id, record);
+  }
+
+  async recordReviewAssignment(input: ReviewAssignmentRecord) {
+    const record = ReviewAssignmentRecordSchema.parse(input);
+    this.#require(this.#positions, record.targetPositionId, 'position');
+    this.#insert(
+      this.#reviewAssignments,
+      record.id,
+      record,
+      'review assignment',
+    );
+    return copy(record);
+  }
+
+  async recordReview(input: ResearchReviewRecord) {
+    const record = ResearchReviewRecordSchema.parse(input);
+    this.#require(
+      this.#reviewAssignments,
+      record.assignmentId,
+      'review assignment',
+    );
+    return this.#idempotentInsert(this.#reviews, record.id, record);
+  }
+
+  async recordDissent(input: DissentReportRecord) {
+    const record = DissentReportRecordSchema.parse(input);
+    this.#insert(this.#dissent, record.id, record, 'dissent');
+    return copy(record);
+  }
+
+  async recordCorrelation(input: CorrelationAssessmentRecord) {
+    const record = CorrelationAssessmentRecordSchema.parse(input);
+    this.#insert(this.#correlations, record.id, record, 'correlation');
+    return copy(record);
+  }
+
+  async recordRejectedResidue(input: RejectedAuditResidueRecord) {
+    const record = RejectedAuditResidueRecordSchema.parse(input);
+    assertPayloadDigest(
+      record.payload,
+      record.payloadDigest,
+      'rejected residue',
+    );
+    this.#insert(this.#residue, record.id, record, 'rejected residue');
+    return copy(record);
+  }
+
+  async recordReceipt(input: CellReceiptRecord) {
+    const record = CellReceiptRecordSchema.parse(input);
+    this.#insert(this.#receipts, record.id, record, 'cell receipt');
+    return copy(record);
+  }
+
+  async recordIsolationCommit(input: IsolationCommitRecord) {
+    const record = IsolationCommitRecordSchema.parse(input);
+    this.#require(this.#positions, record.positionId, 'position');
+    this.#uniqueBy(
+      this.#commits,
+      (row) => row.positionId === record.positionId,
+      'position isolation commit',
+    );
+    this.#insert(this.#commits, record.id, record, 'isolation commit');
+    return copy(record);
+  }
+
+  async recordIsolationReveal(input: IsolationRevealRecord) {
+    const record = IsolationRevealRecordSchema.parse(input);
+    const commit = [...this.#commits.values()].find(
+      (row) => row.positionId === record.positionId,
+    );
+    if (!commit)
+      throw new PersistenceIntegrityError(
+        'reveal requires durable position commit',
+      );
+    if (record.auditSequence <= commit.auditSequence)
+      throw new PersistenceIntegrityError(
+        'reveal audit sequence must follow commit',
+      );
+    this.#insert(this.#reveals, record.id, record, 'isolation reveal');
+    return copy(record);
+  }
+
+  async recordSanitizedReviewContext(input: SanitizedReviewContextRecord) {
+    const record = SanitizedReviewContextRecordSchema.parse(input);
+    this.#require(
+      this.#reviewAssignments,
+      record.assignmentId,
+      'review assignment',
+    );
+    this.#insert(this.#contexts, record.id, record, 'sanitized review context');
+    return copy(record);
+  }
+
+  async recordCellAttempt(input: CellAttemptRecord) {
+    const record = CellAttemptRecordSchema.parse(input);
+    this.#require(this.#cellPlans, record.cellPlanId, 'cell plan');
+    this.#insert(this.#attempts, record.id, record, 'cell attempt');
+    return copy(record);
+  }
+
+  async recordBudgetReservation(input: BudgetReservationRecord) {
+    const record = BudgetReservationRecordSchema.parse(input);
+    this.#require(this.#attempts, record.attemptId, 'cell attempt');
+    const existing = this.#findByStableIdentity(this.#reservations, record);
+    if (existing) return copy(existing);
+    this.#insert(this.#reservations, record.id, record, 'budget reservation');
+    return copy(record);
+  }
+
+  async recordBudgetSettlement(input: BudgetSettlementRecord) {
+    const record = BudgetSettlementRecordSchema.parse(input);
+    const existing = this.#findByStableIdentity(this.#settlements, record);
+    if (existing) return copy(existing);
+    const reservation = this.#require(
+      this.#reservations,
+      record.reservationId,
+      'budget reservation',
+    );
+    if (reservation.state !== 'reserved')
+      throw new PersistenceConflictError('reservation is already closed');
+    if (!withinBudget(record.amount, reservation.ceiling))
+      throw new PersistenceIntegrityError(
+        'settlement exceeds reservation ceiling',
+      );
+    this.#reservations.set(reservation.id, {
+      ...reservation,
+      state: 'settled',
+      revision: reservation.revision + 1,
+      updatedAt: record.settledAt,
+    });
+    this.#insert(this.#settlements, record.id, record, 'budget settlement');
+    return copy(record);
+  }
+
+  async recordBudgetRelease(input: BudgetReleaseRecord) {
+    const record = BudgetReleaseRecordSchema.parse(input);
+    const reservation = this.#require(
+      this.#reservations,
+      record.reservationId,
+      'budget reservation',
+    );
+    if (reservation.state !== 'reserved')
+      throw new PersistenceConflictError('reservation is already closed');
+    const existing = this.#findByStableIdentity(this.#releases, record);
+    if (existing) return copy(existing);
+    this.#reservations.set(reservation.id, {
+      ...reservation,
+      state: 'released',
+      revision: reservation.revision + 1,
+      updatedAt: record.releasedAt,
+    });
+    this.#insert(this.#releases, record.id, record, 'budget release');
+    return copy(record);
+  }
+
+  async recordProviderCharge(input: ProviderChargeRecord) {
+    const record = ProviderChargeRecordSchema.parse(input);
+    this.#require(
+      this.#reservations,
+      record.reservationId,
+      'budget reservation',
+    );
+    const existing = this.#findByStableIdentity(this.#charges, record);
+    if (existing) return copy(existing);
+    this.#insert(this.#charges, record.id, record, 'provider charge');
+    return copy(record);
+  }
+
+  async recordCancellationReceipt(input: CancellationReceiptRecord) {
+    const record = CancellationReceiptRecordSchema.parse(input);
+    this.#require(this.#attempts, record.attemptId, 'cell attempt');
+    const existing = this.#findByStableIdentity(this.#cancellations, record);
+    if (existing) return copy(existing);
+    if (record.reservationId) {
+      const reservation = this.#require(
+        this.#reservations,
+        record.reservationId,
+        'budget reservation',
+      );
+      if (!withinBudget(record.consumed, reservation.ceiling))
+        throw new PersistenceIntegrityError(
+          'cancelled consumption exceeds reservation',
+        );
+      if (reservation.state === 'reserved') {
+        this.#reservations.set(reservation.id, {
+          ...reservation,
+          state: 'cancelled',
+          revision: reservation.revision + 1,
+          updatedAt: record.cancelledAt,
+        });
+      }
+    }
+    this.#insert(
+      this.#cancellations,
+      record.id,
+      record,
+      'cancellation receipt',
+    );
+    return copy(record);
+  }
+
+  async reconstructProgram(
+    programId: string,
+  ): Promise<ReconstructedResearchCellState> {
+    return parseResearchCellState({
+      programId,
+      modelProfiles: [],
+      modelProfileVersions: [],
+      modelLineageEdges: [],
+      cellPlans: this.#forProgram(this.#cellPlans, programId),
+      positions: this.#forProgram(this.#positions, programId),
+      reviewAssignments: this.#forProgram(this.#reviewAssignments, programId),
+      reviews: this.#forProgram(this.#reviews, programId),
+      dissentReports: this.#forProgram(this.#dissent, programId),
+      correlationAssessments: [...this.#correlations.values()].map(copy),
+      rejectedResidue: this.#forProgram(this.#residue, programId),
+      receipts: this.#forProgram(this.#receipts, programId),
+      isolationCommits: this.#forProgram(this.#commits, programId),
+      isolationReveals: this.#forProgram(this.#reveals, programId),
+      sanitizedReviewContexts: this.#forProgram(this.#contexts, programId),
+      cellAttempts: this.#forProgram(this.#attempts, programId),
+      budgetReservations: this.#forProgram(this.#reservations, programId),
+      budgetSettlements: [...this.#settlements.values()]
+        .filter((row) => {
+          const reservation = this.#reservations.get(row.reservationId);
+          return reservation?.programId === programId;
+        })
+        .map(copy),
+      budgetReleases: [...this.#releases.values()]
+        .filter((row) => {
+          const reservation = this.#reservations.get(row.reservationId);
+          return reservation?.programId === programId;
+        })
+        .map(copy),
+      providerCharges: [...this.#charges.values()]
+        .filter((row) => {
+          const reservation = this.#reservations.get(row.reservationId);
+          return reservation?.programId === programId;
+        })
+        .map(copy),
+      cancellationReceipts: this.#forProgram(this.#cancellations, programId),
+    });
+  }
+
+  #idempotentInsert<T extends { id: string }>(
+    map: Map<string, T>,
+    id: string,
+    record: T,
+  ): AdmissionPersistenceResult<T> {
+    const existing = map.get(id);
+    if (existing) {
+      if (!sameJson(existing, record))
+        throw new PersistenceConflictError(
+          'duplicate id carries different payload',
+        );
+      return { decision: 'admitted', record: copy(existing) };
+    }
+    map.set(id, copy(record));
+    return { decision: 'admitted', record: copy(record) };
+  }
+
+  #insert<T extends { id: string }>(
+    map: Map<string, T>,
+    id: string,
+    record: T,
+    subject: string,
+  ): void {
+    if (map.has(id))
+      throw new PersistenceConflictError(`duplicate ${subject} id`);
+    map.set(id, copy(record));
+  }
+
+  #require<T>(map: Map<string, T>, id: string, subject: string): T {
+    const record = map.get(id);
+    if (!record) throw new PersistenceIntegrityError(`${subject} not found`);
+    return copy(record);
+  }
+
+  #uniqueBy<T>(
+    map: Map<string, T>,
+    predicate: (record: T) => boolean,
+    subject: string,
+  ): void {
+    if ([...map.values()].some(predicate))
+      throw new PersistenceConflictError(`duplicate ${subject}`);
+  }
+
+  #findByStableIdentity<T extends { stableIdentity: string }>(
+    map: Map<string, T>,
+    record: T,
+  ): T | undefined {
+    const existing = [...map.values()].find(
+      (row) => row.stableIdentity === record.stableIdentity,
+    );
+    if (existing && !sameJson(existing, record))
+      throw new PersistenceConflictError(
+        'stable identity reused for different payload',
+      );
+    return existing;
+  }
+
+  #forProgram<T extends { programId: string }>(
+    map: Map<string, T>,
+    programId: string,
+  ): T[] {
+    return [...map.values()]
+      .filter((row) => row.programId === programId)
+      .map(copy);
+  }
+}
+
+function copy<T>(value: T): T {
+  return structuredClone(value);
+}
+
+function withinBudget(
+  value: z.infer<typeof BudgetAmountSchema>,
+  ceiling: z.infer<typeof BudgetAmountSchema>,
+): boolean {
+  return (
+    value.costUsd <= ceiling.costUsd &&
+    value.tokens <= ceiling.tokens &&
+    value.durationMs <= ceiling.durationMs
+  );
 }
 
 function sameValues(
