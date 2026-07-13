@@ -247,9 +247,14 @@ describe('major-2 Activity effect execution', () => {
           provider,
         ),
       ),
-    ).rejects.toMatchObject({ code: 'invalid_input', retryable: false });
+    ).rejects.toMatchObject({ code: 'attribution_mismatch', retryable: false });
     expect(calls).toBe(0);
-    expect(store.attempts).toHaveLength(0);
+    expect(store.attempts).toHaveLength(3);
+    expect(store.failures.map(({ code }) => code)).toEqual([
+      'attribution_mismatch',
+      'digest_mismatch',
+      'attribution_mismatch',
+    ]);
   });
 
   it('does not call the provider when another delivery wins the begin race', async () => {
@@ -465,6 +470,7 @@ function options(
 class MemoryStore implements ActivityEffectStore {
   readonly attempts: ActivityAttemptInput[] = [];
   readonly heartbeats: HeartbeatProgressV1[] = [];
+  readonly failures: ActivityFailure[] = [];
   readonly effects = new Map<string, CompletedEffectV1 | PendingEffectV1>();
   async appendAttempt(input: ActivityAttemptInput): Promise<void> {
     await Promise.resolve();
@@ -516,12 +522,11 @@ class MemoryStore implements ActivityEffectStore {
     this.heartbeats.push(validateHeartbeat(progress));
   }
   async failAttempt(
-    input: ActivityAttemptInput,
+    _input: ActivityAttemptInput,
     failure: ActivityFailure,
   ): Promise<void> {
     await Promise.resolve();
-    void input;
-    void failure;
+    this.failures.push(failure);
   }
 }
 class BeginRaceStore extends MemoryStore {

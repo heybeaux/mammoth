@@ -444,14 +444,6 @@ export async function executeActivityEffect<TInput, TResult>(
 ): Promise<TResult> {
   const { invocation } = options;
   validateInvocation(invocation);
-  const computedInputDigest = canonicalDigest(invocation.input);
-  if (computedInputDigest !== invocation.inputDigest) {
-    throw new ActivityFailure(
-      'digest_mismatch',
-      'Activity input digest does not match semantic input',
-      false,
-    );
-  }
   const identity: EffectIdentityV1 = {
     schemaVersion: 1,
     programId: invocation.programId,
@@ -463,8 +455,31 @@ export async function executeActivityEffect<TInput, TResult>(
   const idempotencyKey = effectIdempotencyKey(identity);
   const attempt = { invocation, idempotencyKey };
   const work = await options.resolveWork(invocation.workItemId);
-  validateAttribution(invocation, work);
   await options.store.appendAttempt(attempt);
+  try {
+    const computedInputDigest = canonicalDigest(invocation.input);
+    if (computedInputDigest !== invocation.inputDigest) {
+      throw new ActivityFailure(
+        'digest_mismatch',
+        'Activity input digest does not match semantic input',
+        false,
+      );
+    }
+    validateAttribution(invocation, work);
+  } catch (error) {
+    const failure =
+      error instanceof ActivityFailure
+        ? error
+        : new ActivityFailure(
+            'invalid_input',
+            error instanceof Error
+              ? error.message
+              : 'Activity input is invalid',
+            false,
+          );
+    await options.store.failAttempt(attempt, failure);
+    throw failure;
+  }
 
   const existing = await options.store.lookup(
     options.provider.name,
@@ -750,11 +765,6 @@ function validateInvocation(invocation: ActivityInvocationV1): void {
     (invocation as { readonly schemaVersion: unknown }).schemaVersion !== 1 ||
     !activityTypes.includes(invocation.activityType) ||
     !activityOperationKinds.includes(invocation.operationKind) ||
-    !(
-      activityOperationKindsByType[
-        invocation.activityType
-      ] as readonly ActivityOperationKindV1[]
-    ).includes(invocation.operationKind) ||
     !nonEmpty(invocation.contractVersion) ||
     !nonEmpty(invocation.programId) ||
     !nonEmpty(invocation.workItemId) ||
@@ -800,6 +810,11 @@ function validateAttribution(
   work: AttributableWorkItemV1 | undefined,
 ): asserts work is AttributableWorkItemV1 {
   if (
+    !(
+      activityOperationKindsByType[
+        invocation.activityType
+      ] as readonly ActivityOperationKindV1[]
+    ).includes(invocation.operationKind) ||
     !work ||
     work.id !== invocation.workItemId ||
     work.programId !== invocation.programId ||
