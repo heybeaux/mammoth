@@ -97,8 +97,7 @@ passed with 3 files and 38 tests; `pnpm typecheck` passed.
 
 ### T3 Persistence And Budget
 
-State: spawn requested; fresh worktree artifacts observed. Not active by Mammoth's
-live-registry definition.
+State: integrated.
 
 Worker runtime: Codex worker fallback. Durable OpenClaw `sessions_spawn` and live
 registry tools were not exposed in this turn's tool surface, so this worker must
@@ -150,6 +149,26 @@ modification to `packages/temporal-adapter/src/research-cli.ts` was observed and
 coordinator interruption `019f5d97-4367-7031-a8e1-7db187302571` instructed the
 worker to stop touching the non-owned path. A follow-up status showed only owned
 paths modified.
+
+Completion handoff: worker returned completed status with commit
+`90cac4cb5c5b811be417c60d3e46c826b4b9b6f9`. It reported
+`pnpm --filter @mammoth/persistence test`,
+`pnpm --filter @mammoth/persistence typecheck`,
+`pnpm --filter @mammoth/persistence build`, `pnpm typecheck`, Prettier checks for
+owned TypeScript files, and `git diff --check` passing. It reported that the
+non-owned Temporal mode-bit change was reverted before handoff.
+
+Integration: coordinator cherry-picked the owned commit as `e8a226d` on
+`feat/p5-isolated-divergence`. Integration verification:
+`pnpm --filter @mammoth/persistence test` passed with 2 files and 11 tests;
+`pnpm --filter @mammoth/persistence typecheck` passed;
+`pnpm --filter @mammoth/persistence build` passed.
+
+Remaining integration gap: the worker added reference SQL under
+`packages/persistence/sql/001_epistemic_ledger.sql`, but the production Postgres
+adapter migration registry in `packages/postgres-adapter/src/migrations.ts`
+remains unchanged. P5 still needs a forward-only migration after P4 version `5`
+and adapter/restart verification before the T3 gate can be claimed complete.
 
 ### T4/T5 Workflow And Projection
 
