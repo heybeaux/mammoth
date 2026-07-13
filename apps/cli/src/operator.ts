@@ -78,7 +78,9 @@ export async function executeCli(
   try {
     const command = parseArgs(argv, dependencies.cwd());
     let output: unknown;
-    if (command.name === 'run') {
+    if (command.name === 'projection-inspect') {
+      output = await inspectObservatoryProjection(command.projectionPath);
+    } else if (command.name === 'run') {
       const document = await readOperatorInput(command.charterPath);
       assertProgramId(document.charter.programId);
       await persistOperatorDocument(command.root, document);
@@ -143,6 +145,112 @@ export async function executeCli(
       return 4;
     return 2;
   }
+}
+
+export async function inspectObservatoryProjection(path: string): Promise<{
+  command: 'projection-inspect';
+  schemaVersion: 1;
+  sourceRevision: string;
+  digest: string;
+  complete: boolean;
+  nodeCount: number;
+  edgeCount: number;
+  timelineEventCount: number;
+  p4NodeCounts: Record<string, number>;
+}> {
+  let parsed: unknown;
+  try {
+    const content = await readBoundedRegularFile(path);
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(content);
+    rejectDuplicateJsonKeys(text);
+    parsed = JSON.parse(text);
+  } catch (error: unknown) {
+    if (error instanceof CliError) throw error;
+    throw new CliError(
+      'INVALID_PROJECTION',
+      `cannot read projection: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  try {
+    const projection = validateProjectionDocument(parsed);
+    const p4NodeKinds = new Set([
+      'research_cell',
+      'position',
+      'review',
+      'model_lineage',
+      'correlation',
+      'dissent',
+      'rejected_residue',
+      'receipt',
+    ]);
+    const p4NodeCounts: Record<string, number> = {};
+    for (const node of projection.nodes)
+      if (p4NodeKinds.has(node.kind))
+        p4NodeCounts[node.kind] = (p4NodeCounts[node.kind] ?? 0) + 1;
+    return {
+      command: 'projection-inspect',
+      schemaVersion: projection.schemaVersion,
+      sourceRevision: projection.sourceRevision,
+      digest: projection.integrity.canonicalDigest,
+      complete: projection.integrity.complete,
+      nodeCount: projection.nodes.length,
+      edgeCount: projection.edges.length,
+      timelineEventCount: projection.timeline.length,
+      p4NodeCounts,
+    };
+  } catch (error: unknown) {
+    throw new CliError(
+      'INVALID_PROJECTION',
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+function validateProjectionDocument(value: unknown): {
+  schemaVersion: 1;
+  sourceRevision: string;
+  nodes: { kind: string }[];
+  edges: unknown[];
+  timeline: unknown[];
+  integrity: {
+    canonicalDigest: string;
+    complete: boolean;
+  };
+} {
+  if (!isRecord(value) || value.schemaVersion !== 1)
+    throw new CliError('INVALID_PROJECTION', 'unsupported projection schema');
+  if (
+    typeof value.sourceRevision !== 'string' ||
+    !Array.isArray(value.nodes) ||
+    !Array.isArray(value.edges) ||
+    !Array.isArray(value.timeline) ||
+    !isRecord(value.integrity) ||
+    typeof value.integrity.canonicalDigest !== 'string' ||
+    typeof value.integrity.complete !== 'boolean'
+  ) {
+    throw new CliError('INVALID_PROJECTION', 'malformed projection document');
+  }
+  const withoutDigest = {
+    ...value,
+    integrity: {
+      ...value.integrity,
+    },
+  };
+  delete (withoutDigest.integrity as Record<string, unknown>).canonicalDigest;
+  if (canonicalDigest(withoutDigest) !== value.integrity.canonicalDigest) {
+    throw new CliError('INVALID_PROJECTION', 'projection digest mismatch');
+  }
+  return value as {
+    schemaVersion: 1;
+    sourceRevision: string;
+    nodes: { kind: string }[];
+    edges: unknown[];
+    timeline: unknown[];
+    integrity: {
+      canonicalDigest: string;
+      complete: boolean;
+    };
+  };
 }
 
 export function nodeDependencies(io: CliIo = consoleIo): CliDependencies {

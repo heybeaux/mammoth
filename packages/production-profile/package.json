@@ -14,9 +14,12 @@
     "test": "pnpm --filter @mammoth/postgres-adapter build && pnpm --filter @mammoth/temporal-adapter build && vitest run",
     "typecheck": "tsc --noEmit",
     "verify:lifecycle": "tsx src/cli.ts verify-lifecycle",
+    "verify:p4": "tsx src/cli.ts verify-p4",
     "verify:backup": "tsx src/cli.ts verify-backup"
   },
   "dependencies": {
+    "@mammoth/domain": "workspace:*",
+    "@mammoth/persistence": "workspace:*",
     "@mammoth/postgres-adapter": "workspace:*",
     "@mammoth/temporal-adapter": "workspace:*",
     "@mammoth/work-queue": "workspace:*",

@@ -1,11 +1,10 @@
 {
-  "name": "@mammoth/workflow",
+  "name": "@mammoth/p4-acceptance",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./p3-contract": "./src/p3-contract.ts"
+    ".": "./src/verifier.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -13,7 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mammoth/domain": "workspace:*"
+    "@mammoth/domain": "workspace:*",
+    "@mammoth/observatory-projection": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

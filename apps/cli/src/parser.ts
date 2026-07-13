@@ -1,7 +1,14 @@
 import { resolve } from 'node:path';
 import { CliError, type CliCommand } from './types.js';
 
-const commands = new Set(['run', 'status', 'resume', 'cancel', 'inspect']);
+const commands = new Set([
+  'run',
+  'status',
+  'resume',
+  'cancel',
+  'inspect',
+  'projection-inspect',
+]);
 
 export function parseArgs(argv: readonly string[], cwd: string): CliCommand {
   const [name, subject, ...tail] = argv;
@@ -32,6 +39,14 @@ export function parseArgs(argv: readonly string[], cwd: string): CliCommand {
   }
   if (name !== 'run' && name !== 'resume' && maxSteps !== undefined)
     throw new CliError('USAGE', '--max-steps is valid only for run and resume');
+  if (name === 'projection-inspect') {
+    return {
+      name,
+      projectionPath: resolve(cwd, subject),
+      root,
+      json,
+    };
+  }
   if (name === 'run') {
     return {
       name,
@@ -57,5 +72,5 @@ export function assertProgramId(value: string): void {
 }
 
 export function usage(): string {
-  return 'usage: mammoth <run|status|resume|cancel|inspect> <subject> [--root PATH] [--json] [--max-steps N]';
+  return 'usage: mammoth <run|status|resume|cancel|inspect|projection-inspect> <subject> [--root PATH] [--json] [--max-steps N]';
 }

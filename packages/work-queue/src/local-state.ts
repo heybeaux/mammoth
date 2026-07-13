@@ -1,12 +1,16 @@
 import {
   closeSync,
   fsyncSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
+  readlinkSync,
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
@@ -91,24 +95,20 @@ export class LocalWorkStateStore implements WorkStateStore {
 
   #withLock<T>(operation: () => T): T {
     const lockPath = `${this.#path}.lock`;
-    const ownerPath = `${lockPath}/owner`;
     const ownerToken = `${String(process.pid)}:${crypto.randomUUID()}`;
-    mkdirSync(dirname(this.#path), { recursive: true });
+    const directory = dirname(this.#path);
+    mkdirSync(directory, { recursive: true });
     const deadline = Date.now() + 10_000;
     for (;;) {
       try {
-        mkdirSync(lockPath, { mode: 0o700 });
-        const descriptor = openSync(ownerPath, 'wx', 0o600);
-        try {
-          writeFileSync(descriptor, `${ownerToken}\n`, 'utf8');
-          fsyncSync(descriptor);
-        } finally {
-          closeSync(descriptor);
-        }
+        // The symlink target is the owner record, so acquisition has no
+        // ownerless lock window for another process to reclaim.
+        symlinkSync(ownerToken, lockPath);
+        fsyncDirectory(directory);
         break;
       } catch (error: unknown) {
         if (!isAlreadyExists(error)) throw error;
-        if (removeStaleLock(lockPath, ownerPath)) continue;
+        if (removeStaleLock(lockPath)) continue;
         if (Date.now() >= deadline) {
           throw new Error(`timed out acquiring work-state lock: ${lockPath}`);
         }
@@ -118,9 +118,7 @@ export class LocalWorkStateStore implements WorkStateStore {
     try {
       return operation();
     } finally {
-      if (readOwner(ownerPath) === ownerToken) {
-        rmSync(lockPath, { recursive: true, force: true });
-      }
+      releaseLock(lockPath, ownerToken);
     }
   }
 }
@@ -143,18 +141,40 @@ function isAlreadyExists(error: unknown): boolean {
   );
 }
 
-function removeStaleLock(path: string, ownerPath: string): boolean {
+function fsyncDirectory(path: string): void {
+  const descriptor = openSync(path, 'r');
+  try {
+    fsyncSync(descriptor);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+function releaseLock(path: string, ownerToken: string): void {
+  if (readOwner(path) !== ownerToken) return;
+  try {
+    unlinkSync(path);
+  } catch (error: unknown) {
+    if (!isNotFound(error)) throw error;
+  }
+}
+
+function removeStaleLock(path: string): boolean {
   let owner: number;
   let token: string;
   try {
-    token = readFileSync(ownerPath, 'utf8').trim();
+    token = readOwner(path) ?? '';
+    if (token.length === 0)
+      throw Object.assign(new Error('missing owner'), {
+        code: 'ENOENT',
+      });
     owner = Number.parseInt(token.split(':', 1)[0] ?? '', 10);
   } catch (error: unknown) {
     // A newly-created lock directory may not have its owner record yet.
     if (isNotFound(error)) {
       try {
         if (Date.now() - statSync(path).mtimeMs <= 1_000) return false;
-        return reclaimLock(path, ownerPath, undefined);
+        return reclaimLock(path, undefined);
       } catch (statError: unknown) {
         return isNotFound(statError);
       }
@@ -175,18 +195,14 @@ function removeStaleLock(path: string, ownerPath: string): boolean {
     }
   }
   try {
-    return reclaimLock(path, ownerPath, token);
+    return reclaimLock(path, token);
   } catch (error: unknown) {
     return isNotFound(error);
   }
 }
 
-function reclaimLock(
-  path: string,
-  ownerPath: string,
-  expectedOwner: string | undefined,
-): boolean {
-  if (readOwner(ownerPath) !== expectedOwner) return false;
+function reclaimLock(path: string, expectedOwner: string | undefined): boolean {
+  if (readOwner(path) !== expectedOwner) return false;
   const quarantine = `${path}.stale.${String(process.pid)}.${crypto.randomUUID()}`;
   try {
     renameSync(path, quarantine);
@@ -200,6 +216,11 @@ function reclaimLock(
 
 function readOwner(path: string): string | undefined {
   try {
+    const status = lstatSync(path);
+    if (status.isSymbolicLink()) return readlinkSync(path).trim();
+    if (status.isDirectory()) {
+      return readFileSync(`${path}/owner`, 'utf8').trim();
+    }
     return readFileSync(path, 'utf8').trim();
   } catch (error: unknown) {
     if (isNotFound(error)) return undefined;

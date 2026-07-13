@@ -51,6 +51,13 @@ export type CliCommand =
       maxSteps?: number;
     }
   | {
+      name: 'projection-inspect';
+      projectionPath: string;
+      root: string;
+      json: boolean;
+      maxSteps?: number;
+    }
+  | {
       name: 'status' | 'resume' | 'cancel' | 'inspect';
       programId: string;
       root: string;

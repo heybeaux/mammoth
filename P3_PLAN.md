@@ -1,6 +1,6 @@
 # Mammoth P3 Temporal Workflow Checkpoint
 
-> Status: active
+> Status: completed — merged and verified on 2026-07-13
 >
 > Baseline: `v0.2.0-production-data`
 >

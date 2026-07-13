@@ -91,3 +91,6 @@ jobs:
 
       - name: Verify P3 Temporal acceptance
         run: pnpm verify:p3
+
+      - name: Verify P4 research-cell contracts
+        run: pnpm verify:p4

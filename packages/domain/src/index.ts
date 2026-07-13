@@ -6,3 +6,4 @@ export * from './graph.js';
 export * from './lineage.js';
 export * from './primitives.js';
 export * from './program.js';
+export * from './research-cell.js';

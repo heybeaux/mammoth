@@ -2,7 +2,11 @@
 import { loadProfileConfig } from './config.js';
 import { executeProfileCommand } from './cli-command.js';
 import { createProductionProfile } from './profile.js';
-import { verifyBackupRestore, verifyLifecycle } from './verify.js';
+import {
+  verifyBackupRestore,
+  verifyLifecycle,
+  verifyP4Lifecycle,
+} from './verify.js';
 
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -10,6 +14,7 @@ async function main(): Promise<void> {
   await executeProfileCommand(command, {
     createProfile: () => createProductionProfile(config, process.env),
     verifyLifecycle: () => verifyLifecycle(config),
+    verifyP4: () => verifyP4Lifecycle(config),
     verifyBackup: () => verifyBackupRestore(config),
     write: (value) => {
       console.log(JSON.stringify(value, null, 2));

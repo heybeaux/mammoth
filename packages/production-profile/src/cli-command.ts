@@ -6,6 +6,7 @@ export type ProductionProfileCommand =
   | 'stop'
   | 'kill'
   | 'status'
+  | 'verify-p4'
   | 'verify-lifecycle'
   | 'verify-backup';
 
@@ -15,20 +16,24 @@ export interface ProfileCommandOperations {
     'bootstrap' | 'start' | 'stop' | 'kill' | 'assertReady'
   >;
   readonly verifyLifecycle: () => Promise<unknown>;
+  readonly verifyP4: () => Promise<unknown>;
   readonly verifyBackup: () => Promise<unknown>;
   readonly write: (value: unknown) => void;
 }
 
 /**
- * Keeps the P2 Postgres/CAS verifiers independent from the P3 Temporal-aware
- * operational profile. The profile factory is deliberately lazy so verifier
- * commands do not even load Temporal configuration or construct its service.
+ * Keeps P2 Postgres/CAS and P4 research-cell verifiers independent from the P3
+ * Temporal-aware profile. The factory stays lazy so verifier commands do not
+ * load Temporal configuration or construct its service.
  */
 export async function executeProfileCommand(
   command: string | undefined,
   operations: ProfileCommandOperations,
 ): Promise<void> {
   switch (command as ProductionProfileCommand | undefined) {
+    case 'verify-p4':
+      operations.write(await operations.verifyP4());
+      return;
     case 'verify-lifecycle':
       operations.write(await operations.verifyLifecycle());
       return;
@@ -56,7 +61,7 @@ export async function executeProfileCommand(
     }
     default:
       throw new Error(
-        'usage: mammoth-profile <bootstrap|start|stop|kill|status|verify-lifecycle|verify-backup>',
+        'usage: mammoth-profile <bootstrap|start|stop|kill|status|verify-p4|verify-lifecycle|verify-backup>',
       );
   }
 }
