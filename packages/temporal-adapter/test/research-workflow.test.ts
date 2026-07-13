@@ -5,6 +5,7 @@ import { TestWorkflowEnvironment } from '@temporalio/testing';
 import type {
   ProgramBranchIdentity,
   ResearchProgramStageId,
+  WorkflowControlState,
 } from '@mammoth/workflow';
 import { describe, expect, it } from 'vitest';
 import {
@@ -281,6 +282,18 @@ function durableActivities(states: Map<string, ResearchProgramDurableState>) {
       states.set(key(input.workflowIdentity), {
         ...state,
         activeBranch: input.activeBranch,
+      });
+    },
+    saveResearchProgramControlState: async (input: {
+      identity: ProgramBranchIdentity;
+      control: WorkflowControlState;
+    }) => {
+      const state = states.get(key(input.identity));
+      if (!state) throw new Error('program state is missing');
+      states.set(key(input.identity), {
+        ...state,
+        control: input.control,
+        activeBranch: input.control.activeBranch,
       });
     },
     recordResearchProgramTermination: async (input: {
