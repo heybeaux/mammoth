@@ -2,24 +2,25 @@
 
 ## Mission and authority
 
-Build Mammoth from the completed `v0.3.0-temporal-control-plane` baseline through
-the active `v0.4.0-research-cell-contracts` checkpoint in `P4_PLAN.md`.
+Build Mammoth from the completed `v0.4.0-research-cell-contracts` baseline through
+the active `v0.5.0-isolated-divergence` checkpoint in `P5_PLAN.md`.
 `ARCHITECTURE.md` is the normative architecture, `POST_MVP_ROADMAP.md` defines
-long-range sequencing, `P4_PLAN.md` defines the current acceptance contract,
+long-range sequencing, `P5_PLAN.md` defines the current acceptance contract,
 `docs/OBSERVATORY.md` defines the read-only visualization direction, and
 `LOOP.md` defines team execution. Preserve architecture invariants if wording
 conflicts and record the conflict instead of weakening a gate.
 
 Workers may inspect, implement, test, commit, push, open or review pull requests,
 repair CI, and merge accepted work without human confirmation until the checkpoint.
-Do not send routine progress to Beaux. Contact him only when the P4 stopping
+Do not send routine progress to Beaux. Contact him only when the P5 stopping
 condition is met or an escalation condition in `LOOP.md` is unavoidable.
 
 ## Before taking work
 
-Read this file, `P4_PLAN.md`, `POST_MVP_ROADMAP.md`, `LOOP.md`, the P4 handover,
-the relevant package tests, and `ARCHITECTURE.md` sections 6, 11, 13-20, 24, 28,
-31-33, 38, and 40-44. Read `docs/OBSERVATORY.md` for projection work. Every
+Read this file, `P5_PLAN.md`, `POST_MVP_ROADMAP.md`, `LOOP.md`, the P4 release
+receipt, the P4-P6 handover, the relevant package tests, and `ARCHITECTURE.md`
+sections 6, 11, 13-18, 23-24, 28, 31-33, 38, and 40-44. Read
+`docs/OBSERVATORY.md` for projection work. Every
 assignment must name:
 
 - objective and acceptance evidence;
@@ -40,12 +41,12 @@ slot available for coordination and integration.
 Delegate only concrete, bounded work that can proceed independently. Prefer
 path-disjoint ownership such as:
 
-- research-cell and model-lineage contracts;
-- deterministic admission and correlation policy;
-- authoritative Postgres persistence and migration verification;
-- workflow carriage and restart reconstruction;
-- fail-closed Observatory projection and CLI inspection;
-- adversarial acceptance fixtures and receipt audit;
+- commit-before-reveal isolation and sanitized review contracts;
+- deterministic assignment, correlation, dissent, and residue policy;
+- authoritative Postgres persistence, budget settlement, and migration verification;
+- Temporal divergence/review execution and boundary recovery;
+- fail-closed Observatory projection and operator inspection;
+- adversarial isolation, cancellation, replay, and receipt audit;
 - documentation and receipt audit.
 
 Every delegated task must include objective, owned paths, non-owned paths,
@@ -156,10 +157,11 @@ pnpm eval:offline
 
 Also run every verifier introduced by the active loop, including
 `verify:phase-2`, `verify:mvp`, `verify:adapters`, `verify:p2`, `verify:p3`, and
-`verify:p4`. Never claim a check passed unless it ran; record the command and
-result. P4 requires unsupported-consensus, lineage/correlation, self-review,
-criterion-drift, missing-reference, rejection-residue, migration, fencing,
-restart-reconstruction, and fail-closed projection tests.
+`verify:p4`, plus the new `verify:p5`. Never claim a check passed unless it ran;
+record the command and result. P5 requires commit-before-reveal isolation,
+sanitized reviewer context, self-review/correlation rejection, dissent and residue
+retention, duplicate-delivery idempotency, bounded budget settlement, cancellation
+receipts, replay, process/service recovery, and fail-closed projection tests.
 
 ## Commits, reviews, and handoffs
 
@@ -176,6 +178,6 @@ tests and results / risks or unverified areas / blockers / next task
 ```
 
 An item is done only when its acceptance evidence exists, tests and docs are
-updated, required gates pass, the change is merged, and `P4_PLAN.md` or the P4
+updated, required gates pass, the change is merged, and `P5_PLAN.md` or the P5
 receipt reflects reality. Do not stop because one task or PR is done; claim the
-next unblocked P4 item and continue until the checkpoint is proven.
+next unblocked P5 item and continue until the checkpoint is proven.
