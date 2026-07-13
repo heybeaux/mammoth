@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { assertAdapterCompatibility } from './capabilities.js';
+import { TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT } from './descriptors.js';
+import type { WorkflowRuntimeLifecycle } from './workflow-runtime.js';
 import type { EpistemicLedger } from '@mammoth/persistence';
 import { contentDigest, type ContentAddressedStore } from '@mammoth/retrieval';
 import {
@@ -15,6 +18,24 @@ export interface DurableAdapterFactory<T> {
 
 export interface SynchronousDurableAdapterFactory<T> {
   open(): T;
+}
+
+export async function verifyWorkflowRuntimeConformance(
+  factory: DurableAdapterFactory<WorkflowRuntimeLifecycle>,
+): Promise<void> {
+  const adapter = await factory.open();
+  await adapter.start();
+  const descriptor = adapter.descriptor();
+  assert.equal(descriptor.kind, 'workflow-runtime');
+  assertAdapterCompatibility(
+    [descriptor],
+    [TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT],
+  );
+  const readiness = await adapter.readiness();
+  assert.equal(readiness.ready, true);
+  assert.deepEqual(readiness.failures, []);
+  await adapter.shutdown();
+  await adapter.shutdown();
 }
 
 export async function verifyWorkflowStoreConformance(

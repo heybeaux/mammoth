@@ -11,6 +11,9 @@ TypeScript compatibility:
 
 - `verifyWorkflowStoreConformance` checks durable reopen, atomic concurrent
   mutation, no lost updates, and rollback after a failed transaction.
+- `verifyWorkflowRuntimeConformance` checks that a Temporal-style runtime
+  descriptor satisfies the additive contract-major-1 requirement, starts ready,
+  and shuts down idempotently.
 - `verifyEpistemicLedgerConformance` checks ordered revisions across independent
   adapter instances, durable reopen, and rollback after a failed transaction.
 - `verifyWorkStateStoreConformance` checks durable state across independent

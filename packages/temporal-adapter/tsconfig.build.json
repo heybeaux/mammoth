@@ -5,8 +5,7 @@
     "outDir": "dist",
     "rootDir": "src",
     "paths": {
-      "@mammoth/postgres-adapter": ["../postgres-adapter/dist/index.d.ts"],
-      "@mammoth/temporal-adapter": ["../temporal-adapter/dist/index.d.ts"]
+      "@mammoth/adapter-contracts": ["../adapter-contracts/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts"],

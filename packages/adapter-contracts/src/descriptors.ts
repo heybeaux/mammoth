@@ -6,7 +6,7 @@ import type {
 } from './capabilities.js';
 
 export const ADAPTER_CONTRACT_MAJOR = 1 as const;
-export const ADAPTER_CONTRACT_VERSION = '1.0.0' as const;
+export const ADAPTER_CONTRACT_VERSION = '1.1.0' as const;
 
 export const LOCAL_ADAPTER_ROLES = [
   'workflow-state',
@@ -18,6 +18,20 @@ export const LOCAL_ADAPTER_ROLES = [
 ] as const;
 
 export type LocalAdapterRole = (typeof LOCAL_ADAPTER_ROLES)[number];
+
+export const TEMPORAL_WORKFLOW_CAPABILITIES = [
+  'deterministic-replay',
+  'durable-timers',
+  'signals',
+  'queries',
+  'retry-scheduling',
+  'continue-as-new',
+  'task-queue-polling',
+  'clean-shutdown',
+  'durable-restart',
+  'cooperative-cancellation',
+  'health-reporting',
+] as const satisfies readonly AdapterCapability[];
 
 export interface LocalAdapterDescriptor extends AdapterDescriptor {
   readonly role: LocalAdapterRole;
@@ -126,6 +140,16 @@ export const PRODUCTION_LIKE_LOCAL_REQUIREMENTS = [
     'content-verification',
     'health-reporting',
   ]),
+] as const satisfies readonly AdapterRequirement[];
+
+export const TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT = requirement(
+  'workflow-runtime',
+  TEMPORAL_WORKFLOW_CAPABILITIES,
+);
+
+export const P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS = [
+  ...PRODUCTION_LIKE_LOCAL_REQUIREMENTS,
+  TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT,
 ] as const satisfies readonly AdapterRequirement[];
 
 function requirement(

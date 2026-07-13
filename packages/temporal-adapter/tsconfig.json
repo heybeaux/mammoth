@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@mammoth/adapter-contracts": ["../adapter-contracts/src/index.ts"]
+    }
+  },
+  "include": ["src", "test"]
+}

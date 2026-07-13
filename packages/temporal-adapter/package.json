@@ -1,0 +1,32 @@
+{
+  "name": "@mammoth/temporal-adapter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "mammoth-temporal": "./src/cli.ts"
+  },
+  "scripts": {
+    "build": "pnpm --filter @mammoth/adapter-contracts build && tsc -p tsconfig.build.json",
+    "status": "tsx src/cli.ts status",
+    "start": "tsx src/cli.ts start",
+    "stop": "tsx src/cli.ts stop",
+    "test": "pnpm --filter @mammoth/adapter-contracts build && vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mammoth/adapter-contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}
