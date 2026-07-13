@@ -102,8 +102,23 @@ describe('production Activity catalog', () => {
         activityType,
       });
     }
+    for (const activityType of activityTypes) {
+      const original = invocation(activityType);
+      await expect(
+        activities[activityType]({
+          ...original,
+          workflow: {
+            ...original.workflow,
+            runId: 'run-after-restart',
+            activityId: `activity-${activityType}-redelivery`,
+            attempt: 2,
+          },
+        }),
+      ).resolves.toEqual({ activityType });
+    }
     expect(calls).toEqual(activityTypes);
     expect(effects.snapshot().effects).toHaveLength(11);
+    expect(effects.snapshot().attempts).toHaveLength(22);
   });
 
   it('validates heartbeat progress before reporting it to Temporal', () => {
