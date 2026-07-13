@@ -33,7 +33,8 @@ Its dirty state at entry inspection was:
 
 ### T1/T2 Contracts And Policy
 
-State: spawn requested.
+State: spawn requested; fresh worktree artifacts observed. Not active by Mammoth's
+live-registry definition.
 
 Worker runtime: Codex worker fallback. Durable OpenClaw `sessions_spawn` and live
 registry tools were not exposed in this turn's tool surface, so this worker must
@@ -75,9 +76,18 @@ and any P5 evaluator tests added by the worker.
 
 Handoff recipient: P5 coordinator in `/private/tmp/mammoth-p5-integration`.
 
+Fresh evidence: after spawn, the worktree showed staged changes in
+`packages/domain/src/research-cell.ts`, `packages/domain/test/research-cell.test.ts`,
+and `evals/fixtures/p5/t1-t2-contracts-policy-manifest.json`. It also showed a
+non-owned modification to `packages/temporal-adapter/src/research-cli.ts`.
+Coordinator interruption `019f5d97-2828-7451-b606-c1d13ca01175` instructed the
+worker to stop touching the non-owned path, revert that file if the change was
+theirs, or return a conflict note.
+
 ### T3 Persistence And Budget
 
-State: spawn requested.
+State: spawn requested; fresh worktree artifacts observed. Not active by Mammoth's
+live-registry definition.
 
 Worker runtime: Codex worker fallback. Durable OpenClaw `sessions_spawn` and live
 registry tools were not exposed in this turn's tool surface, so this worker must
@@ -122,9 +132,18 @@ feasible.
 
 Handoff recipient: P5 coordinator in `/private/tmp/mammoth-p5-integration`.
 
+Fresh evidence: after spawn, the worktree showed changes in
+`packages/persistence/src/research-cells.ts` and
+`packages/persistence/test/research-cells.test.ts`. An earlier non-owned
+modification to `packages/temporal-adapter/src/research-cli.ts` was observed and
+coordinator interruption `019f5d97-4367-7031-a8e1-7db187302571` instructed the
+worker to stop touching the non-owned path. A follow-up status showed only owned
+paths modified.
+
 ### T4/T5 Workflow And Projection
 
-State: spawn requested.
+State: spawn requested; fresh worktree artifacts observed. Not active by Mammoth's
+live-registry definition.
 
 Worker runtime: Codex worker fallback. Durable OpenClaw `sessions_spawn` and live
 registry tools were not exposed in this turn's tool surface, so this worker must
@@ -166,6 +185,15 @@ Verification commands: `pnpm --filter @mammoth/workflow test`;
 feasible.
 
 Handoff recipient: P5 coordinator in `/private/tmp/mammoth-p5-integration`.
+
+Fresh evidence: after spawn, the worktree showed changes in
+`packages/workflow/src/index.ts`, `packages/workflow/src/p5-contract.ts`,
+`packages/workflow/test/p5-contract.test.ts`,
+`packages/temporal-adapter/src/index.ts`,
+`packages/temporal-adapter/src/research-cli.ts`,
+`packages/temporal-adapter/src/p5-workflow-shell.ts`, and
+`packages/temporal-adapter/src/p5-workflow-types.ts`. These paths are within the
+T4/T5 assignment.
 
 ## Coordinator-Owned T6
 
