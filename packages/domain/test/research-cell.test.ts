@@ -720,6 +720,24 @@ describe('admission and review policy', () => {
     }
   });
 
+  it('binds review input and output-schema references to authority', () => {
+    expect(
+      admitResearchReview({
+        raw: review({ inputDigest: digestC }),
+        assignment: assignment(),
+        universe,
+      }),
+    ).toMatchObject({ ok: false, reasonCodes: ['input_digest_drift'] });
+
+    expect(
+      admitResearchReview({
+        raw: review({ outputSchemaVersion: '2.0.0' }),
+        assignment: assignment(),
+        universe,
+      }),
+    ).toMatchObject({ ok: false, reasonCodes: ['output_schema_drift'] });
+  });
+
   it('distinguishes silent criterion drift from an explicit criterion branch', () => {
     expect(
       admitResearchPosition(

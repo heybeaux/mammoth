@@ -1009,7 +1009,7 @@ function researchReview(): ResearchReviewRecord {
     reviewerModelProfileVersionId: assignment.reviewerModelProfileVersionId,
     reviewerRole: assignment.reviewerRole,
     criterionRef: assignment.contract.criterionRef,
-    inputDigest: canonicalDigest({ review: assignment.id }),
+    inputDigest: cellPlan().inputDigest,
     outputSchemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
     verdict: 'reject',
     reasonCodes: ['unsupported-claim'],

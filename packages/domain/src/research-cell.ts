@@ -881,6 +881,12 @@ export function admitResearchReview(input: {
   ) {
     reasons.push('schema_invalid');
   }
+  if (review.inputDigest !== input.universe.inputDigest) {
+    reasons.push('input_digest_drift');
+  }
+  if (review.outputSchemaVersion !== input.universe.outputSchemaVersion) {
+    reasons.push('output_schema_drift');
+  }
   const reviewer = input.universe.modelVersions.get(
     assignment.reviewerModelProfileVersionId,
   );

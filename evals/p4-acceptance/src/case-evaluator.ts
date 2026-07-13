@@ -788,7 +788,7 @@ function review(assignment: ReviewAssignment): ResearchReview {
     reviewerModelProfileVersionId: assignment.reviewerModelProfileVersionId,
     reviewerRole: assignment.reviewerRole,
     criterionRef: assignment.criterionRef,
-    inputDigest: digest('review-input-p4'),
+    inputDigest: digest('input-p4'),
     outputSchemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
     verdict: 'reject' as const,
     reasonCodes: ['adversarial-review'],
