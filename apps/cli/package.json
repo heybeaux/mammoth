@@ -10,7 +10,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && esbuild src/bin.ts --bundle --splitting --platform=node --format=esm --target=node22 --external:@temporalio/* --external:@grpc/* --outdir=dist",
+    "build": "pnpm --filter @mammoth/temporal-adapter build && tsc -p tsconfig.build.json && esbuild src/bin.ts --bundle --splitting --platform=node --format=esm --target=node22 --external:@temporalio/* --external:@grpc/* --outdir=dist",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
