@@ -96,9 +96,12 @@ describe('P5 acceptance verifier', () => {
       repositoryRoot(),
       {
         exists: () => Promise.resolve(true),
-        validateTarget: async (target) => {
-          if (target.id !== 'postgres-p5-migration') return undefined;
-          return 'production Postgres migration registry lacks P5 version 6';
+        validateTarget: (target) => {
+          return Promise.resolve(
+            target.id !== 'postgres-p5-migration'
+              ? undefined
+              : 'production Postgres migration registry lacks P5 version 6',
+          );
         },
         run: () => Promise.resolve({ exitCode: 0 }),
       },

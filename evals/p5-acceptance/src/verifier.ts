@@ -264,10 +264,10 @@ const systemDependencies: P5VerifierDependencies = {
       child.stdout.setEncoding('utf8');
       child.stderr.setEncoding('utf8');
       child.stdout.on('data', (chunk) => {
-        output += chunk;
+        output += String(chunk);
       });
       child.stderr.on('data', (chunk) => {
-        output += chunk;
+        output += String(chunk);
       });
       child.on('error', (error) => {
         resolveRun({ exitCode: 127, diagnostic: error.message });

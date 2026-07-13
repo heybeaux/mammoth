@@ -1005,6 +1005,7 @@ export class InMemoryResearchCellRepository
   }
 
   async createCellPlan(input: CellPlanRecord): Promise<CellPlanRecord> {
+    await asyncBoundary();
     const record = CellPlanRecordSchema.parse(input);
     this.#insert(this.#cellPlans, record.id, record, 'cell plan');
     return copy(record);
@@ -1013,6 +1014,7 @@ export class InMemoryResearchCellRepository
   async updateCellPlanStatus(
     input: CellPlanStatusUpdate,
   ): Promise<CellPlanRecord> {
+    await asyncBoundary();
     const current = this.#cellPlans.get(input.id);
     if (!current) throw new PersistenceIntegrityError('cell plan not found');
     if (
@@ -1034,12 +1036,14 @@ export class InMemoryResearchCellRepository
   }
 
   async recordPosition(input: ResearchPositionRecord) {
+    await asyncBoundary();
     const record = ResearchPositionRecordSchema.parse(input);
     this.#require(this.#cellPlans, record.cellPlanId, 'cell plan');
     return this.#idempotentInsert(this.#positions, record.id, record);
   }
 
   async recordReviewAssignment(input: ReviewAssignmentRecord) {
+    await asyncBoundary();
     const record = ReviewAssignmentRecordSchema.parse(input);
     this.#require(this.#positions, record.targetPositionId, 'position');
     this.#insert(
@@ -1052,6 +1056,7 @@ export class InMemoryResearchCellRepository
   }
 
   async recordReview(input: ResearchReviewRecord) {
+    await asyncBoundary();
     const record = ResearchReviewRecordSchema.parse(input);
     this.#require(
       this.#reviewAssignments,
@@ -1062,18 +1067,21 @@ export class InMemoryResearchCellRepository
   }
 
   async recordDissent(input: DissentReportRecord) {
+    await asyncBoundary();
     const record = DissentReportRecordSchema.parse(input);
     this.#insert(this.#dissent, record.id, record, 'dissent');
     return copy(record);
   }
 
   async recordCorrelation(input: CorrelationAssessmentRecord) {
+    await asyncBoundary();
     const record = CorrelationAssessmentRecordSchema.parse(input);
     this.#insert(this.#correlations, record.id, record, 'correlation');
     return copy(record);
   }
 
   async recordRejectedResidue(input: RejectedAuditResidueRecord) {
+    await asyncBoundary();
     const record = RejectedAuditResidueRecordSchema.parse(input);
     assertPayloadDigest(
       record.payload,
@@ -1085,12 +1093,14 @@ export class InMemoryResearchCellRepository
   }
 
   async recordReceipt(input: CellReceiptRecord) {
+    await asyncBoundary();
     const record = CellReceiptRecordSchema.parse(input);
     this.#insert(this.#receipts, record.id, record, 'cell receipt');
     return copy(record);
   }
 
   async recordIsolationCommit(input: IsolationCommitRecord) {
+    await asyncBoundary();
     const record = IsolationCommitRecordSchema.parse(input);
     this.#require(this.#positions, record.positionId, 'position');
     this.#uniqueBy(
@@ -1103,6 +1113,7 @@ export class InMemoryResearchCellRepository
   }
 
   async recordIsolationReveal(input: IsolationRevealRecord) {
+    await asyncBoundary();
     const record = IsolationRevealRecordSchema.parse(input);
     const commit = [...this.#commits.values()].find(
       (row) => row.positionId === record.positionId,
@@ -1120,6 +1131,7 @@ export class InMemoryResearchCellRepository
   }
 
   async recordSanitizedReviewContext(input: SanitizedReviewContextRecord) {
+    await asyncBoundary();
     const record = SanitizedReviewContextRecordSchema.parse(input);
     this.#require(
       this.#reviewAssignments,
@@ -1131,6 +1143,7 @@ export class InMemoryResearchCellRepository
   }
 
   async recordCellAttempt(input: CellAttemptRecord) {
+    await asyncBoundary();
     const record = CellAttemptRecordSchema.parse(input);
     this.#require(this.#cellPlans, record.cellPlanId, 'cell plan');
     this.#insert(this.#attempts, record.id, record, 'cell attempt');
@@ -1138,6 +1151,7 @@ export class InMemoryResearchCellRepository
   }
 
   async recordBudgetReservation(input: BudgetReservationRecord) {
+    await asyncBoundary();
     const record = BudgetReservationRecordSchema.parse(input);
     this.#require(this.#attempts, record.attemptId, 'cell attempt');
     const existing = this.#findByStableIdentity(this.#reservations, record);
@@ -1147,6 +1161,7 @@ export class InMemoryResearchCellRepository
   }
 
   async recordBudgetSettlement(input: BudgetSettlementRecord) {
+    await asyncBoundary();
     const record = BudgetSettlementRecordSchema.parse(input);
     const existing = this.#findByStableIdentity(this.#settlements, record);
     if (existing) return copy(existing);
@@ -1172,6 +1187,7 @@ export class InMemoryResearchCellRepository
   }
 
   async recordBudgetRelease(input: BudgetReleaseRecord) {
+    await asyncBoundary();
     const record = BudgetReleaseRecordSchema.parse(input);
     const reservation = this.#require(
       this.#reservations,
@@ -1193,6 +1209,7 @@ export class InMemoryResearchCellRepository
   }
 
   async recordProviderCharge(input: ProviderChargeRecord) {
+    await asyncBoundary();
     const record = ProviderChargeRecordSchema.parse(input);
     this.#require(
       this.#reservations,
@@ -1206,6 +1223,7 @@ export class InMemoryResearchCellRepository
   }
 
   async recordCancellationReceipt(input: CancellationReceiptRecord) {
+    await asyncBoundary();
     const record = CancellationReceiptRecordSchema.parse(input);
     this.#require(this.#attempts, record.attemptId, 'cell attempt');
     const existing = this.#findByStableIdentity(this.#cancellations, record);
@@ -1241,6 +1259,7 @@ export class InMemoryResearchCellRepository
   async reconstructProgram(
     programId: string,
   ): Promise<ReconstructedResearchCellState> {
+    await asyncBoundary();
     return parseResearchCellState({
       programId,
       modelProfiles: [],
@@ -1350,6 +1369,10 @@ export class InMemoryResearchCellRepository
 
 function copy<T>(value: T): T {
   return structuredClone(value);
+}
+
+function asyncBoundary(): Promise<void> {
+  return Promise.resolve();
 }
 
 function withinBudget(

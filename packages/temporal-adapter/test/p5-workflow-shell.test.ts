@@ -166,8 +166,9 @@ describe('P5 Temporal divergence/review shell', () => {
 
 function fakeActivities() {
   const seen = new Map<string, string>();
-  const activities: P5DivergenceReviewActivities = {
-    runBoundary: vi.fn(async (input) => {
+  const runBoundary = vi.fn<P5DivergenceReviewActivities['runBoundary']>(
+    async (input) => {
+      await Promise.resolve();
       const existing = seen.get(input.activityId);
       const receiptId = existing ?? `receipt:${input.boundary}`;
       seen.set(input.activityId, receiptId);
@@ -178,19 +179,22 @@ function fakeActivities() {
         duplicate: existing !== undefined,
         authoritativeRevision: seen.size,
       };
-    }),
-    recordCancellation: vi.fn(async (input) => ({
+    },
+  );
+  const recordCancellation = vi.fn<
+    P5DivergenceReviewActivities['recordCancellation']
+  >(async (input) => {
+    await Promise.resolve();
+    return {
       boundary: input.cancellationPoint,
       activityId: input.activityId,
       receiptId: `receipt:cancel:${input.cancellationPoint}`,
       duplicate: false,
       authoritativeRevision: 100,
-    })),
-  };
-  return activities as {
-    runBoundary: ReturnType<typeof vi.fn> &
-      P5DivergenceReviewActivities['runBoundary'];
-    recordCancellation: ReturnType<typeof vi.fn> &
-      P5DivergenceReviewActivities['recordCancellation'];
+    };
+  });
+  return {
+    runBoundary,
+    recordCancellation,
   };
 }

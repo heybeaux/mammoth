@@ -1145,7 +1145,7 @@ describe('P5 isolation and blind-review contracts', () => {
     ];
     const residues = residueKinds.map((kind, index) =>
       reviewResidue({
-        id: `residue-${index + 1}`,
+        id: `residue-${String(index + 1)}`,
         kind,
         reasonCodes: [`${kind}-retained`],
       }),
