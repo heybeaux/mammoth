@@ -8,12 +8,16 @@ transitions, and treats missing PostgreSQL or Temporal tools as gate failures.
 
 `bootstrap` starts Postgres and the pinned local Temporal service and creates the
 explicit namespace. It deliberately does not claim the profile is ready. `start`,
-`status`, and both verification commands require Postgres, the Temporal service,
-the configured namespace/retention, and a compatible worker poller on the task
-queue with live manifest/capability probe evidence. Until the worker package and
-probe are composed into this CLI, the full readiness commands intentionally fail
-closed. Run that worker as a separate process after bootstrap and stop it before
-stopping the profile.
+and `status` require Postgres, the Temporal service, the configured
+namespace/retention, and a compatible worker poller on the task queue with live
+manifest/capability probe evidence. Until the worker package and probe are
+composed into this CLI, the full readiness commands intentionally fail closed.
+Run that worker as a separate process after bootstrap and stop it before stopping
+the profile.
+
+The P2 `verify-lifecycle` and `verify-backup` commands retain their original
+Postgres/CAS-only contract. They neither start nor require Temporal; use the
+operational commands above when validating the combined P3 profile.
 
 Shutdown is ordered: compatible worker polling must stop first, then the profile
 performs bounded Temporal service shutdown, then Postgres stops. `kill` still

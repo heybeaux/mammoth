@@ -15,10 +15,10 @@ describe('production profile Temporal integration', () => {
   it('loads the same explicit Temporal namespace and task queue used by the adapter', () => {
     const config = loadProductionTemporalConfig({
       MAMMOTH_TEMPORAL_NAMESPACE: 'mammoth-ci',
-      MAMMOTH_TEMPORAL_TASK_QUEUE: 'research-control-ci',
+      MAMMOTH_TEMPORAL_TASK_QUEUE: 'mammoth-research-control-v1',
     });
     expect(config.namespace).toBe('mammoth-ci');
-    expect(config.taskQueue).toBe('research-control-ci');
+    expect(config.taskQueue).toBe('mammoth-research-control-v1');
   });
 
   it('fails closed when the Temporal-backed profile is not ready', async () => {
