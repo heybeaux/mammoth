@@ -18,7 +18,6 @@ import {
   researchPositionDigest,
   researchReviewDigest,
   synthesisArtifactDigest,
-  unsupportedAgreementCannotPromote,
   validateModelLineageGraph,
   type CellInput,
   type CorrelationAssessment,
@@ -169,11 +168,16 @@ const modelVersions = new Map(
 
 const universe: ReferenceUniverse = {
   programId: 'program-1',
+  cellPlanId: 'cell-plan-1',
+  workItemId: 'work-1',
+  inputDigest: cellInputDigest(input),
+  outputSchemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
   criterionRef,
   claimIds: new Set(['claim-supported', 'claim-unsupported']),
   evidenceIds: new Set(['evidence-1']),
   hypothesisIds: new Set(['hypothesis-1']),
   artifactIds: new Set(['artifact-1']),
+  receiptRefs: new Map(),
   modelVersions,
 };
 
@@ -484,6 +488,13 @@ describe('model lineage and correlation policy', () => {
     expect(
       validateModelLineageGraph([{ ...authorModel, immutableDigest: digestB }]),
     ).toMatchObject({ ok: false, code: 'noncanonical_model_digest' });
+
+    expect(
+      validateModelLineageGraph([
+        authorModel,
+        modelVersion({ id: authorModel.id, family: 'family-conflict' }),
+      ]),
+    ).toMatchObject({ ok: false, code: 'duplicate_model_lineage' });
   });
 
   it('does not count aliases, shared derivation, or unknown lineage as independent', () => {
@@ -527,25 +538,31 @@ describe('model lineage and correlation policy', () => {
 });
 
 describe('admission and review policy', () => {
-  it('keeps one or one hundred unsupported agreeing positions from promoting truth', () => {
-    expect(
-      unsupportedAgreementCannotPromote({
-        claimId: 'claim-unsupported',
-        supportingPositionIds: ['position-1'],
-        admittedClaimIds: new Set(['claim-supported']),
-      }),
-    ).toBe(true);
-    expect(
-      unsupportedAgreementCannotPromote({
-        claimId: 'claim-unsupported',
-        supportingPositionIds: Array.from(
-          { length: 100 },
-          (_, index) => `position-${String(index)}`,
-        ),
-        admittedClaimIds: new Set(['claim-supported']),
-      }),
-    ).toBe(true);
-  });
+  it.each([1, 100])(
+    'keeps an unsupported claim unsupported with %i agreeing positions',
+    (count) => {
+      const proposals = Array.from({ length: count }, (_, index) =>
+        position({ id: `position-${String(index + 1)}` }),
+      );
+      const evaluated = evaluatePositionProposals(proposals, universe);
+      expect(evaluated.admitted).toHaveLength(count);
+      expect(
+        admitSynthesis({
+          raw: synthesis({
+            admittedClaimIds: ['claim-unsupported'],
+            factualSentenceClaimIds: ['claim-unsupported'],
+            positionIds: evaluated.admitted.map(({ id }) => id),
+          }),
+          universe,
+          admittedClaimIds: new Set(['claim-supported']),
+          admittedPositionIds: new Set(evaluated.admitted.map(({ id }) => id)),
+        }),
+      ).toMatchObject({
+        ok: false,
+        reasonCodes: ['synthesis_non_admitted_claim'],
+      });
+    },
+  );
 
   it('rejects self-review and correlated review while accepting cross-family review', () => {
     const selfReview = admitResearchReview({
@@ -558,7 +575,6 @@ describe('admission and review policy', () => {
         reviewerModelProfileVersionId: authorModel.id,
       }),
       universe,
-      requireIndependentReviewer: true,
     });
     expect(selfReview.ok).toBe(false);
     if (!selfReview.ok) expect(selfReview.reasonCodes).toContain('self_review');
@@ -571,7 +587,6 @@ describe('admission and review policy', () => {
         reviewerModelProfileVersionId: aliasModel.id,
       }),
       universe,
-      requireIndependentReviewer: true,
     });
     expect(correlatedReview.ok).toBe(false);
     if (!correlatedReview.ok) {
@@ -587,7 +602,6 @@ describe('admission and review policy', () => {
         targetModelProfileVersionId: correlatedModel.id,
       }),
       universe,
-      requireIndependentReviewer: true,
     });
     expect(sharedDerivationReview.ok).toBe(false);
     if (!sharedDerivationReview.ok) {
@@ -602,7 +616,6 @@ describe('admission and review policy', () => {
         reviewerModelProfileVersionId: unknownModel.id,
       }),
       universe,
-      requireIndependentReviewer: true,
     });
     expect(unknownLineageReview.ok).toBe(false);
     if (!unknownLineageReview.ok) {
@@ -614,9 +627,75 @@ describe('admission and review policy', () => {
         raw: review(),
         assignment: assignment(),
         universe,
-        requireIndependentReviewer: true,
       }),
     ).toMatchObject({ ok: true });
+  });
+
+  it('fails closed when review correlation receives a dangling lineage graph', () => {
+    const dangling = modelVersion({
+      id: 'model-dangling-reviewer',
+      family: 'family-dangling',
+      checkpoint: 'checkpoint-dangling',
+      lineage: {
+        kind: 'known',
+        trainingLineageIds: [],
+        fineTuneLineageIds: [],
+        sharedDerivationIds: [],
+        parentVersionIds: ['model-missing-parent'],
+      },
+    });
+    const danglingUniverse: ReferenceUniverse = {
+      ...universe,
+      modelVersions: new Map([...modelVersions, [dangling.id, dangling]]),
+    };
+    const decision = admitResearchReview({
+      raw: review({ reviewerModelProfileVersionId: dangling.id }),
+      assignment: assignment({ reviewerModelProfileVersionId: dangling.id }),
+      universe: danglingUniverse,
+    });
+    expect(decision).toMatchObject({
+      ok: false,
+      reasonCodes: ['correlated_review'],
+    });
+  });
+
+  it('binds position identity, input, output, and receipts to authority', () => {
+    const receipt = {
+      receiptId: 'receipt-1',
+      kind: 'model_invocation' as const,
+      artifactDigest: digestB,
+      receivedAt: now,
+    };
+    const receiptUniverse: ReferenceUniverse = {
+      ...universe,
+      receiptRefs: new Map([[receipt.receiptId, receipt]]),
+    };
+    expect(
+      admitResearchPosition(
+        position({ receiptRefs: [receipt] }),
+        receiptUniverse,
+      ),
+    ).toMatchObject({ ok: true });
+
+    const driftCases: readonly [Partial<ResearchPosition>, string][] = [
+      [{ cellPlanId: 'cell-plan-other' }, 'cell_plan_drift'],
+      [{ workItemId: 'work-other' }, 'work_item_drift'],
+      [{ inputDigest: digestB }, 'input_digest_drift'],
+      [{ outputSchemaVersion: '2.0.0' }, 'output_schema_drift'],
+      [
+        { receiptRefs: [{ ...receipt, receiptId: 'receipt-missing' }] },
+        'missing_receipt_ref',
+      ],
+      [
+        { receiptRefs: [{ ...receipt, artifactDigest: digestC }] },
+        'receipt_ref_drift',
+      ],
+    ];
+    for (const [change, reason] of driftCases) {
+      expect(
+        admitResearchPosition(position(change), receiptUniverse),
+      ).toMatchObject({ ok: false, reasonCodes: [reason] });
+    }
   });
 
   it('binds every immutable review field to the resolved assignment', () => {

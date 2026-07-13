@@ -524,6 +524,7 @@ export type ModelLineageGraphResult =
       code:
         | 'dangling_model_lineage'
         | 'cyclic_model_lineage'
+        | 'duplicate_model_lineage'
         | 'noncanonical_model_digest';
       message: string;
     };
@@ -539,6 +540,13 @@ export function validateModelLineageGraph(
         ok: false,
         code: 'noncanonical_model_digest',
         message: parsed.error.issues.map((issue) => issue.message).join('; '),
+      };
+    }
+    if (records.has(parsed.data.id)) {
+      return {
+        ok: false,
+        code: 'duplicate_model_lineage',
+        message: `duplicate model profile version ${parsed.data.id}`,
       };
     }
     records.set(parsed.data.id, parsed.data);
@@ -595,6 +603,7 @@ export type CorrelationReason =
   | 'shared_derivation'
   | 'ancestral_derivation'
   | 'unknown_lineage'
+  | 'invalid_lineage_graph'
   | 'different_known_family';
 
 export interface CorrelationPolicyInput {
@@ -616,6 +625,23 @@ export function assessModelCorrelation(
 ): CorrelationPolicyResult {
   const reasons = new Set<CorrelationReason>();
   const { subject, candidate } = input;
+
+  const subjectRecord = input.registry.get(subject.id);
+  const candidateRecord = input.registry.get(candidate.id);
+  const graph = validateModelLineageGraph(input.registry.values());
+  if (
+    !graph.ok ||
+    !ModelProfileVersionSchema.safeParse(subject).success ||
+    !ModelProfileVersionSchema.safeParse(candidate).success ||
+    subjectRecord?.immutableDigest !== subject.immutableDigest ||
+    candidateRecord?.immutableDigest !== candidate.immutableDigest
+  ) {
+    return {
+      independent: false,
+      correlationScore: 1,
+      reasonCodes: ['invalid_lineage_graph'],
+    };
+  }
 
   if (subject.id === candidate.id) reasons.add('same_model_profile_version');
   if (
@@ -708,6 +734,12 @@ export type AdmissionReason =
   | 'missing_evidence_ref'
   | 'missing_hypothesis_ref'
   | 'missing_artifact_ref'
+  | 'missing_receipt_ref'
+  | 'receipt_ref_drift'
+  | 'cell_plan_drift'
+  | 'work_item_drift'
+  | 'input_digest_drift'
+  | 'output_schema_drift'
   | 'criterion_drift'
   | 'unapproved_criterion_branch'
   | 'unknown_model_lineage'
@@ -730,12 +762,17 @@ export type PolicyDecision<T> =
 
 export interface ReferenceUniverse {
   programId: string;
+  cellPlanId: string;
+  workItemId: string;
+  inputDigest: string;
+  outputSchemaVersion: string;
   criterionRef: CriterionReference;
   allowedCriterionBranches?: readonly CriterionReference[];
   claimIds: ReadonlySet<string>;
   evidenceIds: ReadonlySet<string>;
   hypothesisIds: ReadonlySet<string>;
   artifactIds: ReadonlySet<string>;
+  receiptRefs: ReadonlyMap<string, ReceiptReference>;
   modelVersions: ReadonlyMap<string, ModelProfileVersion>;
 }
 
@@ -800,7 +837,6 @@ export function admitResearchReview(input: {
   raw: unknown;
   assignment: ReviewAssignment;
   universe: ReferenceUniverse;
-  requireIndependentReviewer?: boolean;
 }): PolicyDecision<ResearchReview> {
   const parsed = ResearchReviewSchema.safeParse(input.raw);
   if (!parsed.success) {
@@ -853,7 +889,7 @@ export function admitResearchReview(input: {
   );
   if (!reviewer || !target) {
     reasons.push('unknown_model_lineage');
-  } else if (input.requireIndependentReviewer) {
+  } else {
     const correlation = assessModelCorrelation({
       subject: reviewer,
       candidate: target,
@@ -941,6 +977,9 @@ export function admitSynthesis(input: {
     [],
     [],
   );
+  if (artifact.cellPlanId !== input.universe.cellPlanId) {
+    reasons.push('cell_plan_drift');
+  }
   for (const claimId of [
     ...artifact.admittedClaimIds,
     ...artifact.factualSentenceClaimIds,
@@ -961,15 +1000,6 @@ export function admitSynthesis(input: {
         reasonCodes: admissionSuccessReasons(artifact, input.universe),
       }
     : { ok: false, rejected: artifact, reasonCodes: uniqueReasons(reasons) };
-}
-
-export function unsupportedAgreementCannotPromote(input: {
-  claimId: string;
-  supportingPositionIds: readonly string[];
-  admittedClaimIds: ReadonlySet<string>;
-}): boolean {
-  void input.supportingPositionIds;
-  return !input.admittedClaimIds.has(input.claimId);
 }
 
 export interface ProposalAudit<T> {
@@ -999,7 +1029,7 @@ function commonProposalReasons(
   position: ResearchPosition,
   universe: ReferenceUniverse,
 ): AdmissionReason[] {
-  return commonRefsReasons(
+  const reasons = commonRefsReasons(
     position,
     universe,
     position.claimIds,
@@ -1007,6 +1037,15 @@ function commonProposalReasons(
     position.hypothesisIds,
     position.artifactIds,
   );
+  if (position.cellPlanId !== universe.cellPlanId)
+    reasons.push('cell_plan_drift');
+  if (position.workItemId !== universe.workItemId)
+    reasons.push('work_item_drift');
+  if (position.inputDigest !== universe.inputDigest)
+    reasons.push('input_digest_drift');
+  if (position.outputSchemaVersion !== universe.outputSchemaVersion)
+    reasons.push('output_schema_drift');
+  return reasons;
 }
 
 function commonRefsReasons(
@@ -1043,6 +1082,14 @@ function commonRefsReasons(
   for (const artifactId of artifactIds) {
     if (!universe.artifactIds.has(artifactId))
       reasons.push('missing_artifact_ref');
+  }
+  if ('receiptRefs' in value && Array.isArray(value.receiptRefs)) {
+    for (const receipt of value.receiptRefs as readonly ReceiptReference[]) {
+      const known = universe.receiptRefs.get(receipt.receiptId);
+      if (!known) reasons.push('missing_receipt_ref');
+      else if (canonicalDigest(known) !== canonicalDigest(receipt))
+        reasons.push('receipt_ref_drift');
+    }
   }
   return reasons;
 }

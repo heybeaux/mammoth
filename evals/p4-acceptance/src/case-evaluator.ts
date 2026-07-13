@@ -4,13 +4,14 @@ import {
   RESEARCH_CELL_CONTRACT_VERSION,
   admitResearchPosition,
   admitResearchReview,
+  admitSynthesis,
   assessModelCorrelation,
   canonicalDigest,
   evaluatePositionProposals,
   modelProfileVersionDigest,
   researchPositionDigest,
   researchReviewDigest,
-  unsupportedAgreementCannotPromote,
+  synthesisArtifactDigest,
   validateModelLineageGraph,
   type CriterionReference,
   type ModelProfileVersion,
@@ -18,6 +19,7 @@ import {
   type ResearchPosition,
   type ResearchReview,
   type ReviewAssignment,
+  type SynthesisArtifact,
 } from '@mammoth/domain';
 import { buildObservatoryProjectionV1 } from '@mammoth/observatory-projection';
 
@@ -35,17 +37,25 @@ export async function evaluateP4Case(
   switch (testCase.evaluator) {
     case 'unsupported_agreement': {
       const count = requiredNumber(testCase.input, 'supportingPositionCount');
-      const blocked = unsupportedAgreementCannotPromote({
-        claimId: 'claim-target',
-        supportingPositionIds: Array.from(
-          { length: count },
-          (_, index) => `position-${String(index + 1)}`,
+      const universe = referenceUniverse();
+      const proposals = Array.from({ length: count }, (_, index) =>
+        position({ id: `position-${String(index + 1)}` }),
+      );
+      const evaluated = evaluatePositionProposals(proposals, universe);
+      if (evaluated.admitted.length !== count) return 'proposal_rejected';
+      const admittedClaimIds = new Set(
+        testCase.input.claimAdmitted === true ? ['claim-known'] : [],
+      );
+      const decision = admitSynthesis({
+        raw: synthesisArtifact(
+          evaluated.admitted.map(({ id }) => id),
+          ['claim-known'],
         ),
-        admittedClaimIds: new Set(
-          testCase.input.claimAdmitted === true ? ['claim-target'] : [],
-        ),
+        universe,
+        admittedClaimIds,
+        admittedPositionIds: new Set(evaluated.admitted.map(({ id }) => id)),
       });
-      return blocked ? 'unsupported' : 'promoted';
+      return decision.ok ? 'promoted' : 'unsupported';
     }
     case 'model_correlation':
       return evaluateCorrelation(requiredString(testCase.input, 'scenario'));
@@ -141,7 +151,6 @@ function evaluateReview(scenario: string): string {
     raw: review(assignment),
     assignment,
     universe,
-    requireIndependentReviewer: true,
   });
   if (decision.ok) return decision.reasonCodes[0];
   return decision.reasonCodes.includes('self_review')
@@ -290,12 +299,17 @@ function referenceUniverse(
   });
   return {
     programId: 'program-p4',
+    cellPlanId: 'cell-plan-p4',
+    workItemId: 'work-item-p4',
+    inputDigest: digest('input-p4'),
+    outputSchemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
     criterionRef: primary,
     allowedCriterionBranches: [branch],
     claimIds: new Set(['claim-known']),
     evidenceIds: new Set(['evidence-known']),
     hypothesisIds: new Set(['hypothesis-known']),
     artifactIds: new Set(['artifact-known']),
+    receiptRefs: new Map(),
     modelVersions: new Map([
       [author.id, author],
       [reviewer.id, reviewer],
@@ -357,11 +371,15 @@ function modelVersion(input: {
 }
 
 function position(
-  input: { criterionRef?: CriterionReference; claimIds?: string[] } = {},
+  input: {
+    id?: string;
+    criterionRef?: CriterionReference;
+    claimIds?: string[];
+  } = {},
 ): ResearchPosition {
   const claimIds = input.claimIds ?? ['claim-known'];
   const base: ResearchPosition = {
-    id: 'position-p4',
+    id: input.id ?? 'position-p4',
     schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
     programId: 'program-p4',
     cellPlanId: 'cell-plan-p4',
@@ -390,6 +408,28 @@ function position(
     createdAt: '2026-07-13T18:00:00.000Z',
   };
   return { ...base, canonicalDigest: researchPositionDigest(base) };
+}
+
+function synthesisArtifact(
+  positionIds: readonly string[],
+  claimIds: readonly string[],
+): SynthesisArtifact {
+  const base: SynthesisArtifact = {
+    id: 'synthesis-p4',
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    programId: 'program-p4',
+    cellPlanId: 'cell-plan-p4',
+    criterionRef: criterion('criterion-primary', 1, 'branch-main'),
+    admittedClaimIds: [...claimIds],
+    factualSentenceClaimIds: [...claimIds],
+    positionIds: [...positionIds],
+    dissentReportIds: [],
+    unresolvedClaimIds: [],
+    receiptRefs: [],
+    canonicalDigest: digest('synthesis-placeholder'),
+    createdAt: '2026-07-13T18:00:00.000Z',
+  };
+  return { ...base, canonicalDigest: synthesisArtifactDigest(base) };
 }
 
 function reviewAssignment(input: {
