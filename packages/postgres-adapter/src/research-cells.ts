@@ -1,30 +1,31 @@
 import {
-  CellPlanSchema,
-  CellReceiptSchema,
-  CorrelationAssessmentSchema,
-  DissentReportSchema,
-  ModelProfileSchema,
-  ModelProfileVersionSchema,
+  CellPlanRecordSchema as CellPlanSchema,
+  CellReceiptRecordSchema as CellReceiptSchema,
+  CorrelationAssessmentRecordSchema as CorrelationAssessmentSchema,
+  DissentReportRecordSchema as DissentReportSchema,
+  ModelProfileRecordSchema as ModelProfileSchema,
+  ModelProfileVersionRecordSchema as ModelProfileVersionSchema,
   PersistenceConflictError,
-  ResearchPositionSchema,
-  ResearchReviewSchema,
-  RejectedAuditResidueSchema,
+  PersistenceIntegrityError,
+  ResearchPositionRecordSchema as ResearchPositionSchema,
+  ResearchReviewRecordSchema as ResearchReviewSchema,
+  RejectedAuditResidueRecordSchema as RejectedAuditResidueSchema,
   assertPayloadDigest,
   parseResearchCellState,
-  type CellPlan,
+  type CellPlanRecord as CellPlan,
   type CellPlanStatusUpdate,
-  type CellReceipt,
-  type CorrelationAssessment,
-  type DissentReport,
+  type CellReceiptRecord as CellReceipt,
+  type CorrelationAssessmentRecord as CorrelationAssessment,
+  type DissentReportRecord as DissentReport,
   type ModelLineageRepository,
-  type ModelProfile,
-  type ModelProfileVersion,
+  type ModelProfileRecord as ModelProfile,
+  type ModelProfileVersionRecord as ModelProfileVersion,
   type ModelProfileWrite,
   type ReconstructedResearchCellState,
-  type RejectedAuditResidue,
+  type RejectedAuditResidueRecord as RejectedAuditResidue,
   type ResearchCellRepository,
-  type ResearchPosition,
-  type ResearchReview,
+  type ResearchPositionRecord as ResearchPosition,
+  type ResearchReviewRecord as ResearchReview,
 } from '@mammoth/persistence';
 import type { PostgresConnection, TransactionOptions } from './driver.js';
 
@@ -40,6 +41,15 @@ export class PostgresModelLineageRepository implements ModelLineageRepository {
   ) {}
 
   async upsertModelProfile(input: ModelProfileWrite): Promise<ModelProfile> {
+    if (
+      input.id !== input.contract.id ||
+      input.provider !== input.contract.provider ||
+      input.canonicalName !== input.contract.displayName ||
+      input.familyId !== input.contract.family
+    )
+      throw new PersistenceIntegrityError(
+        'model profile write metadata drifts from domain contract',
+      );
     const now = this.options.now();
     await this.database.transaction(this.options.transaction, async (tx) => {
       const existing = await tx.query<ModelProfileRow>(
@@ -58,14 +68,16 @@ export class PostgresModelLineageRepository implements ModelLineageRepository {
         const updated = await tx.query(
           `update mammoth_model_profiles
              set provider = $2, canonical_name = $3, family_id = $4, active = $5,
-                 revision = revision + 1, updated_at = $6::timestamptz
-           where id = $1 and revision = $7`,
+                 authoritative_contract = $6::jsonb,
+                 revision = revision + 1, updated_at = $7::timestamptz
+           where id = $1 and revision = $8`,
           [
             input.id,
             input.provider,
             input.canonicalName,
             input.familyId,
             input.active,
+            JSON.stringify(input.contract),
             now,
             existing.rows[0].revision,
           ],
@@ -86,14 +98,16 @@ export class PostgresModelLineageRepository implements ModelLineageRepository {
         }
         await tx.query(
           `insert into mammoth_model_profiles
-            (id, provider, canonical_name, family_id, active, revision, created_at, updated_at)
-           values ($1, $2, $3, $4, $5, 0, $6::timestamptz, $6::timestamptz)`,
+            (id, provider, canonical_name, family_id, active, authoritative_contract,
+             revision, created_at, updated_at)
+           values ($1, $2, $3, $4, $5, $6::jsonb, 0, $7::timestamptz, $7::timestamptz)`,
           [
             input.id,
             input.provider,
             input.canonicalName,
             input.familyId,
             input.active,
+            JSON.stringify(input.contract),
             now,
           ],
         );
@@ -124,8 +138,9 @@ export class PostgresModelLineageRepository implements ModelLineageRepository {
       `insert into mammoth_model_profile_versions
         (id, profile_id, profile_revision, provider, model_name, checkpoint, family_id,
          lineage_status, training_lineage_ids, fine_tune_lineage_ids, shared_derivation_ids,
-         locality, modalities, context_window, data_policy_id, cost_profile_id, declared_at, metadata)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12,$13::jsonb,$14,$15,$16,$17::timestamptz,$18::jsonb)`,
+         locality, modalities, context_window, data_policy_id, cost_profile_id, declared_at,
+         metadata, authoritative_contract)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11::jsonb,$12,$13::jsonb,$14,$15,$16,$17::timestamptz,$18::jsonb,$19::jsonb)`,
       [
         parsed.id,
         parsed.profileId,
@@ -145,6 +160,7 @@ export class PostgresModelLineageRepository implements ModelLineageRepository {
         parsed.costProfileId,
         parsed.declaredAt,
         JSON.stringify(parsed.metadata),
+        JSON.stringify(parsed.contract),
       ],
     );
     return parsed;
@@ -198,8 +214,8 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
       `insert into mammoth_cell_plans
         (id, program_id, work_item_id, criterion_id, criterion_digest, plan_version,
          template_version, branch_id, role, input_digest, output_contract_version,
-         status, revision, fencing_token, created_at, updated_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::timestamptz,$16::timestamptz)`,
+         status, revision, fencing_token, created_at, updated_at, authoritative_contract)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::timestamptz,$16::timestamptz,$17::jsonb)`,
       [
         parsed.id,
         parsed.programId,
@@ -217,6 +233,7 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         parsed.fencingToken,
         parsed.createdAt,
         parsed.updatedAt,
+        JSON.stringify(parsed.contract),
       ],
     );
     return parsed;
@@ -249,14 +266,13 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
 
   async recordPosition(input: ResearchPosition): Promise<ResearchPosition> {
     const parsed = ResearchPositionSchema.parse(input);
-    assertPayloadDigest(parsed.body, parsed.positionDigest, 'position body');
     await this.database.query(
       `insert into mammoth_research_positions
         (id, cell_plan_id, program_id, work_item_id, criterion_id, criterion_digest,
          model_profile_id, model_profile_version_id, input_digest, output_schema_version,
          position_digest, claim_ids, evidence_ids, hypothesis_ids, proposal_refs,
-         usage, uncertainty_code, failure_code, body, recorded_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17,$18,$19::jsonb,$20::timestamptz)`,
+         usage, uncertainty_code, failure_code, body, recorded_at, authoritative_contract)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17,$18,$19::jsonb,$20::timestamptz,$21::jsonb)`,
       positionParameters(parsed),
     );
     return parsed;
@@ -264,14 +280,14 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
 
   async recordReview(input: ResearchReview): Promise<ResearchReview> {
     const parsed = ResearchReviewSchema.parse(input);
-    assertPayloadDigest(parsed.body, parsed.reviewDigest, 'review body');
     await this.database.query(
       `insert into mammoth_research_reviews
         (id, position_id, cell_plan_id, program_id, work_item_id, criterion_id, criterion_digest,
          model_profile_id, model_profile_version_id, reviewer_role, input_digest,
          output_schema_version, review_digest, verdict, claim_ids, evidence_ids,
-         hypothesis_ids, usage, uncertainty_code, failure_code, reasons, body, recorded_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::jsonb,$17::jsonb,$18::jsonb,$19,$20,$21::jsonb,$22::jsonb,$23::timestamptz)`,
+         hypothesis_ids, usage, uncertainty_code, failure_code, reasons, body, recorded_at,
+         authoritative_contract)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16::jsonb,$17::jsonb,$18::jsonb,$19,$20,$21::jsonb,$22::jsonb,$23::timestamptz,$24::jsonb)`,
       [
         parsed.id,
         parsed.positionId,
@@ -296,6 +312,7 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         JSON.stringify(parsed.reasons),
         JSON.stringify(parsed.body),
         parsed.recordedAt,
+        JSON.stringify(parsed.contract),
       ],
     );
     return parsed;
@@ -303,13 +320,12 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
 
   async recordDissent(input: DissentReport): Promise<DissentReport> {
     const parsed = DissentReportSchema.parse(input);
-    assertPayloadDigest(parsed.body, parsed.reportDigest, 'dissent body');
     await this.database.query(
       `insert into mammoth_dissent_reports
         (id, cell_plan_id, program_id, criterion_id, criterion_digest,
          author_model_profile_version_id, report_digest, claim_ids, evidence_ids,
-         minority_position_ids, body, recorded_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::timestamptz)`,
+         minority_position_ids, body, recorded_at, authoritative_contract)
+       values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::timestamptz,$13::jsonb)`,
       [
         parsed.id,
         parsed.cellPlanId,
@@ -323,6 +339,7 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         JSON.stringify(parsed.minorityPositionIds),
         JSON.stringify(parsed.body),
         parsed.recordedAt,
+        JSON.stringify(parsed.contract),
       ],
     );
     return parsed;
@@ -336,8 +353,8 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
       `insert into mammoth_correlation_assessments
         (id, left_model_profile_version_id, right_model_profile_version_id,
          policy_version, correlation_score, independence_verdict, reasons,
-         assessment_digest, assessed_at)
-       values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9::timestamptz)`,
+         assessment_digest, assessed_at, authoritative_contract)
+       values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9::timestamptz,$10::jsonb)`,
       [
         parsed.id,
         parsed.leftModelProfileVersionId,
@@ -348,6 +365,7 @@ export class PostgresResearchCellRepository implements ResearchCellRepository {
         JSON.stringify(parsed.reasons),
         parsed.assessmentDigest,
         parsed.assessedAt,
+        JSON.stringify(parsed.contract),
       ],
     );
     return parsed;
@@ -515,6 +533,7 @@ interface ModelProfileRow extends Record<string, unknown> {
   revision: number;
   created_at: string;
   updated_at: string;
+  authoritative_contract: unknown;
 }
 interface ModelProfileVersionRow extends Record<string, unknown> {
   id: string;
@@ -535,6 +554,7 @@ interface ModelProfileVersionRow extends Record<string, unknown> {
   cost_profile_id: string;
   declared_at: string;
   metadata: unknown;
+  authoritative_contract: unknown;
 }
 interface CellPlanRow extends Record<string, unknown> {
   id: string;
@@ -553,6 +573,7 @@ interface CellPlanRow extends Record<string, unknown> {
   fencing_token: number;
   created_at: string;
   updated_at: string;
+  authoritative_contract: unknown;
 }
 interface PositionRow extends Record<string, unknown> {
   id: string;
@@ -575,6 +596,7 @@ interface PositionRow extends Record<string, unknown> {
   failure_code: string | null;
   body: unknown;
   recorded_at: string;
+  authoritative_contract: unknown;
 }
 interface ReviewRow
   extends Omit<PositionRow, 'position_digest' | 'proposal_refs'> {
@@ -597,6 +619,7 @@ interface DissentRow extends Record<string, unknown> {
   minority_position_ids: unknown;
   body: unknown;
   recorded_at: string;
+  authoritative_contract: unknown;
 }
 interface CorrelationRow extends Record<string, unknown> {
   id: string;
@@ -608,6 +631,7 @@ interface CorrelationRow extends Record<string, unknown> {
   reasons: unknown;
   assessment_digest: CorrelationAssessment['assessmentDigest'];
   assessed_at: string;
+  authoritative_contract: unknown;
 }
 interface RejectedRow extends Record<string, unknown> {
   id: string;
@@ -634,6 +658,7 @@ interface ReceiptRow extends Record<string, unknown> {
 
 function toModelProfile(row: ModelProfileRow): ModelProfile {
   return ModelProfileSchema.parse({
+    contract: row.authoritative_contract,
     id: row.id,
     provider: row.provider,
     canonicalName: row.canonical_name,
@@ -649,6 +674,7 @@ function toModelProfileVersion(
   row: ModelProfileVersionRow,
 ): ModelProfileVersion {
   return ModelProfileVersionSchema.parse({
+    contract: row.authoritative_contract,
     id: row.id,
     profileId: row.profile_id,
     profileRevision: Number(row.profile_revision),
@@ -671,6 +697,7 @@ function toModelProfileVersion(
 }
 function toCellPlan(row: CellPlanRow): CellPlan {
   return CellPlanSchema.parse({
+    contract: row.authoritative_contract,
     id: row.id,
     programId: row.program_id,
     workItemId: row.work_item_id,
@@ -691,6 +718,7 @@ function toCellPlan(row: CellPlanRow): CellPlan {
 }
 function toPosition(row: PositionRow): ResearchPosition {
   return ResearchPositionSchema.parse({
+    contract: row.authoritative_contract,
     id: row.id,
     cellPlanId: row.cell_plan_id,
     programId: row.program_id,
@@ -715,6 +743,7 @@ function toPosition(row: PositionRow): ResearchPosition {
 }
 function toReview(row: ReviewRow): ResearchReview {
   return ResearchReviewSchema.parse({
+    contract: row.authoritative_contract,
     id: row.id,
     positionId: row.position_id,
     cellPlanId: row.cell_plan_id,
@@ -742,6 +771,7 @@ function toReview(row: ReviewRow): ResearchReview {
 }
 function toDissent(row: DissentRow): DissentReport {
   return DissentReportSchema.parse({
+    contract: row.authoritative_contract,
     id: row.id,
     cellPlanId: row.cell_plan_id,
     programId: row.program_id,
@@ -758,6 +788,7 @@ function toDissent(row: DissentRow): DissentReport {
 }
 function toCorrelation(row: CorrelationRow): CorrelationAssessment {
   return CorrelationAssessmentSchema.parse({
+    contract: row.authoritative_contract,
     id: row.id,
     leftModelProfileVersionId: row.left_model_profile_version_id,
     rightModelProfileVersionId: row.right_model_profile_version_id,
@@ -817,6 +848,7 @@ function positionParameters(parsed: ResearchPosition): readonly unknown[] {
     parsed.failureCode,
     JSON.stringify(parsed.body),
     parsed.recordedAt,
+    JSON.stringify(parsed.contract),
   ];
 }
 function asArray(value: unknown): readonly string[] {

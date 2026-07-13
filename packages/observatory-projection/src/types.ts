@@ -5,14 +5,21 @@ import {
   ClaimEvidenceEdgeSchema,
   ClaimSchema,
   ClaimStatusSchema,
+  CellPlanSchema,
+  CellTemplateSchema,
+  CorrelationAssessmentSchema,
   DecisionCriterionSchema,
   DigestSchema,
   EntityIdSchema,
   EvidenceArtifactSchema,
   EvidenceKindSchema,
   EvidenceLocatorSchema,
+  DissentReportSchema,
+  ModelProfileVersionSchema,
   NonEmptyStringSchema,
   ResearchProgramSchema,
+  ResearchPositionSchema,
+  ResearchReviewSchema,
   SourceLineageSchema,
   TimestampSchema,
 } from '@mammoth/domain';
@@ -138,20 +145,13 @@ const ProjectionDigestRecordSchema = z.object({
 });
 
 export const CellProjectionInputSchema = ProjectionDigestRecordSchema.extend({
+  contract: CellPlanSchema,
   id: EntityIdSchema,
   programId: EntityIdSchema,
   cellPlanId: EntityIdSchema,
   cellPlanVersion: NonEmptyStringSchema,
   branchId: NonEmptyStringSchema,
-  role: z.enum([
-    'landscape',
-    'divergence',
-    'prior-art',
-    'falsification',
-    'experiment-design',
-    'review',
-    'synthesis',
-  ]),
+  role: CellTemplateSchema.shape.kind,
   status: z.enum([
     'planned',
     'running',
@@ -161,7 +161,7 @@ export const CellProjectionInputSchema = ProjectionDigestRecordSchema.extend({
     'cancelled',
   ]),
   criterionId: EntityIdSchema,
-  criterionVersion: NonEmptyStringSchema,
+  criterionVersion: z.number().int().positive(),
   criterionDigest: DigestSchema,
   workItemIds: z.array(EntityIdSchema),
   receiptIds: z.array(EntityIdSchema),
@@ -169,31 +169,34 @@ export const CellProjectionInputSchema = ProjectionDigestRecordSchema.extend({
 
 export const PositionProjectionInputSchema =
   ProjectionDigestRecordSchema.extend({
+    contract: ResearchPositionSchema,
     id: EntityIdSchema,
     cellId: EntityIdSchema,
     claimIds: z.array(EntityIdSchema),
     evidenceIds: z.array(EntityIdSchema),
-    modelProfileId: EntityIdSchema,
+    modelProfileVersionId: EntityIdSchema,
     criterionId: EntityIdSchema,
-    criterionVersion: NonEmptyStringSchema,
+    criterionVersion: z.number().int().positive(),
     criterionDigest: DigestSchema,
     status: z.enum(['proposed', 'admitted', 'rejected', 'unresolved']),
     rejectedResidueId: EntityIdSchema.optional(),
   }).strict();
 
 export const ReviewProjectionInputSchema = ProjectionDigestRecordSchema.extend({
+  contract: ResearchReviewSchema,
   id: EntityIdSchema,
   cellId: EntityIdSchema,
   positionId: EntityIdSchema,
-  reviewerModelProfileId: EntityIdSchema,
+  reviewerModelProfileVersionId: EntityIdSchema,
   assignmentId: EntityIdSchema,
-  verdict: z.enum(['approve', 'reject', 'abstain', 'needs_human']),
+  verdict: z.enum(['admit', 'reject', 'revise', 'unresolved']),
   status: z.enum(['assigned', 'completed', 'rejected', 'cancelled']),
   receiptIds: z.array(EntityIdSchema),
 }).strict();
 
 export const ModelLineageProjectionInputSchema =
   ProjectionDigestRecordSchema.extend({
+    contract: ModelProfileVersionSchema,
     id: EntityIdSchema,
     provider: NonEmptyStringSchema,
     family: NonEmptyStringSchema,
@@ -203,10 +206,27 @@ export const ModelLineageProjectionInputSchema =
     sharedDerivationIds: z.array(EntityIdSchema),
     correlationGroupId: EntityIdSchema.optional(),
     unknownLineage: z.boolean(),
-  }).strict();
+  })
+    .strict()
+    .superRefine((record, context) => {
+      if (
+        record.id !== record.contract.id ||
+        record.provider !== record.contract.provider ||
+        record.family !== record.contract.family ||
+        record.checkpoint !== record.contract.checkpoint ||
+        record.unknownLineage !== (record.contract.lineage.kind === 'unknown')
+      )
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['contract'],
+          message:
+            'model lineage projection metadata drifts from domain contract',
+        });
+    });
 
 export const CorrelationProjectionInputSchema =
   ProjectionDigestRecordSchema.extend({
+    contract: CorrelationAssessmentSchema,
     id: EntityIdSchema,
     modelLineageIds: z.array(EntityIdSchema).min(2),
     policyVersion: NonEmptyStringSchema,
@@ -217,6 +237,7 @@ export const CorrelationProjectionInputSchema =
 
 export const DissentProjectionInputSchema = ProjectionDigestRecordSchema.extend(
   {
+    contract: DissentReportSchema,
     id: EntityIdSchema,
     positionId: EntityIdSchema,
     claimIds: z.array(EntityIdSchema),
@@ -344,7 +365,7 @@ export const CellNodeSchema = z
     role: CellProjectionInputSchema.shape.role,
     status: CellProjectionInputSchema.shape.status,
     criterionId: EntityIdSchema,
-    criterionVersion: NonEmptyStringSchema,
+    criterionVersion: z.number().int().positive(),
     criterionDigest: DigestSchema,
   })
   .strict();
@@ -355,7 +376,7 @@ export const PositionNodeSchema = z
     id: EntityIdSchema,
     status: PositionProjectionInputSchema.shape.status,
     criterionId: EntityIdSchema,
-    criterionVersion: NonEmptyStringSchema,
+    criterionVersion: z.number().int().positive(),
     criterionDigest: DigestSchema,
     modelProfileId: EntityIdSchema,
     claimIds: z.array(EntityIdSchema),

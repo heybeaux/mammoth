@@ -1,6 +1,18 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { canonicalDigest } from '@mammoth/domain';
+import {
+  MODEL_LINEAGE_POLICY_VERSION,
+  RESEARCH_CELL_CONTRACT_VERSION,
+  canonicalDigest,
+  cellInputDigest,
+  modelProfileVersionDigest,
+  researchPositionDigest,
+  researchReviewDigest,
+  type CellInput,
+  type ModelProfileVersion,
+  type ResearchPosition,
+  type ResearchReview,
+} from '@mammoth/domain';
 import { describe, expect, it } from 'vitest';
 import {
   ObservatoryProjectionV1Schema,
@@ -271,6 +283,23 @@ describe('ObservatoryProjectionV1', () => {
   it('fails closed on P4 future authority, digest mismatch, broken references, and lineage cycles', async () => {
     const input = withP4(await fixture());
 
+    const [sourceCell] = input.cells as Record<string, unknown>[];
+    if (!sourceCell) throw new Error('P4 fixture must contain a cell');
+    const sourceContract = sourceCell.contract as Record<string, unknown>;
+    const driftedCell = withDigest({
+      ...sourceCell,
+      contract: {
+        ...sourceContract,
+        criterionRef: {
+          ...(sourceContract.criterionRef as Record<string, unknown>),
+          criterionVersion: 99,
+        },
+      },
+    });
+    expect(() =>
+      buildObservatoryProjectionV1({ ...input, cells: [driftedCell] }),
+    ).toThrow(/drifts from authoritative contract/);
+
     expect(() =>
       buildObservatoryProjectionV1({
         ...input,
@@ -308,6 +337,13 @@ describe('ObservatoryProjectionV1', () => {
       parentModelLineageIds: ['model-lineage-child'],
     });
     const cyclicChild = withDigest({
+      contract: modelVersionContract({
+        id: 'model-lineage-child',
+        provider: 'local',
+        family: 'qwen',
+        checkpoint: 'derived',
+        lineageKind: 'known',
+      }),
       id: 'model-lineage-child',
       provider: 'local',
       family: 'qwen',
@@ -329,10 +365,62 @@ describe('ObservatoryProjectionV1', () => {
 
 function withP4(input: Record<string, unknown>): Record<string, unknown> {
   const criterion = input.criterion as Record<string, unknown>;
+  const criterionRef = {
+    criterionId: String(criterion.id),
+    criterionVersion: Number(criterion.version),
+    criterionDigest: String(criterion.canonicalDigest),
+    branchId: 'main',
+  };
+  const cellInput: CellInput = {
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    claimIds: ['claim-unresolved'],
+    evidenceIds: ['evidence-support'],
+    hypothesisIds: [],
+    artifactIds: [],
+  };
+  const authoritativeInputDigest = cellInputDigest(cellInput);
+  const cellContract = {
+    id: 'cell-plan-divergence',
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    programId: 'program-p2',
+    workItemId: 'work-item-position',
+    templateId: 'template-divergence',
+    templateVersion: 1,
+    criterionRef,
+    branchId: 'main',
+    input: cellInput,
+    inputDigest: authoritativeInputDigest,
+    outputContract: {
+      kind: 'positions' as const,
+      minimumCount: 1,
+      schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    },
+    plannedAt: '2026-07-13T18:00:00.000Z',
+  };
+  const qwen = modelVersionContract({
+    id: 'model-lineage-qwen',
+    provider: 'local',
+    family: 'qwen',
+    checkpoint: 'qwen3',
+    lineageKind: 'known',
+  });
+  const frontier = modelVersionContract({
+    id: 'model-lineage-frontier',
+    provider: 'cloud',
+    family: 'frontier',
+    checkpoint: 'checkpoint-1',
+    lineageKind: 'unknown',
+  });
+  const positionContract = positionContractForProjection(
+    criterionRef,
+    authoritativeInputDigest,
+  );
+  const reviewContract = reviewContractForProjection(criterionRef);
   return {
     ...input,
     cells: [
       withDigest({
+        contract: cellContract,
         id: 'cell-divergence',
         programId: 'program-p2',
         cellPlanId: 'cell-plan-divergence',
@@ -341,7 +429,7 @@ function withP4(input: Record<string, unknown>): Record<string, unknown> {
         role: 'divergence',
         status: 'succeeded',
         criterionId: criterion.id,
-        criterionVersion: String(criterion.version),
+        criterionVersion: Number(criterion.version),
         criterionDigest: criterion.canonicalDigest,
         workItemIds: ['work-item-position'],
         receiptIds: ['receipt-cell'],
@@ -350,13 +438,14 @@ function withP4(input: Record<string, unknown>): Record<string, unknown> {
     ],
     positions: [
       withDigest({
+        contract: positionContract,
         id: 'position-unsupported',
         cellId: 'cell-divergence',
         claimIds: ['claim-unresolved'],
         evidenceIds: ['evidence-support'],
-        modelProfileId: 'model-lineage-qwen',
+        modelProfileVersionId: 'model-lineage-qwen',
         criterionId: criterion.id,
-        criterionVersion: String(criterion.version),
+        criterionVersion: Number(criterion.version),
         criterionDigest: criterion.canonicalDigest,
         status: 'rejected',
         rejectedResidueId: 'residue-position',
@@ -365,10 +454,11 @@ function withP4(input: Record<string, unknown>): Record<string, unknown> {
     ],
     reviews: [
       withDigest({
+        contract: reviewContract,
         id: 'review-position',
         cellId: 'cell-divergence',
         positionId: 'position-unsupported',
-        reviewerModelProfileId: 'model-lineage-frontier',
+        reviewerModelProfileVersionId: 'model-lineage-frontier',
         assignmentId: 'assignment-review-1',
         verdict: 'reject',
         status: 'completed',
@@ -378,6 +468,7 @@ function withP4(input: Record<string, unknown>): Record<string, unknown> {
     ],
     modelLineages: [
       withDigest({
+        contract: qwen,
         id: 'model-lineage-qwen',
         provider: 'local',
         family: 'qwen',
@@ -389,6 +480,7 @@ function withP4(input: Record<string, unknown>): Record<string, unknown> {
         authoritativeRevision: 4,
       }),
       withDigest({
+        contract: frontier,
         id: 'model-lineage-frontier',
         provider: 'cloud',
         family: 'frontier',
@@ -402,6 +494,19 @@ function withP4(input: Record<string, unknown>): Record<string, unknown> {
     ],
     correlations: [
       withDigest({
+        contract: {
+          id: 'correlation-review-panel',
+          schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+          policyVersion: MODEL_LINEAGE_POLICY_VERSION,
+          subjectModelProfileVersionId: 'model-lineage-qwen',
+          candidateModelProfileVersionId: 'model-lineage-frontier',
+          independent: false,
+          correlationScore: 0.25,
+          reasonCodes: ['unknown-lineage-penalty'],
+          assessedAt: '2026-07-13T18:00:00.000Z',
+          canonicalDigest:
+            'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+        },
         id: 'correlation-review-panel',
         modelLineageIds: ['model-lineage-qwen', 'model-lineage-frontier'],
         policyVersion: 'correlation-v1',
@@ -413,6 +518,20 @@ function withP4(input: Record<string, unknown>): Record<string, unknown> {
     ],
     dissentReports: [
       withDigest({
+        contract: {
+          id: 'dissent-position',
+          schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+          programId: 'program-p2',
+          cellPlanId: 'cell-plan-divergence',
+          criterionRef,
+          positionIds: ['position-unsupported'],
+          claimIds: ['claim-unresolved'],
+          evidenceIds: ['evidence-support'],
+          unresolvedReasonCodes: ['minority-report-retained'],
+          canonicalDigest:
+            'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+          createdAt: '2026-07-13T18:00:00.000Z',
+        },
         id: 'dissent-position',
         positionId: 'position-unsupported',
         claimIds: ['claim-unresolved'],
@@ -451,6 +570,128 @@ function withP4(input: Record<string, unknown>): Record<string, unknown> {
       }),
     ],
   };
+}
+
+function modelVersionContract(input: {
+  id: string;
+  provider: string;
+  family: string;
+  checkpoint: string;
+  lineageKind: 'known' | 'unknown';
+}): ModelProfileVersion {
+  const base: ModelProfileVersion = {
+    id: input.id,
+    profileId: `${input.id}-profile`,
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    provider: input.provider,
+    providerModelId: input.id,
+    family: input.family,
+    checkpoint: input.checkpoint,
+    contextWindow: 128_000,
+    modalities: ['text'],
+    locality: input.provider === 'local' ? 'local' : 'cloud',
+    dataPolicyId: 'public-redacted-only',
+    costProfileId: 'cost-default',
+    lineage: {
+      kind: input.lineageKind,
+      trainingLineageIds: [],
+      fineTuneLineageIds: [],
+      sharedDerivationIds: [],
+      parentVersionIds: [],
+    },
+    immutableDigest:
+      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    recordedAt: '2026-07-13T18:00:00.000Z',
+  };
+  return { ...base, immutableDigest: modelProfileVersionDigest(base) };
+}
+
+function positionContractForProjection(
+  criterionRef: {
+    criterionId: string;
+    criterionVersion: number;
+    criterionDigest: string;
+    branchId: string;
+  },
+  inputDigest: string,
+): ResearchPosition {
+  const base: ResearchPosition = {
+    id: 'position-unsupported',
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    programId: 'program-p2',
+    cellPlanId: 'cell-plan-divergence',
+    workItemId: 'work-item-position',
+    authorAgentId: 'agent-qwen',
+    role: 'divergence',
+    criterionRef,
+    modelProfileVersionId: 'model-lineage-qwen',
+    inputDigest,
+    outputSchemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    answer: 'unsupported candidate',
+    claimIds: ['claim-unresolved'],
+    evidenceIds: ['evidence-support'],
+    hypothesisIds: [],
+    artifactIds: [],
+    proposalRefs: [{ kind: 'claim', id: 'claim-unresolved' }],
+    assumptions: [],
+    dissent: [],
+    proposedFalsifiers: [],
+    usage: {
+      inputTokens: 1,
+      outputTokens: 1,
+      costUsd: 0,
+      latencyMs: 1,
+    },
+    uncertaintyCodes: [],
+    failureCodes: [],
+    receiptRefs: [],
+    canonicalDigest:
+      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    createdAt: '2026-07-13T18:00:00.000Z',
+  };
+  return { ...base, canonicalDigest: researchPositionDigest(base) };
+}
+
+function reviewContractForProjection(criterionRef: {
+  criterionId: string;
+  criterionVersion: number;
+  criterionDigest: string;
+  branchId: string;
+}): ResearchReview {
+  const base: ResearchReview = {
+    id: 'review-position',
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    assignmentId: 'assignment-review-1',
+    programId: 'program-p2',
+    workItemId: 'assignment-review-1',
+    targetPositionId: 'position-unsupported',
+    reviewerAgentId: 'agent-frontier',
+    reviewerModelProfileVersionId: 'model-lineage-frontier',
+    reviewerRole: 'falsification',
+    criterionRef,
+    inputDigest:
+      'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    outputSchemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    verdict: 'reject',
+    reasonCodes: ['missing-direct-evidence'],
+    checkedClaimIds: ['claim-unresolved'],
+    checkedEvidenceIds: ['evidence-support'],
+    checkedHypothesisIds: [],
+    checkedArtifactIds: [],
+    usage: {
+      inputTokens: 1,
+      outputTokens: 1,
+      costUsd: 0,
+      latencyMs: 1,
+    },
+    uncertaintyCodes: [],
+    failureCodes: [],
+    receiptRefs: [],
+    canonicalDigest:
+      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    createdAt: '2026-07-13T18:00:00.000Z',
+  };
+  return { ...base, canonicalDigest: researchReviewDigest(base) };
 }
 
 function withDigest<T extends Record<string, unknown>>(record: T): T {

@@ -86,7 +86,7 @@ export function buildObservatoryProjectionV1(
       criterionId: position.criterionId,
       criterionVersion: position.criterionVersion,
       criterionDigest: position.criterionDigest,
-      modelProfileId: position.modelProfileId,
+      modelProfileId: position.modelProfileVersionId,
       claimIds: [...position.claimIds].sort(),
       evidenceIds: [...position.evidenceIds].sort(),
     })),
@@ -96,7 +96,7 @@ export function buildObservatoryProjectionV1(
       assignmentId: review.assignmentId,
       verdict: review.verdict,
       status: review.status,
-      reviewerModelProfileId: review.reviewerModelProfileId,
+      reviewerModelProfileId: review.reviewerModelProfileVersionId,
     })),
     ...source.modelLineages.map((lineage) => ({
       kind: 'model_lineage' as const,
@@ -168,8 +168,8 @@ export function buildObservatoryProjectionV1(
         status: projectionStatus(position.status),
       },
       {
-        id: `${position.id}:model:${position.modelProfileId}`,
-        from: position.modelProfileId,
+        id: `${position.id}:model:${position.modelProfileVersionId}`,
+        from: position.modelProfileVersionId,
         to: position.id,
         kind: 'proposed_by' as const,
         status: projectionStatus(position.status),
@@ -205,8 +205,8 @@ export function buildObservatoryProjectionV1(
         status: projectionStatus(review.status),
       },
       {
-        id: `${review.id}:model:${review.reviewerModelProfileId}`,
-        from: review.reviewerModelProfileId,
+        id: `${review.id}:model:${review.reviewerModelProfileVersionId}`,
+        from: review.reviewerModelProfileVersionId,
         to: review.id,
         kind: 'reviewed_by' as const,
         status: projectionStatus(review.status),
@@ -338,6 +338,7 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
   );
   const lineages = new Set(source.sourceLineages.map(({ id }) => id));
   const cells = new Set(source.cells.map(({ id }) => id));
+  const cellsById = new Map(source.cells.map((cell) => [cell.id, cell]));
   const positions = new Set(source.positions.map(({ id }) => id));
   const reviews = new Set(source.reviews.map(({ id }) => id));
   const modelLineages = new Set(source.modelLineages.map(({ id }) => id));
@@ -430,8 +431,17 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
     if (cell.programId !== source.program.id)
       throw new Error(`cell ${cell.id} does not belong to projected program`);
     if (
+      cell.cellPlanId !== cell.contract.id ||
+      cell.programId !== cell.contract.programId ||
+      cell.criterionId !== cell.contract.criterionRef.criterionId ||
+      cell.criterionVersion !== cell.contract.criterionRef.criterionVersion ||
+      cell.criterionDigest !== cell.contract.criterionRef.criterionDigest ||
+      cell.branchId !== cell.contract.branchId
+    )
+      throw new Error(`cell ${cell.id} drifts from authoritative contract`);
+    if (
       cell.criterionId !== source.criterion.id ||
-      cell.criterionVersion !== String(source.criterion.version) ||
+      cell.criterionVersion !== source.criterion.version ||
       cell.criterionDigest !== source.criterion.canonicalDigest
     )
       throw new Error(`cell ${cell.id} has criterion drift`);
@@ -448,7 +458,7 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
     );
     if (!cells.has(position.cellId))
       throw new Error(`position ${position.id} references unknown cell`);
-    if (!modelLineages.has(position.modelProfileId))
+    if (!modelLineages.has(position.modelProfileVersionId))
       throw new Error(
         `position ${position.id} references unknown model lineage`,
       );
@@ -457,8 +467,20 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
     if (position.evidenceIds.some((id) => !evidence.has(id)))
       throw new Error(`position ${position.id} references unknown evidence`);
     if (
+      position.id !== position.contract.id ||
+      cellsById.get(position.cellId)?.cellPlanId !==
+        position.contract.cellPlanId ||
+      position.modelProfileVersionId !==
+        position.contract.modelProfileVersionId ||
+      position.criterionVersion !==
+        position.contract.criterionRef.criterionVersion
+    )
+      throw new Error(
+        `position ${position.id} drifts from authoritative contract`,
+      );
+    if (
       position.criterionId !== source.criterion.id ||
-      position.criterionVersion !== String(source.criterion.version) ||
+      position.criterionVersion !== source.criterion.version ||
       position.criterionDigest !== source.criterion.canonicalDigest
     )
       throw new Error(`position ${position.id} has criterion drift`);
@@ -475,8 +497,17 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
       throw new Error(`review ${review.id} references unknown cell`);
     if (!positions.has(review.positionId))
       throw new Error(`review ${review.id} references unknown position`);
-    if (!modelLineages.has(review.reviewerModelProfileId))
+    if (!modelLineages.has(review.reviewerModelProfileVersionId))
       throw new Error(`review ${review.id} references unknown model lineage`);
+    if (
+      review.id !== review.contract.id ||
+      review.positionId !== review.contract.targetPositionId ||
+      review.assignmentId !== review.contract.assignmentId ||
+      review.reviewerModelProfileVersionId !==
+        review.contract.reviewerModelProfileVersionId ||
+      review.verdict !== review.contract.verdict
+    )
+      throw new Error(`review ${review.id} drifts from authoritative contract`);
     for (const receiptId of review.receiptIds)
       if (!receipts.has(receiptId))
         throw new Error(`review ${review.id} references unknown receipt`);

@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalDigest } from '@mammoth/work-queue';
+import {
+  RESEARCH_CELL_CONTRACT_VERSION,
+  cellInputDigest,
+  modelProfileVersionDigest,
+  researchPositionDigest,
+  type CellInput,
+  type ModelProfileVersion as DomainModelProfileVersion,
+  type ResearchPosition as DomainResearchPosition,
+} from '@mammoth/domain';
 import type {
-  CellPlan,
-  ModelProfileVersion,
-  ResearchPosition,
+  CellPlanRecord,
+  ModelProfileVersionRecord,
+  ResearchPositionRecord,
 } from '@mammoth/persistence';
 import type {
   PostgresConnection,
@@ -113,7 +122,6 @@ class FakeMigrationDatabase implements PostgresConnection {
 const now = '2026-07-13T18:00:00.000Z';
 const transaction = { statementTimeoutMs: 1_000, transactionTimeoutMs: 2_000 };
 const criterionDigest = canonicalDigest({ criterion: 'pinned' });
-const inputDigest = canonicalDigest({ input: 'cell' });
 
 describe('research-cell migration', () => {
   it('adds forward-only P4 authority tables, constraints, triggers, and restart indexes', () => {
@@ -253,6 +261,12 @@ describe('Postgres research-cell repositories', () => {
           revision: 3,
           created_at: now,
           updated_at: now,
+          authoritative_contract: {
+            id: 'profile-1',
+            provider: 'provider-a',
+            family: 'family-a',
+            displayName: 'new-name',
+          },
         });
       }
       if (sql.includes('group by profile.id')) {
@@ -266,6 +280,12 @@ describe('Postgres research-cell repositories', () => {
           revision: 4,
           created_at: now,
           updated_at: now,
+          authoritative_contract: {
+            id: 'profile-1',
+            provider: 'provider-a',
+            family: 'family-a',
+            displayName: 'new-name',
+          },
         });
       }
       return empty(1);
@@ -279,6 +299,12 @@ describe('Postgres research-cell repositories', () => {
       provider: 'provider-a',
       canonicalName: 'new-name',
       familyId: 'family-a',
+      contract: {
+        id: 'profile-1',
+        provider: 'provider-a',
+        family: 'family-a',
+        displayName: 'new-name',
+      },
       active: true,
       aliases: ['old-name'],
       expectedRevision: 3,
@@ -287,7 +313,7 @@ describe('Postgres research-cell repositories', () => {
     const update = database.calls.find((call) =>
       call.sql.includes('revision = revision + 1'),
     );
-    expect(update?.sql).toContain('where id = $1 and revision = $7');
+    expect(update?.sql).toContain('where id = $1 and revision = $8');
     expect(
       database.calls.filter((call) =>
         call.sql.includes('insert into mammoth_model_profile_aliases'),
@@ -370,7 +396,7 @@ describe('Postgres research-cell repositories', () => {
     ).rejects.toMatchObject({ code: 'persistence_conflict', retryable: true });
   });
 
-  it('rejects tampered position digests before durable insert', async () => {
+  it('rejects position metadata that drifts from its domain contract before durable insert', async () => {
     const database = new RecordingDatabase();
 
     await expect(
@@ -382,10 +408,7 @@ describe('Postgres research-cell repositories', () => {
         body: { supportedByVoteOnly: true },
         positionDigest: canonicalDigest({ supportedByVoteOnly: false }),
       }),
-    ).rejects.toMatchObject({
-      code: 'persistence_integrity',
-      retryable: false,
-    });
+    ).rejects.toThrow(/drifts from domain contract/);
     expect(database.calls).toHaveLength(0);
   });
 
@@ -498,8 +521,36 @@ describe('Postgres research-cell repositories', () => {
   });
 });
 
-function modelVersion(): ModelProfileVersion {
+function modelVersionContract(): DomainModelProfileVersion {
+  const base: DomainModelProfileVersion = {
+    id: 'version-1',
+    profileId: 'profile-1',
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    provider: 'provider-a',
+    providerModelId: 'model-a',
+    family: 'family-a',
+    checkpoint: 'checkpoint-a',
+    contextWindow: 128_000,
+    modalities: ['text'],
+    locality: 'cloud',
+    dataPolicyId: 'public-redacted-only',
+    costProfileId: 'cost-a',
+    lineage: {
+      kind: 'known',
+      trainingLineageIds: [],
+      fineTuneLineageIds: [],
+      sharedDerivationIds: [],
+      parentVersionIds: [],
+    },
+    immutableDigest:
+      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    recordedAt: now,
+  };
+  return { ...base, immutableDigest: modelProfileVersionDigest(base) };
+}
+function modelVersion(): ModelProfileVersionRecord {
   return {
+    contract: modelVersionContract(),
     id: 'version-1',
     profileId: 'profile-1',
     profileRevision: 1,
@@ -520,18 +571,49 @@ function modelVersion(): ModelProfileVersion {
     metadata: {},
   };
 }
-function cellPlan(): CellPlan {
+function cellPlan(): CellPlanRecord {
+  const input: CellInput = {
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    claimIds: ['claim-1'],
+    evidenceIds: ['evidence-1'],
+    hypothesisIds: ['hypothesis-1'],
+    artifactIds: [],
+  };
+  const authoritativeInputDigest = cellInputDigest(input);
   return {
+    contract: {
+      id: 'cell-plan-1',
+      schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+      programId: 'program-1',
+      workItemId: 'work-1',
+      templateId: 'template-divergence',
+      templateVersion: 1,
+      criterionRef: {
+        criterionId: 'criterion-1',
+        criterionVersion: 1,
+        criterionDigest,
+        branchId: 'main',
+      },
+      branchId: 'main',
+      input,
+      inputDigest: authoritativeInputDigest,
+      outputContract: {
+        kind: 'positions',
+        minimumCount: 1,
+        schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+      },
+      plannedAt: now,
+    },
     id: 'cell-plan-1',
     programId: 'program-1',
     workItemId: 'work-1',
     criterionId: 'criterion-1',
     criterionDigest,
     planVersion: 'cell-plan@1',
-    templateVersion: 'divergence@1',
+    templateVersion: '1',
     branchId: 'main',
     role: 'lateralist',
-    inputDigest,
+    inputDigest: authoritativeInputDigest,
     outputContractVersion: 'position@1',
     status: 'planned',
     revision: 1,
@@ -540,9 +622,49 @@ function cellPlan(): CellPlan {
     updatedAt: now,
   };
 }
-function position(): ResearchPosition {
+function positionContract(): DomainResearchPosition {
+  const plan = cellPlan().contract;
+  const base: DomainResearchPosition = {
+    id: 'position-1',
+    schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    programId: 'program-1',
+    cellPlanId: 'cell-plan-1',
+    workItemId: 'work-1',
+    authorAgentId: 'agent-1',
+    role: 'lateralist',
+    criterionRef: plan.criterionRef,
+    modelProfileVersionId: 'version-1',
+    inputDigest: plan.inputDigest,
+    outputSchemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+    answer: 'candidate',
+    claimIds: ['claim-1'],
+    evidenceIds: ['evidence-1'],
+    hypothesisIds: ['hypothesis-1'],
+    artifactIds: [],
+    proposalRefs: [{ kind: 'claim', id: 'claim-1' }],
+    assumptions: [],
+    dissent: [],
+    proposedFalsifiers: [],
+    usage: {
+      inputTokens: 1,
+      outputTokens: 2,
+      costUsd: 0.01,
+      latencyMs: 10,
+    },
+    uncertaintyCodes: [],
+    failureCodes: [],
+    receiptRefs: [],
+    canonicalDigest:
+      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    createdAt: now,
+  };
+  return { ...base, canonicalDigest: researchPositionDigest(base) };
+}
+function position(): ResearchPositionRecord {
   const body = { answer: 'candidate', claimIds: ['claim-1'] };
+  const contract = positionContract();
   return {
+    contract,
     id: 'position-1',
     cellPlanId: 'cell-plan-1',
     programId: 'program-1',
@@ -551,9 +673,9 @@ function position(): ResearchPosition {
     criterionDigest,
     modelProfileId: 'profile-1',
     modelProfileVersionId: 'version-1',
-    inputDigest,
+    inputDigest: contract.inputDigest,
     outputSchemaVersion: 'position@1',
-    positionDigest: canonicalDigest(body),
+    positionDigest: contract.canonicalDigest,
     claimIds: ['claim-1'],
     evidenceIds: ['evidence-1'],
     hypothesisIds: ['hypothesis-1'],
@@ -576,6 +698,12 @@ function modelProfileRow(): Row {
     revision: 1,
     created_at: now,
     updated_at: now,
+    authoritative_contract: {
+      id: 'profile-1',
+      provider: 'provider-a',
+      family: 'family-a',
+      displayName: 'model-a',
+    },
   };
 }
 function modelVersionRow(): Row {
@@ -598,6 +726,7 @@ function modelVersionRow(): Row {
     cost_profile_id: 'cost-a',
     declared_at: now,
     metadata: {},
+    authoritative_contract: modelVersionContract(),
   };
 }
 function cellPlanRow(): Row {
@@ -619,6 +748,7 @@ function cellPlanRow(): Row {
     fencing_token: plan.fencingToken,
     created_at: plan.createdAt,
     updated_at: plan.updatedAt,
+    authoritative_contract: plan.contract,
   };
 }
 function positionRow(): Row {
@@ -644,6 +774,7 @@ function positionRow(): Row {
     failure_code: pos.failureCode,
     body: pos.body,
     recorded_at: pos.recordedAt,
+    authoritative_contract: pos.contract,
   };
 }
 function result(row: Row): QueryResult<Row> {

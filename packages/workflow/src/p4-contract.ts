@@ -1,34 +1,32 @@
 /**
- * Dependency-free P4 contracts for carrying research-cell application/workflow
- * identity across orchestration boundaries.
+ * P4 contracts for carrying the authoritative domain research-cell identity
+ * across orchestration boundaries.
  *
  * Temporal history is orchestration evidence only. These contracts carry stable
  * identifiers and reconstruct product state through ports backed by
  * authoritative stores.
  */
 
+import {
+  CellTemplateSchema,
+  CriterionReferenceSchema,
+  type CellTemplate,
+  type CriterionReference,
+} from '@mammoth/domain';
+
 export const P4_APPLICATION_CONTRACT_MAJOR = 1 as const;
 export const P4_CELL_PLAN_SCHEMA_VERSION = 1 as const;
 export const P4_CELL_WORK_ITEM_SCHEMA_VERSION = 1 as const;
 export const P4_RESEARCH_CELL_WORKFLOW_VERSION = 1 as const;
 
-export const P4_CELL_ROLES = [
-  'landscape',
-  'divergence',
-  'prior-art',
-  'falsification',
-  'experiment-design',
-  'review',
-  'synthesis',
-] as const;
+export const P4_CELL_ROLES = CellTemplateSchema.shape.kind.options;
 
-export type P4CellRole = (typeof P4_CELL_ROLES)[number];
+export type P4CellRole = CellTemplate['kind'];
 
-export interface P4CriterionReference {
-  readonly criterionId: string;
-  readonly criterionVersion: string;
-  readonly criterionDigest: string;
-}
+export type P4CriterionReference = Pick<
+  CriterionReference,
+  'criterionId' | 'criterionVersion' | 'criterionDigest' | 'branchId'
+>;
 
 export interface P4CellPlanIdentity {
   readonly programId: string;
@@ -71,7 +69,7 @@ export interface P4CellPlanContinueAsNewCarry {
   readonly stableCellPlanId: string;
   readonly programId: string;
   readonly criterionId: string;
-  readonly criterionVersion: string;
+  readonly criterionVersion: number;
   readonly criterionDigest: string;
   readonly cellPlanId: string;
   readonly cellPlanVersion: string;
@@ -103,7 +101,7 @@ export function deriveP4CellPlanId(identity: P4CellPlanIdentity): string {
     `v${String(P4_CELL_PLAN_SCHEMA_VERSION)}`,
     encodeIdComponent(identity.programId),
     encodeIdComponent(identity.criterion.criterionId),
-    encodeIdComponent(identity.criterion.criterionVersion),
+    encodeIdComponent(String(identity.criterion.criterionVersion)),
     encodeIdComponent(identity.criterion.criterionDigest),
     encodeIdComponent(identity.cellPlanId),
     encodeIdComponent(identity.cellPlanVersion),
@@ -386,28 +384,27 @@ function parseCellPlanIdentity(value: unknown): P4CellPlanIdentity {
   const criterion = requireRecord(identity.criterion, 'P4 criterion reference');
   requireExactKeys(
     criterion,
-    ['criterionId', 'criterionVersion', 'criterionDigest'],
+    ['criterionId', 'criterionVersion', 'criterionDigest', 'branchId'],
     'P4 criterion reference',
   );
+  const parsedCriterion = CriterionReferenceSchema.parse(criterion);
+  const branchId = requireIdentifier(identity.branchId, 'branchId');
+  if (parsedCriterion.branchId !== branchId)
+    throw new Error('P4 cell plan criterion branch mismatch');
   return {
     programId: requireIdentifier(identity.programId, 'programId'),
     criterion: {
-      criterionId: requireIdentifier(criterion.criterionId, 'criterionId'),
-      criterionVersion: requireIdentifier(
-        criterion.criterionVersion,
-        'criterionVersion',
-      ),
-      criterionDigest: requireDigest(
-        criterion.criterionDigest,
-        'criterionDigest',
-      ),
+      criterionId: parsedCriterion.criterionId,
+      criterionVersion: parsedCriterion.criterionVersion,
+      criterionDigest: parsedCriterion.criterionDigest,
+      branchId: parsedCriterion.branchId,
     },
     cellPlanId: requireIdentifier(identity.cellPlanId, 'cellPlanId'),
     cellPlanVersion: requireIdentifier(
       identity.cellPlanVersion,
       'cellPlanVersion',
     ),
-    branchId: requireIdentifier(identity.branchId, 'branchId'),
+    branchId,
     role: requireCellRole(identity.role, 'role'),
   };
 }
@@ -447,6 +444,7 @@ function cellPlanIdentityFromCarry(
       criterionId: carry.criterionId,
       criterionVersion: carry.criterionVersion,
       criterionDigest: carry.criterionDigest,
+      branchId: carry.branchId,
     },
     cellPlanId: carry.cellPlanId,
     cellPlanVersion: carry.cellPlanVersion,
@@ -462,11 +460,12 @@ function cellPlanIdentityFromRawCarry(
     programId: requireIdentifier(carry.programId, 'programId'),
     criterion: {
       criterionId: requireIdentifier(carry.criterionId, 'criterionId'),
-      criterionVersion: requireIdentifier(
+      criterionVersion: requirePositiveInteger(
         carry.criterionVersion,
         'criterionVersion',
       ),
       criterionDigest: requireDigest(carry.criterionDigest, 'criterionDigest'),
+      branchId: requireIdentifier(carry.branchId, 'branchId'),
     },
     cellPlanId: requireIdentifier(carry.cellPlanId, 'cellPlanId'),
     cellPlanVersion: requireIdentifier(
@@ -479,13 +478,17 @@ function cellPlanIdentityFromRawCarry(
 }
 
 function requireCellRole(value: unknown, name: string): P4CellRole {
-  if (
-    typeof value !== 'string' ||
-    !P4_CELL_ROLES.includes(value as P4CellRole)
-  ) {
+  const parsed = CellTemplateSchema.shape.kind.safeParse(value);
+  if (!parsed.success) {
     throw new Error(`${name} must be a supported P4 cell role`);
   }
-  return value as P4CellRole;
+  return parsed.data;
+}
+
+function requirePositiveInteger(value: unknown, name: string): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0)
+    throw new Error(`${name} must be a positive integer`);
+  return value;
 }
 
 function encodeIdComponent(value: string): string {

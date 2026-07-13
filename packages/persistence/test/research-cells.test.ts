@@ -1,28 +1,64 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalDigest } from '@mammoth/domain';
+import {
+  RESEARCH_CELL_CONTRACT_VERSION,
+  canonicalDigest,
+  cellInputDigest,
+  type CellInput,
+} from '@mammoth/domain';
 import {
   PersistenceIntegrityError,
-  RejectedAuditResidueSchema,
+  RejectedAuditResidueRecordSchema,
   assertPayloadDigest,
   parseResearchCellState,
-  type CellPlan,
+  type CellPlanRecord,
 } from '../src/index.js';
 
 const now = '2026-07-13T18:00:00.000Z';
 
 describe('research-cell persistence ports', () => {
   it('accepts canonical cell-plan records with pinned criterion and input digests', () => {
-    const plan: CellPlan = {
+    const input: CellInput = {
+      schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+      claimIds: [],
+      evidenceIds: [],
+      hypothesisIds: [],
+      artifactIds: [],
+    };
+    const digest = cellInputDigest(input);
+    const plan: CellPlanRecord = {
+      contract: {
+        id: 'cell-plan-1',
+        schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+        programId: 'program-1',
+        workItemId: 'work-1',
+        templateId: 'template-divergence',
+        templateVersion: 1,
+        criterionRef: {
+          criterionId: 'criterion-1',
+          criterionVersion: 1,
+          criterionDigest: canonicalDigest({ criterion: 'one' }),
+          branchId: 'main',
+        },
+        branchId: 'main',
+        input,
+        inputDigest: digest,
+        outputContract: {
+          kind: 'positions',
+          minimumCount: 1,
+          schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
+        },
+        plannedAt: now,
+      },
       id: 'cell-plan-1',
       programId: 'program-1',
       workItemId: 'work-1',
       criterionId: 'criterion-1',
       criterionDigest: canonicalDigest({ criterion: 'one' }),
       planVersion: 'cell-plan@1',
-      templateVersion: 'divergence@1',
+      templateVersion: '1',
       branchId: 'main',
       role: 'lateralist',
-      inputDigest: canonicalDigest({ input: 'one' }),
+      inputDigest: digest,
       outputContractVersion: 'position@1',
       status: 'planned',
       revision: 0,
@@ -45,11 +81,29 @@ describe('research-cell persistence ports', () => {
     });
 
     expect(reconstructed.cellPlans[0]).toEqual(plan);
+
+    expect(() =>
+      parseResearchCellState({
+        ...reconstructed,
+        cellPlans: [
+          {
+            ...plan,
+            contract: {
+              ...plan.contract,
+              criterionRef: {
+                ...plan.contract.criterionRef,
+                criterionDigest: canonicalDigest({ criterion: 'drifted' }),
+              },
+            },
+          },
+        ],
+      }),
+    ).toThrow(/drifts from domain contract/);
   });
 
   it('rejects malformed residue digests before adapter writes', () => {
     expect(() =>
-      RejectedAuditResidueSchema.parse({
+      RejectedAuditResidueRecordSchema.parse({
         id: 'rejected-1',
         programId: 'program-1',
         subjectType: 'position',

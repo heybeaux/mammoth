@@ -27,8 +27,9 @@ const cellPlan: P4CellPlanIdentity = {
   programId: 'program-alpha',
   criterion: {
     criterionId: 'criterion-alpha',
-    criterionVersion: 'criterion-v2',
+    criterionVersion: 2,
     criterionDigest: digestA,
+    branchId: 'branch-main',
   },
   cellPlanId: 'cell-plan-divergence',
   cellPlanVersion: 'cell-plan-v3',
@@ -40,7 +41,7 @@ const workItem: P4CellWorkItemIdentity = {
   cellPlan,
   workItemId: 'work-item-position',
   workItemVersion: 'work-item-v1',
-  workRole: 'review',
+  workRole: 'falsification',
 };
 
 describe('P4 cell workflow and application carriage contracts', () => {
@@ -48,10 +49,9 @@ describe('P4 cell workflow and application carriage contracts', () => {
     expect(P4_CELL_ROLES).toEqual([
       'landscape',
       'divergence',
-      'prior-art',
+      'prior_art',
       'falsification',
-      'experiment-design',
-      'review',
+      'experiment',
       'synthesis',
     ]);
 
@@ -67,7 +67,7 @@ describe('P4 cell workflow and application carriage contracts', () => {
     expect(
       deriveP4CellPlanId({ ...cellPlan, cellPlanVersion: 'cell-plan-v4' }),
     ).not.toBe(planId);
-    expect(deriveP4CellPlanId({ ...cellPlan, role: 'review' })).not.toBe(
+    expect(deriveP4CellPlanId({ ...cellPlan, role: 'synthesis' })).not.toBe(
       planId,
     );
     expect(deriveP4ResearchCellWorkflowId(cellPlan)).toContain(
@@ -192,6 +192,12 @@ describe('P4 cell workflow and application carriage contracts', () => {
         workflowId: 'wrong',
       }),
     ).toThrow('P4 cell workflow identity mismatch');
+    expect(() =>
+      parseP4CellPlanContinueAsNewCarry({
+        ...planCarry,
+        criterionVersion: 'criterion-v2',
+      }),
+    ).toThrow('criterionVersion must be a positive integer');
 
     const itemCarry = createP4CellWorkItemContinueAsNewCarry(workItem);
     expect(() =>

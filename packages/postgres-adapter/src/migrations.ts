@@ -244,6 +244,7 @@ create table mammoth_model_profiles (
   canonical_name text not null,
   family_id text not null,
   active boolean not null,
+  authoritative_contract jsonb not null,
   revision bigint not null default 0 check (revision >= 0),
   created_at timestamptz not null,
   updated_at timestamptz not null,
@@ -280,6 +281,7 @@ create table mammoth_model_profile_versions (
   cost_profile_id text not null,
   declared_at timestamptz not null,
   metadata jsonb not null,
+  authoritative_contract jsonb not null,
   unique (profile_id, profile_revision),
   unique (profile_id, provider, model_name, checkpoint)
 );
@@ -302,6 +304,7 @@ create table mammoth_cell_plans (
   revision bigint not null default 0 check (revision >= 0),
   fencing_token bigint not null default 0 check (fencing_token >= 0),
   terminal_reason text,
+  authoritative_contract jsonb not null,
   created_at timestamptz not null,
   updated_at timestamptz not null,
   unique (program_id, criterion_id, criterion_digest, plan_version, branch_id, role),
@@ -330,6 +333,7 @@ create table mammoth_research_positions (
   uncertainty_code text,
   failure_code text,
   body jsonb not null,
+  authoritative_contract jsonb not null,
   recorded_at timestamptz not null,
   unique (cell_plan_id, work_item_id, model_profile_version_id, position_digest)
 );
@@ -350,7 +354,7 @@ create table mammoth_research_reviews (
   input_digest text not null check (input_digest ~ '^sha256:[0-9a-f]{64}$'),
   output_schema_version text not null,
   review_digest text not null check (review_digest ~ '^sha256:[0-9a-f]{64}$'),
-  verdict text not null check (verdict in ('admit','reject','abstain')),
+  verdict text not null check (verdict in ('admit','reject','revise','unresolved')),
   claim_ids jsonb not null,
   evidence_ids jsonb not null,
   hypothesis_ids jsonb not null,
@@ -359,6 +363,7 @@ create table mammoth_research_reviews (
   failure_code text,
   reasons jsonb not null,
   body jsonb not null,
+  authoritative_contract jsonb not null,
   recorded_at timestamptz not null,
   unique (position_id, reviewer_role, model_profile_version_id)
 );
@@ -377,6 +382,7 @@ create table mammoth_dissent_reports (
   evidence_ids jsonb not null,
   minority_position_ids jsonb not null,
   body jsonb not null,
+  authoritative_contract jsonb not null,
   recorded_at timestamptz not null,
   unique (cell_plan_id, author_model_profile_version_id, report_digest)
 );
@@ -391,6 +397,7 @@ create table mammoth_correlation_assessments (
   independence_verdict text not null check (independence_verdict in ('independent','correlated','unknown')),
   reasons jsonb not null,
   assessment_digest text not null check (assessment_digest ~ '^sha256:[0-9a-f]{64}$'),
+  authoritative_contract jsonb not null,
   assessed_at timestamptz not null,
   check (left_model_profile_version_id <> right_model_profile_version_id),
   unique (left_model_profile_version_id, right_model_profile_version_id, policy_version)
