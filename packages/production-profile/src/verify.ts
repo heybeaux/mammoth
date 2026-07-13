@@ -11,6 +11,7 @@ import {
 import {
   canonicalDigest,
   effectIdempotencyKey,
+  executeActivityEffect,
   type ActivityInvocationV1,
   type CompletedEffectV1,
 } from '@mammoth/work-queue';
@@ -84,6 +85,10 @@ async function seedActivityEffect(connection: PostgresConnection): Promise<{
   readonly provider: string;
   readonly idempotencyKey: CompletedEffectV1['idempotencyKey'];
   readonly resultDigest: CompletedEffectV1['resultDigest'];
+  readonly invocation: ActivityInvocationV1;
+  readonly result: {
+    readonly artifactDigest: CompletedEffectV1['resultDigest'];
+  };
 }> {
   const workId = 'p3-profile-activity-effect-v2';
   const provider = 'p3-profile-idempotent-provider';
@@ -103,13 +108,38 @@ async function seedActivityEffect(connection: PostgresConnection): Promise<{
   const idempotencyKey = effectIdempotencyKey(identity);
   const result = { artifactDigest: canonicalDigest('p3-profile-artifact') };
   const resultDigest = canonicalDigest(result);
+  const invocationBase: ActivityInvocationV1<typeof semanticInput> = {
+    schemaVersion: 1,
+    activityType: 'retrieval',
+    operationKind: identity.operationKind,
+    contractVersion: identity.contractVersion,
+    programId: identity.programId,
+    workItemId: identity.workItemId,
+    input: semanticInput,
+    inputDigest,
+    workflow: {
+      workflowId: 'p3-profile-workflow',
+      runId: 'p3-profile-run',
+      activityId: 'p3-profile-activity',
+      attempt: 1,
+      taskQueue: 'retrieval',
+      workerId: 'p3-profile-worker',
+    },
+    lease: { owner: 'p3-profile-worker', fencingToken: 1 },
+  };
   const existing = await connection.query(
     `select result_digest from mammoth_activity_effects
      where provider = $1 and idempotency_key = $2 and state = 'completed'`,
     [provider, idempotencyKey],
   );
   if (existing.rowCount === 1)
-    return { provider, idempotencyKey, resultDigest };
+    return {
+      provider,
+      idempotencyKey,
+      resultDigest,
+      invocation: invocationBase,
+      result,
+    };
 
   let sequence = 0;
   const common = {
@@ -130,26 +160,14 @@ async function seedActivityEffect(connection: PostgresConnection): Promise<{
     leaseExpiresAt: '2026-07-13T00:05:00.000Z',
   });
   if (!claimed) throw new Error('P3 Activity fixture was not claimable');
+  const fencingToken = Number(claimed.fencingToken);
+  if (!Number.isSafeInteger(fencingToken) || fencingToken < 1)
+    throw new Error('P3 Activity fixture received an invalid Postgres fence');
   const invocation: ActivityInvocationV1<typeof semanticInput> = {
-    schemaVersion: 1,
-    activityType: 'retrieval',
-    operationKind: identity.operationKind,
-    contractVersion: identity.contractVersion,
-    programId: identity.programId,
-    workItemId: identity.workItemId,
-    input: semanticInput,
-    inputDigest,
-    workflow: {
-      workflowId: 'p3-profile-workflow',
-      runId: 'p3-profile-run',
-      activityId: 'p3-profile-activity',
-      attempt: 1,
-      taskQueue: 'retrieval',
-      workerId: 'p3-profile-worker',
-    },
+    ...invocationBase,
     lease: {
       owner: 'p3-profile-worker',
-      fencingToken: claimed.fencingToken,
+      fencingToken,
     },
   };
   const effects = new PostgresActivityEffectStore(connection, common);
@@ -161,38 +179,43 @@ async function seedActivityEffect(connection: PostgresConnection): Promise<{
     inputDigest,
     state: 'leased',
   });
-  await effects.appendAttempt({ invocation, idempotencyKey });
-  await effects.begin({
+  let providerCalls = 0;
+  const completed = await executeActivityEffect({
     invocation,
-    idempotencyKey,
-    provider,
-    identity,
-    startedAt: common.now(),
-  });
-  await effects.complete({
-    ...identity,
-    id: 'p3-profile-effect',
-    provider,
-    idempotencyKey,
-    state: 'completed',
-    originalAttribution: {
-      ...invocation.workflow,
-      leaseOwner: 'p3-profile-worker',
-      fencingToken: claimed.fencingToken,
+    provider: {
+      name: provider,
+      execute: async (key) => {
+        providerCalls += 1;
+        if (key !== idempotencyKey) throw new Error('provider key drifted');
+        return {
+          receipt: { providerOperationId: 'p3-profile-operation' },
+          result,
+        };
+      },
     },
-    providerReceipt: { providerOperationId: 'p3-profile-operation' },
+    store: effects,
+    resolveWork: (candidate) => effects.resolveWork(candidate),
     resultSchema: 'retrieval-result@1',
-    resultDigest,
-    result,
-    startedAt: common.now(),
-    completedAt: common.now(),
+    validateResult: (value) => {
+      if (
+        !value ||
+        typeof value !== 'object' ||
+        (value as { artifactDigest?: unknown }).artifactDigest !==
+          result.artifactDigest
+      ) {
+        throw new Error('invalid retrieval result');
+      }
+      return result;
+    },
+    now: common.now,
+    id: common.id,
+    advanceWork: (advance) => effects.completeWorkFromEffect(advance),
   });
-  await effects.completeWorkFromEffect({
-    invocation,
-    provider,
-    idempotencyKey,
-  });
-  return { provider, idempotencyKey, resultDigest };
+  if (providerCalls !== 1 || canonicalDigest(completed) !== resultDigest)
+    throw new Error(
+      'P3 Activity provider effect did not complete exactly once',
+    );
+  return { provider, idempotencyKey, resultDigest, invocation, result };
 }
 
 async function verifyActivityEffect(
@@ -201,6 +224,10 @@ async function verifyActivityEffect(
     readonly provider: string;
     readonly idempotencyKey: CompletedEffectV1['idempotencyKey'];
     readonly resultDigest: CompletedEffectV1['resultDigest'];
+    readonly invocation: ActivityInvocationV1;
+    readonly result: {
+      readonly artifactDigest: CompletedEffectV1['resultDigest'];
+    };
   },
 ): Promise<void> {
   const effects = new PostgresActivityEffectStore(connection, {
@@ -217,6 +244,51 @@ async function verifyActivityEffect(
     completed.resultDigest !== fixture.resultDigest
   ) {
     throw new Error('P3 completed Activity effect did not survive restart');
+  }
+  let duplicateProviderCalls = 0;
+  const duplicateInvocation: ActivityInvocationV1 = {
+    ...fixture.invocation,
+    workflow: {
+      ...fixture.invocation.workflow,
+      runId: 'p3-profile-run-after-restart',
+      activityId: 'p3-profile-activity-redelivery',
+      attempt: 2,
+    },
+  };
+  const replayed = await executeActivityEffect({
+    invocation: duplicateInvocation,
+    provider: {
+      name: fixture.provider,
+      execute: async () => {
+        duplicateProviderCalls += 1;
+        throw new Error('duplicate provider effect');
+      },
+    },
+    store: effects,
+    resolveWork: (candidate) => effects.resolveWork(candidate),
+    resultSchema: 'retrieval-result@1',
+    validateResult: () => fixture.result,
+    now: () => '2026-07-13T00:01:00.000Z',
+    id: () => 'must-not-create-a-second-effect',
+    advanceWork: (advance) => effects.completeWorkFromEffect(advance),
+  });
+  const attempts = await connection.query<{ count: string }>(
+    'select count(*)::text as count from mammoth_activity_attempts where work_id = $1',
+    [fixture.invocation.workItemId],
+  );
+  const effectsForWork = await connection.query<{ count: string }>(
+    'select count(*)::text as count from mammoth_activity_effects where work_id = $1',
+    [fixture.invocation.workItemId],
+  );
+  if (
+    duplicateProviderCalls !== 0 ||
+    canonicalDigest(replayed) !== fixture.resultDigest ||
+    attempts.rows[0]?.count !== '2' ||
+    effectsForWork.rows[0]?.count !== '1'
+  ) {
+    throw new Error(
+      'P3 duplicate Activity delivery did not reuse its durable completion',
+    );
   }
 }
 

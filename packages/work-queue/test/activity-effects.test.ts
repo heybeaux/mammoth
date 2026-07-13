@@ -158,6 +158,60 @@ describe('major-2 Activity effect execution', () => {
     expect(store.effects).toHaveLength(1);
   });
 
+  it('replays a completion after work completion without advancing the stale delivery fence', async () => {
+    const store = new MemoryStore();
+    let providerCalls = 0;
+    const provider = {
+      name: 'fixture-provider',
+      execute: async () => {
+        providerCalls += 1;
+        return { receipt: {}, result: { artifactId: 'artifact-1' } };
+      },
+    };
+    const input = invocation();
+    await executeActivityEffect(options(input, store, provider));
+    let advances = 0;
+    const replay = options(
+      invocation({ workflow: { ...input.workflow, attempt: 2 } }),
+      store,
+      provider,
+    );
+    await expect(
+      executeActivityEffect({
+        ...replay,
+        resolveWork: async () => ({
+          ...(await replay.resolveWork()),
+          state: 'completed' as const,
+        }),
+        advanceWork: async () => {
+          advances += 1;
+        },
+      }),
+    ).resolves.toEqual({ artifactId: 'artifact-1' });
+    expect(providerCalls).toBe(1);
+    expect(advances).toBe(0);
+  });
+
+  it('fails closed when completed work has no matching effect receipt', async () => {
+    const store = new MemoryStore();
+    const configured = options(invocation(), store, {
+      name: 'fixture-provider',
+      execute: async () => ({
+        receipt: {},
+        result: { artifactId: 'forbidden' },
+      }),
+    });
+    await expect(
+      executeActivityEffect({
+        ...configured,
+        resolveWork: async () => ({
+          ...(await configured.resolveWork()),
+          state: 'completed' as const,
+        }),
+      }),
+    ).rejects.toMatchObject({ code: 'integrity_failure', retryable: false });
+  });
+
   it('fails poison attribution and input digest mismatch before any provider call', async () => {
     const store = new MemoryStore();
     let calls = 0;

@@ -400,7 +400,7 @@ export interface AttributableWorkItemV1 {
   readonly activityType: ActivityTypeV1;
   readonly contractVersion: string;
   readonly inputDigest: Digest;
-  readonly state: 'pending' | 'leased' | 'retry_wait';
+  readonly state: 'pending' | 'leased' | 'retry_wait' | 'completed';
 }
 
 export interface EffectProvider<TResult> {
@@ -472,8 +472,17 @@ export async function executeActivityEffect<TInput, TResult>(
   );
   if (existing?.state === 'completed') {
     const result = mapCompleted(existing, identity, options);
-    await advanceWork(options, idempotencyKey);
+    if (work.state !== 'completed') await advanceWork(options, idempotencyKey);
     return result;
+  }
+  if (work.state === 'completed') {
+    const failure = new ActivityFailure(
+      'integrity_failure',
+      'Completed work has no matching completed Activity effect',
+      false,
+    );
+    await options.store.failAttempt(attempt, failure);
+    throw failure;
   }
   if (existing) {
     if (!options.provider.reconcile) {
@@ -789,7 +798,7 @@ function validateIdentity(identity: EffectIdentityV1): void {
 function validateAttribution(
   invocation: ActivityInvocationV1,
   work: AttributableWorkItemV1 | undefined,
-): void {
+): asserts work is AttributableWorkItemV1 {
   if (
     !work ||
     work.id !== invocation.workItemId ||
@@ -797,7 +806,7 @@ function validateAttribution(
     work.activityType !== invocation.activityType ||
     work.contractVersion !== invocation.contractVersion ||
     work.inputDigest !== invocation.inputDigest ||
-    !['pending', 'leased', 'retry_wait'].includes(work.state)
+    !['pending', 'leased', 'retry_wait', 'completed'].includes(work.state)
   ) {
     throw new ActivityFailure(
       'attribution_mismatch',

@@ -98,7 +98,10 @@ export class PostgresActivityEffectStore implements ActivityEffectStore {
       [workItemId],
     );
     const row = result.rows[0];
-    if (!row || !['pending', 'leased', 'retry_wait'].includes(row.status))
+    if (
+      !row ||
+      !['pending', 'leased', 'retry_wait', 'completed'].includes(row.status)
+    )
       return undefined;
     return {
       id: row.work_id,
@@ -152,7 +155,8 @@ export class PostgresActivityEffectStore implements ActivityEffectStore {
       row.task_queue !== invocation.workflow.taskQueue ||
       row.worker_id !== (invocation.workflow.workerId ?? null) ||
       row.lease_owner !== (invocation.lease?.owner ?? null) ||
-      row.fencing_token !== (invocation.lease?.fencingToken ?? null)
+      normalizeFence(row.fencing_token) !==
+        (invocation.lease?.fencingToken ?? null)
     ) {
       throw new ActivityFailure(
         'attribution_mismatch',
@@ -377,7 +381,18 @@ interface ActivityAttemptRow extends Record<string, unknown> {
   task_queue: string;
   worker_id: string | null;
   lease_owner: string | null;
-  fencing_token: number | null;
+  fencing_token: number | string | null;
+}
+function normalizeFence(value: number | string | null): number | null {
+  if (value === null) return null;
+  const normalized = Number(value);
+  if (!Number.isSafeInteger(normalized) || normalized < 1)
+    throw new ActivityFailure(
+      'integrity_failure',
+      'Stored Activity attempt has an invalid fencing token',
+      false,
+    );
+  return normalized;
 }
 interface EffectRow extends Record<string, unknown> {
   id: string;
