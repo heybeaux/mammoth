@@ -20,6 +20,7 @@ describe('production profile CLI command boundary', () => {
   it.each([
     ['verify-lifecycle', 'verifyLifecycle'],
     ['verify-backup', 'verifyBackup'],
+    ['verify-p5', 'verifyP5'],
   ] as const)(
     'runs the P2 %s verifier without constructing the Temporal profile',
     async (command, verifierName) => {
@@ -71,6 +72,7 @@ function fixture() {
     createProfile: vi.fn(() => profile),
     verifyLifecycle: vi.fn<() => Promise<unknown>>(() => Promise.resolve()),
     verifyP4: vi.fn<() => Promise<unknown>>(() => Promise.resolve()),
+    verifyP5: vi.fn<() => Promise<unknown>>(() => Promise.resolve()),
     verifyBackup: vi.fn<() => Promise<unknown>>(() => Promise.resolve()),
     write: vi.fn<(value: unknown) => void>(),
   } satisfies ProfileCommandOperations & { readonly profile: typeof profile };

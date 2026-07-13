@@ -122,6 +122,19 @@ export interface P4LifecycleVerification {
   readonly receiptDigest: string;
 }
 
+export interface P5LifecycleVerification {
+  readonly schemaVersion: 1;
+  readonly migrationVersion: 6;
+  readonly programId: string;
+  readonly validCommitId: string;
+  readonly validRevealId: string;
+  readonly sanitizedContextId: string;
+  readonly reservationId: string;
+  readonly settlementId: string;
+  readonly cancellationId: string;
+  readonly rejectedCases: readonly string[];
+}
+
 /** P4 authority gate; deliberately independent from P2 and Temporal/P3. */
 export async function verifyP4Lifecycle(
   config: ProfileConfig,
@@ -160,6 +173,430 @@ export async function verifyP4Lifecycle(
       );
     }
     return actual;
+  } finally {
+    if (active) await active.lifecycle.shutdown().catch(() => undefined);
+    await service.stop().catch(() => undefined);
+  }
+}
+
+/** P5 authority gate; executes production Postgres trigger invariants. */
+export async function verifyP5Lifecycle(
+  config: ProfileConfig,
+): Promise<P5LifecycleVerification> {
+  const service = new NativePostgresService(config);
+  let active:
+    | { lifecycle: PostgresLifecycle; connection: PostgresConnection }
+    | undefined;
+  try {
+    await service.start();
+    active = await connect(service);
+    const fixture = await seedResearchCell(active.connection);
+    const state = fixture.state;
+    const plan = requiredFirst(state.cellPlans, 'cell plan');
+    const position = requiredFirst(state.positions, 'position');
+    const migration = await active.connection.query<{
+      version: number;
+      name: string;
+    }>(
+      'select version, name from mammoth_schema_migrations where version = 6 and applied_at is not null',
+    );
+    if (
+      migration.rowCount !== 1 ||
+      Number(migration.rows[0]?.version) !== 6 ||
+      migration.rows[0]?.name !== 'p5_isolated_divergence'
+    ) {
+      throw new Error('P5 migration v6 was not durably applied');
+    }
+
+    const rejectedCases: string[] = [];
+    await expectPostgresReject(
+      active.connection,
+      'commit-digest-drift',
+      `insert into mammoth_p5_isolation_commits
+        (id, position_id, cell_plan_id, program_id, work_item_id, criterion_id,
+         criterion_digest, input_digest, output_digest, position_digest,
+         isolation_protocol_version, audit_sequence, committed_at, authoritative_contract)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'1.0.0',1,$11::timestamptz,$12::jsonb)`,
+      [
+        'p5-profile-commit-drift',
+        position.id,
+        plan.id,
+        plan.programId,
+        plan.workItemId,
+        plan.criterionId,
+        plan.criterionDigest,
+        plan.inputDigest,
+        canonicalDigest({ drift: true }),
+        canonicalDigest({ drift: true }),
+        p4Fixture.now,
+        JSON.stringify({ fixture: 'commit-drift' }),
+      ],
+      rejectedCases,
+    );
+
+    await active.connection.query(
+      `insert into mammoth_p5_isolation_commits
+        (id, position_id, cell_plan_id, program_id, work_item_id, criterion_id,
+         criterion_digest, input_digest, output_digest, position_digest,
+         isolation_protocol_version, audit_sequence, committed_at, authoritative_contract)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'1.0.0',10,$11::timestamptz,$12::jsonb)
+       on conflict (id) do nothing`,
+      [
+        'p5-profile-commit-valid',
+        position.id,
+        plan.id,
+        plan.programId,
+        plan.workItemId,
+        plan.criterionId,
+        plan.criterionDigest,
+        plan.inputDigest,
+        position.positionDigest,
+        position.positionDigest,
+        p4Fixture.now,
+        JSON.stringify({ fixture: 'commit-valid' }),
+      ],
+    );
+
+    await expectPostgresReject(
+      active.connection,
+      'reveal-before-commit-sequence',
+      `insert into mammoth_p5_isolation_reveals
+        (id, position_id, cell_plan_id, program_id, reveal_digest,
+         revealed_to_position_ids, audit_sequence, revealed_at)
+       values ($1,$2,$3,$4,$5,$6::jsonb,5,$7::timestamptz)`,
+      [
+        'p5-profile-reveal-early',
+        position.id,
+        plan.id,
+        plan.programId,
+        canonicalDigest({ reveal: 'early' }),
+        JSON.stringify([position.id]),
+        p4Fixture.now,
+      ],
+      rejectedCases,
+    );
+
+    await active.connection.query(
+      `insert into mammoth_p5_isolation_reveals
+        (id, position_id, cell_plan_id, program_id, reveal_digest,
+         revealed_to_position_ids, audit_sequence, revealed_at)
+       values ($1,$2,$3,$4,$5,$6::jsonb,11,$7::timestamptz)
+       on conflict (id) do nothing`,
+      [
+        'p5-profile-reveal-valid',
+        position.id,
+        plan.id,
+        plan.programId,
+        canonicalDigest({ reveal: 'valid' }),
+        JSON.stringify([position.id]),
+        p4Fixture.now,
+      ],
+    );
+
+    await active.connection.query(
+      `insert into mammoth_model_profiles
+        (id, provider, canonical_name, family_id, active, authoritative_contract,
+         revision, created_at, updated_at)
+       values ('p5-profile-reviewer','p5-profile-provider','p5-profile-reviewer',
+         'p5-profile-family',true,$1::jsonb,1,$2::timestamptz,$2::timestamptz)
+       on conflict (id) do nothing`,
+      [
+        JSON.stringify({
+          id: 'p5-profile-reviewer',
+          provider: 'p5-profile-provider',
+          family: 'p5-profile-family',
+          displayName: 'p5-profile-reviewer',
+          activeVersionId: 'p5-profile-reviewer-version',
+        }),
+        p4Fixture.now,
+      ],
+    );
+    const reviewerVersionBase = {
+      id: 'p5-profile-reviewer-version',
+      profileId: 'p5-profile-reviewer',
+      schemaVersion: RESEARCH_CELL_CONTRACT_VERSION as '1.0.0',
+      provider: 'p5-profile-provider',
+      providerModelId: 'p5-profile-reviewer-model',
+      family: 'p5-profile-family',
+      checkpoint: 'p5-profile-reviewer-checkpoint',
+      contextWindow: 128_000,
+      modalities: ['text'],
+      locality: 'cloud' as const,
+      dataPolicyId: 'p5-profile-data-policy',
+      costProfileId: 'p5-profile-cost-policy',
+      lineage: {
+        kind: 'known' as const,
+        trainingLineageIds: ['p5-profile-reviewer-training-lineage'],
+        fineTuneLineageIds: [],
+        sharedDerivationIds: [],
+        parentVersionIds: [],
+      },
+      immutableDigest: canonicalDigest('placeholder'),
+      recordedAt: p4Fixture.now,
+    };
+    const reviewerVersionContract = {
+      ...reviewerVersionBase,
+      immutableDigest: modelProfileVersionDigest(
+        reviewerVersionBase as ModelProfileVersion,
+      ),
+    };
+    await active.connection.query(
+      `insert into mammoth_model_profile_versions
+        (id, profile_id, profile_revision, provider, model_name, checkpoint,
+         family_id, lineage_status, training_lineage_ids, fine_tune_lineage_ids,
+         shared_derivation_ids, locality, modalities, context_window,
+         data_policy_id, cost_profile_id, declared_at, metadata,
+         authoritative_contract)
+       values ($1,'p5-profile-reviewer',1,'p5-profile-provider',
+         'p5-profile-reviewer-model','p5-profile-reviewer-checkpoint',
+         'p5-profile-family','known',$2::jsonb,$3::jsonb,$4::jsonb,'cloud',
+         $5::jsonb,128000,'p5-profile-data-policy','p5-profile-cost-policy',
+         $6::timestamptz,$7::jsonb,$8::jsonb)
+       on conflict (id) do nothing`,
+      [
+        reviewerVersionContract.id,
+        JSON.stringify(reviewerVersionContract.lineage.trainingLineageIds),
+        JSON.stringify([]),
+        JSON.stringify([]),
+        JSON.stringify(reviewerVersionContract.modalities),
+        p4Fixture.now,
+        JSON.stringify({ acceptanceFixture: 'p5-native-postgres-triggers' }),
+        JSON.stringify(reviewerVersionContract),
+      ],
+    );
+
+    await active.connection.query(
+      `insert into mammoth_review_assignments
+        (id, program_id, work_item_id, target_position_id, reviewer_agent_id,
+         reviewer_model_profile_version_id, reviewer_role, target_author_agent_id,
+         target_model_profile_version_id, target_role, criterion_id, criterion_digest,
+         blind, assignment_digest, authoritative_contract, recorded_at)
+       values ($1,$2,$3,$4,'p5-profile-reviewer','p5-profile-reviewer-version',
+         'falsifier',$5,$6,$7,$8,$9,true,$10,$11::jsonb,$12::timestamptz)
+       on conflict (id) do nothing`,
+      [
+        'p5-profile-assignment',
+        plan.programId,
+        plan.workItemId,
+        position.id,
+        position.contract.authorAgentId,
+        position.modelProfileVersionId,
+        position.contract.role,
+        plan.criterionId,
+        plan.criterionDigest,
+        canonicalDigest({ assignment: 'p5-profile-assignment' }),
+        JSON.stringify({
+          id: 'p5-profile-assignment',
+          reviewerAgentId: 'p5-profile-reviewer',
+        }),
+        p4Fixture.now,
+      ],
+    );
+
+    await expectPostgresReject(
+      active.connection,
+      'nested-sanitized-context-leakage',
+      `insert into mammoth_p5_sanitized_review_contexts
+        (id, assignment_id, target_position_id, program_id, contract_version,
+         context_digest, payload, created_at)
+       values ($1,'p5-profile-assignment',$2,$3,'1.0.0',$4,$5::jsonb,$6::timestamptz)`,
+      [
+        'p5-profile-context-leak',
+        position.id,
+        plan.programId,
+        canonicalDigest({ context: 'leak' }),
+        JSON.stringify({ safe: true, nested: { authorAgentId: 'leak' } }),
+        p4Fixture.now,
+      ],
+      rejectedCases,
+    );
+
+    await active.connection.query(
+      `insert into mammoth_p5_sanitized_review_contexts
+        (id, assignment_id, target_position_id, program_id, contract_version,
+         context_digest, payload, created_at)
+       values ($1,'p5-profile-assignment',$2,$3,'1.0.0',$4,$5::jsonb,$6::timestamptz)
+       on conflict (id) do nothing`,
+      [
+        'p5-profile-context-valid',
+        position.id,
+        plan.programId,
+        canonicalDigest({ context: 'valid' }),
+        JSON.stringify({ positionDigest: position.positionDigest }),
+        p4Fixture.now,
+      ],
+    );
+
+    await active.connection.query(
+      `insert into mammoth_p5_cell_attempts
+        (id, cell_plan_id, work_item_id, program_id, attempt, owner_id,
+         fencing_token, state, started_at, updated_at)
+       values ($1,$2,$3,$4,1,'p5-profile-worker',1,'started',$5::timestamptz,$5::timestamptz)
+       on conflict (id) do nothing`,
+      [
+        'p5-profile-attempt',
+        plan.id,
+        plan.workItemId,
+        plan.programId,
+        p4Fixture.now,
+      ],
+    );
+    await active.connection.query(
+      `insert into mammoth_p5_budget_reservations
+        (id, stable_identity, program_id, work_item_id, attempt_id, ceiling,
+         state, revision, created_at, updated_at)
+       values ($1,'p5-profile-budget',$2,$3,'p5-profile-attempt',$4::jsonb,
+         'reserved',0,$5::timestamptz,$5::timestamptz)
+       on conflict (id) do nothing`,
+      [
+        'p5-profile-reservation',
+        plan.programId,
+        plan.workItemId,
+        JSON.stringify({ costUsd: 1, tokens: 10, durationMs: 100 }),
+        p4Fixture.now,
+      ],
+    );
+
+    await expectPostgresReject(
+      active.connection,
+      'provider-aggregate-overspend',
+      `with first_charge as (
+         insert into mammoth_p5_provider_charges
+           (id, stable_identity, reservation_id, provider, provider_receipt_id,
+            amount, receipt_digest, payload, charged_at)
+         values ('p5-profile-charge-a','p5-profile-charge-a','p5-profile-reservation',
+           'p5-profile-provider','receipt-a',$1::jsonb,$2,$3::jsonb,$4::timestamptz)
+         on conflict (id) do nothing
+         returning id
+       )
+       insert into mammoth_p5_provider_charges
+         (id, stable_identity, reservation_id, provider, provider_receipt_id,
+          amount, receipt_digest, payload, charged_at)
+       values ('p5-profile-charge-over','p5-profile-charge-over','p5-profile-reservation',
+         'p5-profile-provider','receipt-over',$5::jsonb,$6,$7::jsonb,$4::timestamptz)`,
+      [
+        JSON.stringify({ costUsd: 0.7, tokens: 7, durationMs: 70 }),
+        canonicalDigest({ charge: 'a' }),
+        JSON.stringify({ charge: 'a' }),
+        p4Fixture.now,
+        JSON.stringify({ costUsd: 0.4, tokens: 4, durationMs: 40 }),
+        canonicalDigest({ charge: 'over' }),
+        JSON.stringify({ charge: 'over' }),
+      ],
+      rejectedCases,
+    );
+
+    await expectPostgresReject(
+      active.connection,
+      'settlement-overspend',
+      `insert into mammoth_p5_budget_settlements
+        (id, stable_identity, reservation_id, amount, receipt_digest, payload, settled_at)
+       values ($1,'p5-profile-settlement-over','p5-profile-reservation',$2::jsonb,$3,$4::jsonb,$5::timestamptz)`,
+      [
+        'p5-profile-settlement-over',
+        JSON.stringify({ costUsd: 2, tokens: 1, durationMs: 1 }),
+        canonicalDigest({ settlement: 'over' }),
+        JSON.stringify({ settlement: 'over' }),
+        p4Fixture.now,
+      ],
+      rejectedCases,
+    );
+
+    await active.connection.query(
+      `insert into mammoth_p5_budget_settlements
+        (id, stable_identity, reservation_id, amount, receipt_digest, payload, settled_at)
+       values ($1,'p5-profile-settlement','p5-profile-reservation',$2::jsonb,$3,$4::jsonb,$5::timestamptz)
+       on conflict (id) do nothing`,
+      [
+        'p5-profile-settlement',
+        JSON.stringify({ costUsd: 0.8, tokens: 8, durationMs: 80 }),
+        canonicalDigest({ settlement: 'valid' }),
+        JSON.stringify({ settlement: 'valid' }),
+        p4Fixture.now,
+      ],
+    );
+
+    await expectPostgresReject(
+      active.connection,
+      'duplicate-settlement',
+      `insert into mammoth_p5_budget_settlements
+        (id, stable_identity, reservation_id, amount, receipt_digest, payload, settled_at)
+       values ('p5-profile-settlement-duplicate','p5-profile-settlement-duplicate',
+         'p5-profile-reservation',$1::jsonb,$2,$3::jsonb,$4::timestamptz)`,
+      [
+        JSON.stringify({ costUsd: 0.1, tokens: 1, durationMs: 1 }),
+        canonicalDigest({ settlement: 'duplicate' }),
+        JSON.stringify({ settlement: 'duplicate' }),
+        p4Fixture.now,
+      ],
+      rejectedCases,
+    );
+
+    await expectPostgresReject(
+      active.connection,
+      'release-after-settlement',
+      `insert into mammoth_p5_budget_releases
+        (id, stable_identity, reservation_id, reason, receipt_digest, payload, released_at)
+       values ('p5-profile-release-after-settlement','p5-profile-release-after-settlement',
+         'p5-profile-reservation','unused',$1,$2::jsonb,$3::timestamptz)`,
+      [
+        canonicalDigest({ release: 'after-settlement' }),
+        JSON.stringify({ release: 'after-settlement' }),
+        p4Fixture.now,
+      ],
+      rejectedCases,
+    );
+
+    await expectPostgresReject(
+      active.connection,
+      'cancellation-combined-overspend',
+      `insert into mammoth_p5_cancellation_receipts
+        (id, stable_identity, reservation_id, attempt_id, program_id, work_item_id,
+         cancellation_phase, consumed, released, receipt_digest, payload, cancelled_at)
+       values ('p5-profile-cancel-over','p5-profile-cancel-over','p5-profile-reservation',
+         'p5-profile-attempt',$1,$2,'during_settlement',$3::jsonb,$4::jsonb,$5,$6::jsonb,$7::timestamptz)`,
+      [
+        plan.programId,
+        plan.workItemId,
+        JSON.stringify({ costUsd: 0.7, tokens: 7, durationMs: 70 }),
+        JSON.stringify({ costUsd: 0.7, tokens: 7, durationMs: 70 }),
+        canonicalDigest({ cancel: 'over' }),
+        JSON.stringify({ cancel: 'over' }),
+        p4Fixture.now,
+      ],
+      rejectedCases,
+    );
+
+    await active.connection.query(
+      `insert into mammoth_p5_cancellation_receipts
+        (id, stable_identity, reservation_id, attempt_id, program_id, work_item_id,
+         cancellation_phase, consumed, released, receipt_digest, payload, cancelled_at)
+       values ('p5-profile-cancel-valid','p5-profile-cancel-valid','p5-profile-reservation',
+         'p5-profile-attempt',$1,$2,'during_settlement',$3::jsonb,$4::jsonb,$5,$6::jsonb,$7::timestamptz)
+       on conflict (id) do nothing`,
+      [
+        plan.programId,
+        plan.workItemId,
+        JSON.stringify({ costUsd: 0.2, tokens: 2, durationMs: 20 }),
+        JSON.stringify({ costUsd: 0.3, tokens: 3, durationMs: 30 }),
+        canonicalDigest({ cancel: 'valid' }),
+        JSON.stringify({ cancel: 'valid' }),
+        p4Fixture.now,
+      ],
+    );
+
+    return {
+      schemaVersion: 1,
+      migrationVersion: 6,
+      programId: plan.programId,
+      validCommitId: 'p5-profile-commit-valid',
+      validRevealId: 'p5-profile-reveal-valid',
+      sanitizedContextId: 'p5-profile-context-valid',
+      reservationId: 'p5-profile-reservation',
+      settlementId: 'p5-profile-settlement',
+      cancellationId: 'p5-profile-cancel-valid',
+      rejectedCases,
+    };
   } finally {
     if (active) await active.lifecycle.shutdown().catch(() => undefined);
     await service.stop().catch(() => undefined);
@@ -518,6 +955,22 @@ function requiredFirst<T>(values: readonly T[], subject: string): T {
   if (value === undefined)
     throw new Error(`P4 reconstruction is missing ${subject}`);
   return value;
+}
+
+async function expectPostgresReject(
+  connection: PostgresConnection,
+  caseId: string,
+  sql: string,
+  parameters: readonly unknown[],
+  rejectedCases: string[],
+): Promise<void> {
+  try {
+    await connection.query(sql, parameters);
+  } catch {
+    rejectedCases.push(caseId);
+    return;
+  }
+  throw new Error(`P5 live Postgres trigger accepted invalid case: ${caseId}`);
 }
 
 function verifySeededResearchCell(

@@ -133,6 +133,91 @@ export const P5_CASE_EXECUTION_GATES: Readonly<
   ],
 };
 
+export const P5_EXECUTABLE_CASE_PROOFS: readonly {
+  readonly caseId: (typeof REQUIRED_P5_CASES)[number];
+  readonly path: string;
+  readonly snippets: readonly string[];
+}[] = [
+  {
+    caseId: 'reviewer-context-nested-future-fields',
+    path: 'packages/domain/test/research-cell.test.ts',
+    snippets: ['nested: { authorIdentity', 'futureProhibitedField'],
+  },
+  {
+    caseId: 'reviewer-context-prohibited-fields',
+    path: 'packages/production-profile/src/verify.ts',
+    snippets: ['nested-sanitized-context-leakage'],
+  },
+  {
+    caseId: 'reveal-mismatched-digest',
+    path: 'packages/production-profile/src/verify.ts',
+    snippets: ['commit-digest-drift'],
+  },
+  {
+    caseId: 'authoritative-attribution-retained-while-reviewer-input-sanitized',
+    path: 'packages/observatory-projection/test/builder.test.ts',
+    snippets: [
+      'projects P5 isolation, attribution, spend, partial results, and receipts without reviewer leakage',
+      'authorAgentId: ',
+      "not.toContain('authorConfidence')",
+    ],
+  },
+  {
+    caseId: 'minority-and-unresolved-conflict-survive',
+    path: 'packages/observatory-projection/test/builder.test.ts',
+    snippets: ['dissent', 'unresolved'],
+  },
+  {
+    caseId:
+      'abstained-invalid-rejected-timed-out-never-started-reviews-retained',
+    path: 'packages/observatory-projection/test/builder.test.ts',
+    snippets: ['rejectedResidue', 'rejected_for', 'invalid schema'],
+  },
+  {
+    caseId: 'duplicate-position-review-budget-effect-cancellation-delivery',
+    path: 'packages/temporal-adapter/test/p5-live-workflow.test.ts',
+    snippets: [
+      'injected ambiguous P5 budget settlement delivery',
+      'duplicatePrevented',
+    ],
+  },
+  {
+    caseId: 'overspend-settlement-beyond-reservation-release-after-settlement',
+    path: 'packages/production-profile/src/verify.ts',
+    snippets: [
+      'settlement-overspend',
+      'release-after-settlement',
+      'provider-aggregate-overspend',
+    ],
+  },
+  {
+    caseId: 'cancellation-before-dispatch-through-settlement',
+    path: 'packages/temporal-adapter/test/p5-live-workflow.test.ts',
+    snippets: ['records honest P5 cancellation receipts', 'during_settlement'],
+  },
+  {
+    caseId: 'worker-client-and-service-death-at-durable-boundaries',
+    path: 'packages/temporal-adapter/test/p5-live-workflow.test.ts',
+    snippets: ['worker replacement', 'client handle loss', 'reacquired.result'],
+  },
+  {
+    caseId: 'continue-as-new-and-replay-supported-versions',
+    path: 'packages/temporal-adapter/test/p5-live-workflow.test.ts',
+    snippets: ['continue-as-new', 'Worker.runReplayHistory'],
+  },
+  {
+    caseId:
+      'migration-interruption-stale-fencing-digest-corruption-broken-references',
+    path: 'packages/production-profile/src/verify.ts',
+    snippets: ['verifyP5Lifecycle', 'commit-digest-drift'],
+  },
+  {
+    caseId: 'future-projection-authority-and-deterministic-restart-digest',
+    path: 'packages/observatory-projection/test/builder.test.ts',
+    snippets: ['fails closed on P5 impossible sequence', 'reviewer leakage'],
+  },
+];
+
 export const P5_GATES: readonly P5GateSpec[] = [
   {
     id: 'fixture-manifest',
@@ -158,9 +243,9 @@ export const P5_GATES: readonly P5GateSpec[] = [
   {
     id: 'postgres-p5-migration',
     description:
-      'Forward-only production Postgres migration after P4 version 5',
-    requiredPath: 'packages/postgres-adapter/src/migrations.ts',
-    command: ['pnpm', '--filter', '@mammoth/postgres-adapter', 'test'],
+      'Forward-only production Postgres migration after P4 version 5 with live trigger fixtures',
+    requiredPath: 'packages/production-profile/package.json',
+    command: ['pnpm', '--filter', '@mammoth/production-profile', 'verify:p5'],
   },
   {
     id: 'workflow-contracts',
@@ -246,6 +331,7 @@ export async function verifyP5(
   assertUniqueGateIds(gates);
   assertFixtureExecutionGates(gates);
   await verifyP5FixtureManifest(repository);
+  await verifyP5ExecutableCaseProofs(repository);
   const results: P5GateResult[] = [];
   for (const gate of gates) {
     const absolutePath = resolve(repository, gate.requiredPath);
@@ -284,6 +370,35 @@ export async function verifyP5(
     fixtureManifest: P5_FIXTURE_MANIFEST,
     gates: results,
   };
+}
+
+export async function verifyP5ExecutableCaseProofs(
+  repository: string,
+): Promise<void> {
+  const proven = new Set<(typeof REQUIRED_P5_CASES)[number]>();
+  for (const proof of P5_EXECUTABLE_CASE_PROOFS) {
+    const source = await readFile(resolve(repository, proof.path), 'utf8');
+    for (const snippet of proof.snippets) {
+      if (!source.includes(snippet)) {
+        throw new Error(
+          `P5_EXECUTABLE_CASE_PROOF_MISSING:${proof.caseId}:${proof.path}:${snippet}`,
+        );
+      }
+    }
+    proven.add(proof.caseId);
+  }
+  const executableCases = REQUIRED_P5_CASES.filter((caseId) =>
+    P5_CASE_EXECUTION_GATES[caseId].some((gate) =>
+      [
+        'postgres-p5-migration',
+        'temporal-execution-recovery',
+        'projection-operator-inspection',
+      ].includes(gate),
+    ),
+  );
+  const missing = executableCases.filter((caseId) => !proven.has(caseId));
+  if (missing.length > 0)
+    throw new Error(`P5_EXECUTABLE_CASE_PROOF_DRIFT:${missing.join(',')}`);
 }
 
 function assertUniqueGateIds(gates: readonly P5GateSpec[]): void {
@@ -334,7 +449,19 @@ const systemDependencies: P5VerifierDependencies = {
         return 'P5 acceptance package must expose a vitest test script';
     }
     if (target.id === 'postgres-p5-migration') {
-      const source = await readFile(absolutePath, 'utf8');
+      const source = await readFile(
+        resolve(repository, 'packages/postgres-adapter/src/migrations.ts'),
+        'utf8',
+      );
+      const packageDocument: unknown = JSON.parse(
+        await readFile(absolutePath, 'utf8'),
+      );
+      if (
+        !isRecord(packageDocument) ||
+        !isRecord(packageDocument.scripts) ||
+        packageDocument.scripts['verify:p5'] !== 'tsx src/cli.ts verify-p5'
+      )
+        return 'production profile package must expose the live P5 Postgres verifier';
       if (
         !source.includes('version: 6') ||
         !source.includes("name: 'p5_isolated_divergence'")
@@ -353,9 +480,22 @@ const systemDependencies: P5VerifierDependencies = {
         !source.includes('mammoth_p5_guard_isolation_commit') ||
         !source.includes('mammoth_p5_guard_sanitized_review_context') ||
         !source.includes('mammoth_p5_guard_budget_settlement') ||
-        !source.includes('mammoth_p5_guard_cancellation_receipt')
+        !source.includes('mammoth_p5_guard_cancellation_receipt') ||
+        !source.includes('mammoth_p5_json_contains_forbidden_attribution') ||
+        !source.includes('mammoth_p5_provider_charge_guard')
       )
         return 'production Postgres migration lacks executable P5 invariant guards';
+      const verifierSource = await readFile(
+        resolve(repository, 'packages/production-profile/src/verify.ts'),
+        'utf8',
+      );
+      if (
+        !verifierSource.includes('verifyP5Lifecycle') ||
+        !verifierSource.includes('nested-sanitized-context-leakage') ||
+        !verifierSource.includes('provider-aggregate-overspend') ||
+        !verifierSource.includes('cancellation-combined-overspend')
+      )
+        return 'production profile lacks live P5 trigger adversarial fixtures';
     }
     if (target.id === 'temporal-execution-recovery') {
       const document: unknown = JSON.parse(

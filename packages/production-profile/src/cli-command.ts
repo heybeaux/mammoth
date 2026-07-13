@@ -6,6 +6,7 @@ export type ProductionProfileCommand =
   | 'stop'
   | 'kill'
   | 'status'
+  | 'verify-p5'
   | 'verify-p4'
   | 'verify-lifecycle'
   | 'verify-backup';
@@ -17,6 +18,7 @@ export interface ProfileCommandOperations {
   >;
   readonly verifyLifecycle: () => Promise<unknown>;
   readonly verifyP4: () => Promise<unknown>;
+  readonly verifyP5: () => Promise<unknown>;
   readonly verifyBackup: () => Promise<unknown>;
   readonly write: (value: unknown) => void;
 }
@@ -33,6 +35,9 @@ export async function executeProfileCommand(
   switch (command as ProductionProfileCommand | undefined) {
     case 'verify-p4':
       operations.write(await operations.verifyP4());
+      return;
+    case 'verify-p5':
+      operations.write(await operations.verifyP5());
       return;
     case 'verify-lifecycle':
       operations.write(await operations.verifyLifecycle());
@@ -61,7 +66,7 @@ export async function executeProfileCommand(
     }
     default:
       throw new Error(
-        'usage: mammoth-profile <bootstrap|start|stop|kill|status|verify-p4|verify-lifecycle|verify-backup>',
+        'usage: mammoth-profile <bootstrap|start|stop|kill|status|verify-p4|verify-p5|verify-lifecycle|verify-backup>',
       );
   }
 }

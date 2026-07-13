@@ -800,6 +800,10 @@ create index mammoth_p5_isolation_reveals_program_idx
   on mammoth_p5_isolation_reveals (program_id, cell_plan_id, audit_sequence);
 create index mammoth_p5_budget_reservations_program_idx
   on mammoth_p5_budget_reservations (program_id, work_item_id, state);
+create unique index mammoth_p5_budget_settlements_reservation_unique
+  on mammoth_p5_budget_settlements (reservation_id);
+create unique index mammoth_p5_budget_releases_reservation_unique
+  on mammoth_p5_budget_releases (reservation_id);
 create index mammoth_p5_cancellation_receipts_program_idx
   on mammoth_p5_cancellation_receipts (program_id, work_item_id, cancellation_phase);
 
@@ -863,6 +867,53 @@ as $$
   select (amount ->> 'costUsd')::numeric <= (ceiling ->> 'costUsd')::numeric
      and (amount ->> 'tokens')::numeric <= (ceiling ->> 'tokens')::numeric
      and (amount ->> 'durationMs')::numeric <= (ceiling ->> 'durationMs')::numeric;
+$$;
+
+create function mammoth_p5_amount_pair_within_ceiling(left_amount jsonb, right_amount jsonb, ceiling jsonb)
+returns boolean
+language sql
+immutable
+as $$
+  select ((left_amount ->> 'costUsd')::numeric + (right_amount ->> 'costUsd')::numeric)
+            <= (ceiling ->> 'costUsd')::numeric
+     and ((left_amount ->> 'tokens')::numeric + (right_amount ->> 'tokens')::numeric)
+            <= (ceiling ->> 'tokens')::numeric
+     and ((left_amount ->> 'durationMs')::numeric + (right_amount ->> 'durationMs')::numeric)
+            <= (ceiling ->> 'durationMs')::numeric;
+$$;
+
+create function mammoth_p5_json_contains_forbidden_attribution(document jsonb)
+returns boolean
+language plpgsql
+immutable
+as $$
+declare
+  item record;
+  element jsonb;
+begin
+  if document is null then
+    return false;
+  end if;
+  if jsonb_typeof(document) = 'object' then
+    for item in select key, value as nested from jsonb_each(document) loop
+      if item.key ~* '(author|attribution|rawReviewerIdentity|modelProfileVersion|providerModel|priorVerdict|upstreamPassMarker)' then
+        return true;
+      end if;
+      if mammoth_p5_json_contains_forbidden_attribution(item.nested) then
+        return true;
+      end if;
+    end loop;
+  elsif jsonb_typeof(document) = 'array' then
+    for element in
+      select array_element from jsonb_array_elements(document) as array_values(array_element)
+    loop
+      if mammoth_p5_json_contains_forbidden_attribution(element) then
+        return true;
+      end if;
+    end loop;
+  end if;
+  return false;
+end;
 $$;
 
 create function mammoth_p5_guard_isolation_commit()
@@ -947,14 +998,7 @@ begin
   then
     raise exception 'P5 sanitized context assignment mismatch';
   end if;
-  if new.payload ?| array[
-    'authorAgentId',
-    'targetAuthorAgentId',
-    'targetModelProfileVersionId',
-    'targetAuthorModelProfileVersionId',
-    'rawReviewerIdentity',
-    'attribution'
-  ] then
+  if mammoth_p5_json_contains_forbidden_attribution(new.payload) then
     raise exception 'P5 sanitized context contains forbidden attribution';
   end if;
   return new;
@@ -1045,7 +1089,7 @@ begin
   if reservation_record is null then
     raise exception 'P5 budget settlement reservation is missing';
   end if;
-  if reservation_record.state not in ('reserved', 'settled') then
+  if reservation_record.state <> 'reserved' then
     raise exception 'P5 budget settlement requires an unsettled reservation';
   end if;
   if not mammoth_p5_amount_within_ceiling(new.amount, reservation_record.ceiling) then
@@ -1078,7 +1122,7 @@ begin
   if reservation_record is null then
     raise exception 'P5 budget release reservation is missing';
   end if;
-  if reservation_record.state not in ('reserved', 'released', 'cancelled') then
+  if reservation_record.state <> 'reserved' then
     raise exception 'P5 budget release requires an unsettled reservation';
   end if;
   if exists (
@@ -1100,17 +1144,35 @@ language plpgsql
 as $$
 declare
   reservation_record record;
+  prior_cost numeric;
+  prior_tokens numeric;
+  prior_duration numeric;
 begin
   perform mammoth_p5_require_budget_amount(new.amount, 'provider charge');
-  select ceiling
+  select ceiling, state
     into reservation_record
     from mammoth_p5_budget_reservations
    where id = new.reservation_id;
   if reservation_record is null then
     raise exception 'P5 provider charge reservation is missing';
   end if;
+  if reservation_record.state not in ('reserved', 'settled') then
+    raise exception 'P5 provider charge requires an active or settled reservation';
+  end if;
   if not mammoth_p5_amount_within_ceiling(new.amount, reservation_record.ceiling) then
     raise exception 'P5 provider charge exceeds reservation ceiling';
+  end if;
+  select coalesce(sum((amount ->> 'costUsd')::numeric), 0),
+         coalesce(sum((amount ->> 'tokens')::numeric), 0),
+         coalesce(sum((amount ->> 'durationMs')::numeric), 0)
+    into prior_cost, prior_tokens, prior_duration
+    from mammoth_p5_provider_charges
+   where reservation_id = new.reservation_id;
+  if prior_cost + (new.amount ->> 'costUsd')::numeric > (reservation_record.ceiling ->> 'costUsd')::numeric
+    or prior_tokens + (new.amount ->> 'tokens')::numeric > (reservation_record.ceiling ->> 'tokens')::numeric
+    or prior_duration + (new.amount ->> 'durationMs')::numeric > (reservation_record.ceiling ->> 'durationMs')::numeric
+  then
+    raise exception 'P5 provider charge aggregate exceeds reservation ceiling';
   end if;
   return new;
 end;
@@ -1150,8 +1212,11 @@ begin
     if reservation_record is null then
       raise exception 'P5 cancellation reservation is missing';
     end if;
-    if not mammoth_p5_amount_within_ceiling(new.consumed, reservation_record.ceiling)
-      or not mammoth_p5_amount_within_ceiling(new.released, reservation_record.ceiling)
+    if not mammoth_p5_amount_pair_within_ceiling(
+      new.consumed,
+      new.released,
+      reservation_record.ceiling
+    )
     then
       raise exception 'P5 cancellation amount exceeds reservation ceiling';
     end if;

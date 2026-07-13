@@ -6,6 +6,7 @@ import {
   verifyBackupRestore,
   verifyLifecycle,
   verifyP4Lifecycle,
+  verifyP5Lifecycle,
 } from './verify.js';
 
 async function main(): Promise<void> {
@@ -15,6 +16,7 @@ async function main(): Promise<void> {
     createProfile: () => createProductionProfile(config, process.env),
     verifyLifecycle: () => verifyLifecycle(config),
     verifyP4: () => verifyP4Lifecycle(config),
+    verifyP5: () => verifyP5Lifecycle(config),
     verifyBackup: () => verifyBackupRestore(config),
     write: (value) => {
       console.log(JSON.stringify(value, null, 2));

@@ -398,3 +398,63 @@ main CI, and annotated tag target. The fixed candidate still requires
 independent re-review, clean-checkout ladder, PR, CI repair if needed, merge,
 post-merge main CI, receipt PR/merge, and annotated
 `v0.5.0-isolated-divergence` tag.
+
+### Independent Re-Review
+
+State: completed.
+
+Agent id: `019f5db9-de73-7af2-9c2e-426e26985c37`
+
+Reviewed candidate: `d0a86d83bd7617920da86e195e10b352104cd363`
+(`style: format P5 review fixes`).
+
+Reviewer result: blocking findings remained. The reviewer accepted that the P5
+Temporal gate was no longer an offline shell, but found that it still overclaimed
+P5 recovery because it lacked P5 cancellation and P5 worker/client recovery
+cases. The reviewer also found that migration version `6` still had DB-boundary
+holes for nested sanitized-context leakage, duplicate settlement/release,
+provider aggregate ceiling, and combined cancellation accounting. Finally, the
+reviewer found `verify:p5` still mapped case IDs to broad gates without
+case-level executable proof. The release receipt remains a post-merge predicate,
+not a code-candidate blocker.
+
+### Second Review Fix Response
+
+Candidate head before commit: uncommitted review-fix slice after `d0a86d8`.
+
+Findings addressed:
+
+1. P5 Temporal recovery: expanded `test/p5-live-workflow.test.ts` from one
+   happy-path live workflow test to seven P5-specific live tests covering stable
+   IDs, continue-as-new, history replay, all five cancellation phases, replacement
+   worker completion, client handle reacquisition, and duplicate budget-settlement
+   Activity delivery.
+2. P5 Postgres enforcement: tightened migration version `6` with recursive JSON
+   attribution-leakage detection, unique settlement/release per reservation,
+   reservation lifecycle checks for settlement/release, provider lifecycle and
+   aggregate ceiling checks, and combined cancellation consumed+released ceiling
+   checks.
+3. Live DB boundary proof: added production-profile `verify:p5`, which starts
+   native Postgres, applies migration `6`, seeds P4 authority plus P5 fixtures,
+   and proves named invalid P5 cases fail under production triggers.
+4. Verifier strength: changed the P5 Postgres gate to execute
+   `@mammoth/production-profile verify:p5` and added executable case-proof
+   validation for production-boundary fixture cases.
+
+Verification:
+
+```text
+pnpm --filter @mammoth/temporal-adapter exec vitest run test/p5-live-workflow.test.ts --test-timeout 120000 --no-file-parallelism: passed, 1 file / 7 tests
+pnpm --filter @mammoth/temporal-adapter test:live: passed, 4 files / 11 tests
+pnpm --filter @mammoth/production-profile verify:p5: passed, rejected 8 named live Postgres cases
+pnpm --filter @mammoth/production-profile test: passed, 4 files / 23 tests
+pnpm --filter @mammoth/p5-acceptance test: passed, 1 file / 5 tests
+pnpm verify:p5: passed, 7/7 gates, including production-profile verify:p5 and expanded P5 live Temporal gate
+pnpm lint: passed
+pnpm typecheck: passed
+```
+
+Remaining before release: independent re-review must run again against the new
+candidate. Then rerun a clean-checkout ladder, open PR, repair CI if needed,
+merge, verify main CI, merge exact receipt, and create annotated
+`v0.5.0-isolated-divergence`.
