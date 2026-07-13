@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@mammoth/runtime": "workspace:*",
+    "@mammoth/temporal-adapter": "workspace:*",
     "@mammoth/workflow": "workspace:*"
   },
   "devDependencies": {

@@ -38,3 +38,11 @@ replay behavior; cancelled and completed executions are not resumable.
 Cancellation writes `cancellation-receipt.json`, including an integrity hash,
 completed and omitted stages, timestamps, reason, and captured workflow state.
 `inspect` exposes that receipt and the runtime `audit.json` chain.
+
+Set `MAMMOTH_WORKFLOW_BACKEND=temporal` to route the existing `run`, `status`,
+`resume`, `cancel`, and `inspect` commands through the Temporal research-program
+client. Each invocation establishes its own Temporal connection and addresses a
+stable workflow ID derived from the charter program ID plus
+`MAMMOTH_CRITERION_VERSION` and `MAMMOTH_BRANCH_ID` (defaulting to
+`criterion-v1` and `main`). Temporal-backed bounded `--max-steps` execution is
+rejected explicitly rather than silently changing its semantics.
