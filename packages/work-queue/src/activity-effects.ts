@@ -484,9 +484,13 @@ export async function executeActivityEffect<TInput, TResult>(
       await options.store.failAttempt(attempt, failure);
       throw failure;
     }
-    const reconciled = await options.provider.reconcile(idempotencyKey);
-    if (reconciled)
-      return persistAndMap(identity, attempt, reconciled, options);
+    try {
+      const reconciled = await options.provider.reconcile(idempotencyKey);
+      if (reconciled)
+        return await persistAndMap(identity, attempt, reconciled, options);
+    } catch (error) {
+      throw await recordProviderFailure(options, attempt, error);
+    }
   }
 
   const startedAt = options.now();
@@ -529,25 +533,36 @@ export async function executeActivityEffect<TInput, TResult>(
     });
     return await persistAndMap(identity, attempt, external, options, startedAt);
   } catch (error) {
-    const failure =
-      error instanceof ActivityFailure
-        ? error
-        : new ActivityFailure(
-            'provider_result_ambiguous',
-            error instanceof Error
-              ? error.message
-              : 'Provider result is ambiguous',
-          );
-    if (failure.code === 'provider_result_ambiguous') {
-      await options.store.markAmbiguous(
-        options.provider.name,
-        idempotencyKey,
-        failure.code,
-      );
-    }
-    await options.store.failAttempt(attempt, failure);
-    throw failure;
+    throw await recordProviderFailure(options, attempt, error);
   }
+}
+
+async function recordProviderFailure<TInput, TResult>(
+  options: ExecuteActivityEffectOptions<TInput, TResult>,
+  attempt: ActivityAttemptInput,
+  error: unknown,
+): Promise<ActivityFailure> {
+  const failure =
+    error instanceof ActivityFailure
+      ? error
+      : new ActivityFailure(
+          'provider_result_ambiguous',
+          error instanceof Error
+            ? error.message
+            : 'Provider result is ambiguous',
+        );
+  if (
+    failure.code === 'provider_result_ambiguous' ||
+    failure.code === 'invalid_provider_result'
+  ) {
+    await options.store.markAmbiguous(
+      options.provider.name,
+      attempt.idempotencyKey,
+      failure.code,
+    );
+  }
+  await options.store.failAttempt(attempt, failure);
+  return failure;
 }
 
 export function effectIdempotencyKey(identity: EffectIdentityV1): Digest {
