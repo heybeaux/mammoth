@@ -120,7 +120,11 @@ describe('P5 live Temporal divergence/review workflow', () => {
           history,
           handle.workflowId,
         );
-        return { queried, completed, historyLength: history.events?.length ?? 0 };
+        return {
+          queried,
+          completed,
+          historyLength: history.events?.length ?? 0,
+        };
       });
 
       expect(result.queried.completedBoundaries.length).toBeGreaterThan(0);

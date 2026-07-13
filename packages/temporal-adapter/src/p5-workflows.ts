@@ -134,7 +134,8 @@ export async function p5DivergenceReviewWorkflow(
     if (
       input.resumeFrom === undefined &&
       completedBoundaries.length >= P5_CONTINUE_AS_NEW_MAX_BOUNDARIES &&
-      completedBoundaries.length < P5_DIVERGENCE_REVIEW_WORKFLOW_BOUNDARIES.length
+      completedBoundaries.length <
+        P5_DIVERGENCE_REVIEW_WORKFLOW_BOUNDARIES.length
     ) {
       createP5DivergenceReviewCarry({
         identity: input.identity,

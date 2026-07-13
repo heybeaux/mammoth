@@ -97,24 +97,20 @@ describe('P5 acceptance verifier', () => {
   });
 
   it('fails closed when the production Postgres migration registry lacks P5 version 6', async () => {
-    const result = await verifyP5(
-      repositoryRoot(),
-      {
-        exists: () => Promise.resolve(true),
-        validateTarget: (target) => {
-          return Promise.resolve(
-            target.id !== 'postgres-p5-migration'
-              ? undefined
-              : 'production Postgres migration registry lacks P5 version 6',
-          );
-        },
-        run: () => Promise.resolve({ exitCode: 0 }),
+    const result = await verifyP5(repositoryRoot(), {
+      exists: () => Promise.resolve(true),
+      validateTarget: (target) => {
+        return Promise.resolve(
+          target.id !== 'postgres-p5-migration'
+            ? undefined
+            : 'production Postgres migration registry lacks P5 version 6',
+        );
       },
-    );
+      run: () => Promise.resolve({ exitCode: 0 }),
+    });
     expect(result.ok).toBe(false);
     expect(
-      result.gates.find(({ id }) => id === 'postgres-p5-migration')
-        ?.diagnostic,
+      result.gates.find(({ id }) => id === 'postgres-p5-migration')?.diagnostic,
     ).toMatch(/P5 version 6/);
   });
 });
