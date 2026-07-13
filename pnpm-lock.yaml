@@ -281,6 +281,9 @@ importers:
       '@mammoth/domain':
         specifier: workspace:*
         version: link:../domain
+      '@mammoth/persistence':
+        specifier: workspace:*
+        version: link:../persistence
       '@mammoth/postgres-adapter':
         specifier: workspace:*
         version: link:../postgres-adapter

@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@mammoth/domain": "workspace:*",
+    "@mammoth/persistence": "workspace:*",
     "@mammoth/postgres-adapter": "workspace:*",
     "@mammoth/temporal-adapter": "workspace:*",
     "@mammoth/work-queue": "workspace:*",

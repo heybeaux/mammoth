@@ -19,6 +19,10 @@ import {
   type PostgresConnection,
 } from '@mammoth/postgres-adapter';
 import {
+  P4_ADMISSION_POLICY_DIGEST,
+  P4_ADMISSION_POLICY_VERSION,
+} from '@mammoth/persistence';
+import {
   canonicalDigest,
   effectIdempotencyKey,
   type ActivityInvocationV1,
@@ -353,13 +357,12 @@ async function seedResearchCell(
     ...positionBase,
     canonicalDigest: researchPositionDigest(positionBase as ResearchPosition),
   };
-  const admissionPolicyVersion = 'admission@1';
   await repositories.cells.recordPosition({
     contract: positionContract,
     admission: {
       decision: 'admitted',
-      policyVersion: admissionPolicyVersion,
-      policyDigest: canonicalDigest({ policy: admissionPolicyVersion }),
+      policyVersion: P4_ADMISSION_POLICY_VERSION,
+      policyDigest: P4_ADMISSION_POLICY_DIGEST,
       subjectDigest: positionContract.canonicalDigest,
       reasonCodes: ['admitted'],
       decidedAt: p4Fixture.now,
@@ -397,8 +400,8 @@ async function seedResearchCell(
     subjectType: 'position',
     subjectId: p4Fixture.positionId,
     reasonCode: 'p4-profile-fixture-rejection',
-    policyVersion: admissionPolicyVersion,
-    policyDigest: canonicalDigest({ policy: admissionPolicyVersion }),
+    policyVersion: P4_ADMISSION_POLICY_VERSION,
+    policyDigest: P4_ADMISSION_POLICY_DIGEST,
     reasonCodes: ['p4-profile-fixture-rejection'],
     payloadDigest: canonicalDigest(rejectedPayload),
     payload: rejectedPayload,
@@ -438,6 +441,33 @@ async function verifyResearchCell(
     migration.rows[0]?.name !== 'research_cell_persistence'
   ) {
     throw new Error('P4 migration v5 was not durably applied');
+  }
+  const policyMetadata = await connection.query<{
+    position_policy_version: string;
+    position_policy_digest: string;
+    residue_policy_version: string;
+    residue_policy_digest: string;
+  }>(
+    `select recorded_position.admission_policy_version as position_policy_version,
+            recorded_position.admission_policy_digest as position_policy_digest,
+            residue.policy_version as residue_policy_version,
+            residue.policy_digest as residue_policy_digest
+       from mammoth_research_positions recorded_position
+       join mammoth_rejected_audit_residue residue on residue.id = $2
+      where recorded_position.id = $1`,
+    [p4Fixture.positionId, p4Fixture.rejectedResidueId],
+  );
+  const persistedPolicy = policyMetadata.rows[0];
+  if (
+    policyMetadata.rowCount !== 1 ||
+    persistedPolicy?.position_policy_version !== P4_ADMISSION_POLICY_VERSION ||
+    persistedPolicy.position_policy_digest !== P4_ADMISSION_POLICY_DIGEST ||
+    persistedPolicy.residue_policy_version !== P4_ADMISSION_POLICY_VERSION ||
+    persistedPolicy.residue_policy_digest !== P4_ADMISSION_POLICY_DIGEST
+  ) {
+    throw new Error(
+      'P4 persisted admission metadata drifted from the frozen policy',
+    );
   }
   const reconstructed = await researchCellRepositories(
     connection,
