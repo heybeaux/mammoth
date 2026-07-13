@@ -17,13 +17,18 @@
     "status": "tsx src/cli.ts status",
     "start": "tsx src/cli.ts start",
     "stop": "tsx src/cli.ts stop",
-    "test": "pnpm --filter @mammoth/adapter-contracts build && vitest run",
+    "test": "pnpm --filter @mammoth/adapter-contracts build && vitest run test/config.test.ts test/readiness.test.ts test/service.test.ts",
+    "test:live": "pnpm --filter @mammoth/adapter-contracts build && vitest run test/live-probe.test.ts --test-timeout 120000",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mammoth/adapter-contracts": "workspace:*"
+    "@mammoth/adapter-contracts": "workspace:*",
+    "@temporalio/client": "1.20.2",
+    "@temporalio/worker": "1.20.2",
+    "@temporalio/workflow": "1.20.2"
   },
   "devDependencies": {
+    "@temporalio/testing": "1.20.2",
     "@types/node": "^22.0.0",
     "tsx": "^4.20.3",
     "typescript": "^5.8.0",
