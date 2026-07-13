@@ -259,3 +259,30 @@ their state remains `spawn requested` until live status or handoff evidence is
 available. The coordinator must not mark the P5 entry gate complete until each
 worker has one live owner proven by the appropriate registry or an accepted
 replacement strategy is documented.
+
+### Verifier And Migration Integration
+
+Commit: `98c1cb7` (`feat: add P5 acceptance verifier`).
+
+Changes: added `evals/fixtures/p5/adversarial-manifest.json`,
+`@mammoth/p5-acceptance`, `scripts/verify-p5.ts`, root `verify:p5`, and a visible
+default-branch CI step after `verify:p4`. Added production Postgres migration
+version `6` named `p5_isolated_divergence` after P4 migration `5`, plus migration
+tests for empty install, P3-to-current upgrade, and P4-to-P5 upgrade.
+
+Verification:
+
+```text
+pnpm --filter @mammoth/p5-acceptance test: passed, 1 file / 5 tests
+pnpm --filter @mammoth/p5-acceptance typecheck: passed
+pnpm --filter @mammoth/postgres-adapter test: passed, 5 files / 51 tests
+pnpm --filter @mammoth/p5-acceptance build: passed
+pnpm --filter @mammoth/postgres-adapter build: passed
+pnpm format:check: passed
+pnpm typecheck: passed
+pnpm verify:p5: passed, 7/7 gates
+```
+
+Remaining gap: `verify:p5` now exists and is non-recursive, but P5 still needs
+the full clean-checkout ladder, independent non-author adversarial review,
+review fixes/re-review, PR/CI/merge, exact receipt, and annotated release tag.
