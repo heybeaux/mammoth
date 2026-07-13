@@ -1,26 +1,50 @@
 # P3 Temporal Entry Evidence
 
-## Audit scope and verdict
+## Baseline audit scope and verdict
 
-This entry audit was executed from clean commit
+The baseline entry audit was executed from clean commit
 `386c8882add78dd95ee21745f1b224ba964c3319` on 2026-07-11
 (America/Vancouver). It inventories the contracts and production seams that the
-Temporal control plane must consume; it does not claim that a Temporal adapter,
-worker, workflow, or lifecycle already exists.
+Temporal control plane must consume. The baseline did not contain a Temporal
+adapter, worker, workflow, or lifecycle.
 
-The P2 baseline is reconfirmed. The remaining P3 entry predicates are not yet
-complete: Temporal has no frozen descriptor, its local service lifecycle is not
-defined, and the candidate Activity inventory has not yet been frozen into a
-complete work-item/idempotency/receipt mapping. No contract change was made by
-this audit.
+At that baseline, P2 was reconfirmed but the remaining P3 entry predicates were
+open: Temporal had no frozen descriptor, its local service lifecycle was not
+defined, and the candidate Activity inventory had not been frozen into a complete
+work-item/idempotency/receipt mapping. No contract change was made by the baseline
+audit.
 
-| P3 entry predicate                                                                           | Status                   | Evidence or gap                                                                                                                                                                                    |
+| P3 entry predicate                                                                           | Baseline status          | Evidence or gap                                                                                                                                                                                    |
 | -------------------------------------------------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Reconfirm `v0.2.0-production-data` from a clean checkout                                     | passed                   | `pnpm verify:p2` passed all eight reported gates after supplying an operator-only test password and isolated profile root/port.                                                                    |
 | Record contract changes in an ADR before dependent code                                      | no change identified yet | Accepted ADR 0003 already fixes the Postgres/CAS/provider/Temporal authority boundary. Any new or weakened observable contract still requires an ADR before implementation.                        |
 | Freeze the Temporal workflow adapter descriptor under contract major `1`                     | open                     | Major `1` is frozen generally, but only the local `workflow-store` descriptor exists. There is no Temporal descriptor or Temporal conformance evidence.                                            |
 | Define local Temporal service lifecycle for development and CI                               | open                     | The production-like profile manages native Postgres/CAS only. There is no Temporal service config, namespace, task queue, retention, startup, readiness, restart, or shutdown contract.            |
 | Map every side-effecting Activity to a stable provider key, work item, and completed receipt | open                     | P2 supplies work/effect/outbox primitives, but the P3 Activity catalog and per-operation mapping are not frozen. The provisional inventory below records the existing seams and missing decisions. |
+
+## Integration reconciliation
+
+The first P3 integration slice resolves the five entry predicates without
+claiming the T1 or T2 delivery gates complete:
+
+| P3 entry predicate                                                                           | Integration status | Evidence                                                                                                                                                                                                                                   |
+| -------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Reconfirm `v0.2.0-production-data` from a clean checkout                                     | passed             | A second clean coordinator checkout ran `pnpm verify:p2` with an isolated short profile root, disposable environment credential, and isolated port. All eight P2 gates passed.                                                             |
+| Record contract changes in an ADR before dependent code                                      | passed             | Accepted ADR 0004 separates `workflow-runtime` from `workflow-store`; accepted ADR 0005 defines the separately versioned major-2 `activity-effect` contract before T3 source work.                                                         |
+| Freeze the Temporal workflow adapter descriptor under contract major `1`                     | passed             | Adapter contract `1.1.0` adds the `workflow-runtime` kind, exact capability requirement, diagnostic metadata, inward gateway/lifecycle ports, and fail-closed conformance without changing P2 `workflow-store` semantics.                  |
+| Define local Temporal service lifecycle for development and CI                               | passed             | `@mammoth/temporal-adapter` defines a pinned CLI service, explicit bootstrap, local/CI namespaces, task queue, retention, health/readiness, worker identity, bounded startup/shutdown, and no embedded credentials.                        |
+| Map every side-effecting Activity to a stable provider key, work item, and completed receipt | passed             | `docs/reviews/p3-activity-contract-reconciliation.md` freezes eleven Activity responsibilities, stable key inputs, attribution, result mapping, retry/heartbeat/timeout policy, receipt boundaries, crash seams, and implementation order. |
+
+The coordinator additionally ran the existing repository ladder on the integrated
+slice: typecheck, tests, build, evidence/audit, Phase 1/2, adapter, M2, M3, MVP,
+P2, and offline evaluation all passed. The workflow foundation adds 19 passing
+workflow tests; adapter contracts add 25 passing tests; the Temporal adapter adds
+16 passing tests; and production-profile Temporal wiring adds 5 passing tests.
+
+These are contract and unit/integration results. The Temporal CLI is not installed
+in the audited environment, so no live Temporal server, namespace, poller, SDK
+worker, probe workflow, service restart, or shutdown evidence is claimed. Those
+remain T1 delivery work, not entry-gate work.
 
 ## Executed baseline evidence
 
@@ -170,7 +194,7 @@ change architecture or observable contracts, by an ADR before dependent code:
    built from Postgres projections and immutable metadata, carry integrity and
    omission fields, and never query Temporal history as product authority.
 
-## Entry handoff
+## Baseline entry handoff
 
 P2 is a verified foundation for P3, but Temporal implementation should not claim
 the full entry gate until the T1 contract/lifecycle owner freezes the descriptor
@@ -178,3 +202,11 @@ and service policy and the Activity owner completes the per-operation mapping.
 The first bounded integration slice is therefore Temporal lifecycle plus adapter
 descriptor/conformance, with any required contract decision recorded before code
 depends on it.
+
+## Reconciled entry verdict
+
+The P3 entry gate is satisfied by the integrated candidate evidence above. The
+accurate delivery status remains: T1 lifecycle/descriptor foundation and T2
+deterministic contract foundation implemented; live Temporal execution, SDK
+gateway/worker composition, Activities, and the remaining T1-T6 acceptance gates
+are not yet complete.
