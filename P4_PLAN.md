@@ -1,6 +1,6 @@
 # Mammoth P4 Research-Cell Contract Checkpoint
 
-> Status: implementation verification
+> Status: candidate verification — independent findings and release gates pending
 >
 > Baseline: `v0.3.0-temporal-control-plane`
 >
