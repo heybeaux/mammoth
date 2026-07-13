@@ -67,6 +67,77 @@ export function buildObservatoryProjectionV1(
       sourceLineageId: evidence.sourceLineageId,
       retrievedAt: evidence.retrievedAt,
     })),
+    ...source.cells.map((cell) => ({
+      kind: 'research_cell' as const,
+      id: cell.id,
+      cellPlanId: cell.cellPlanId,
+      cellPlanVersion: cell.cellPlanVersion,
+      branchId: cell.branchId,
+      role: cell.role,
+      status: cell.status,
+      criterionId: cell.criterionId,
+      criterionVersion: cell.criterionVersion,
+      criterionDigest: cell.criterionDigest,
+    })),
+    ...source.positions.map((position) => ({
+      kind: 'position' as const,
+      id: position.id,
+      status: position.status,
+      criterionId: position.criterionId,
+      criterionVersion: position.criterionVersion,
+      criterionDigest: position.criterionDigest,
+      modelProfileId: position.modelProfileId,
+      claimIds: [...position.claimIds].sort(),
+      evidenceIds: [...position.evidenceIds].sort(),
+    })),
+    ...source.reviews.map((review) => ({
+      kind: 'review' as const,
+      id: review.id,
+      assignmentId: review.assignmentId,
+      verdict: review.verdict,
+      status: review.status,
+      reviewerModelProfileId: review.reviewerModelProfileId,
+    })),
+    ...source.modelLineages.map((lineage) => ({
+      kind: 'model_lineage' as const,
+      id: lineage.id,
+      provider: lineage.provider,
+      family: lineage.family,
+      checkpoint: lineage.checkpoint,
+      modelProfileVersion: lineage.modelProfileVersion,
+      unknownLineage: lineage.unknownLineage,
+      ...(lineage.correlationGroupId === undefined
+        ? {}
+        : { correlationGroupId: lineage.correlationGroupId }),
+    })),
+    ...source.correlations.map((correlation) => ({
+      kind: 'correlation' as const,
+      id: correlation.id,
+      policyVersion: correlation.policyVersion,
+      score: correlation.score,
+      status: correlation.status,
+      reasonCodes: [...correlation.reasonCodes].sort(),
+    })),
+    ...source.dissentReports.map((dissent) => ({
+      kind: 'dissent' as const,
+      id: dissent.id,
+      status: dissent.status,
+      reasonCodes: [...dissent.reasonCodes].sort(),
+    })),
+    ...source.rejectedResidue.map((residue) => ({
+      kind: 'rejected_residue' as const,
+      id: residue.id,
+      sourceKind: residue.sourceKind,
+      reasonCodes: [...residue.reasonCodes].sort(),
+      retainedArtifactDigest: residue.retainedArtifactDigest,
+    })),
+    ...source.receipts.map((receipt) => ({
+      kind: 'receipt' as const,
+      id: receipt.id,
+      workItemId: receipt.workItemId,
+      status: receipt.status,
+      artifactDigest: receipt.artifactDigest,
+    })),
   ].sort(compareId);
 
   const evidenceEdges: ObservatoryProjectionV1['edges'] =
@@ -87,6 +158,121 @@ export function buildObservatoryProjectionV1(
       status: edgeStatus(claimStatuses.get(edge.claimId) ?? 'unresolved'),
       dependencyKind: edge.kind,
     }));
+  const cellEdges: ObservatoryProjectionV1['edges'] = [
+    ...source.positions.flatMap((position) => [
+      {
+        id: `${position.id}:proposed_by:${position.cellId}`,
+        from: position.cellId,
+        to: position.id,
+        kind: 'has_position' as const,
+        status: projectionStatus(position.status),
+      },
+      {
+        id: `${position.id}:model:${position.modelProfileId}`,
+        from: position.modelProfileId,
+        to: position.id,
+        kind: 'proposed_by' as const,
+        status: projectionStatus(position.status),
+      },
+      ...position.claimIds.map((claimId) => ({
+        id: `${position.id}:claim:${claimId}`,
+        from: position.id,
+        to: claimId,
+        kind: 'references_claim' as const,
+        status: projectionStatus(position.status),
+      })),
+      ...position.evidenceIds.map((evidenceId) => ({
+        id: `${position.id}:evidence:${evidenceId}`,
+        from: position.id,
+        to: evidenceId,
+        kind: 'references_evidence' as const,
+        status: projectionStatus(position.status),
+      })),
+    ]),
+    ...source.reviews.flatMap((review) => [
+      {
+        id: `${review.id}:cell:${review.cellId}`,
+        from: review.cellId,
+        to: review.id,
+        kind: 'reviews' as const,
+        status: projectionStatus(review.status),
+      },
+      {
+        id: `${review.id}:position:${review.positionId}`,
+        from: review.id,
+        to: review.positionId,
+        kind: 'reviews' as const,
+        status: projectionStatus(review.status),
+      },
+      {
+        id: `${review.id}:model:${review.reviewerModelProfileId}`,
+        from: review.reviewerModelProfileId,
+        to: review.id,
+        kind: 'reviewed_by' as const,
+        status: projectionStatus(review.status),
+      },
+      ...review.receiptIds.map((receiptId) => ({
+        id: `${review.id}:receipt:${receiptId}`,
+        from: review.id,
+        to: receiptId,
+        kind: 'emitted_receipt' as const,
+        status: projectionStatus(review.status),
+      })),
+    ]),
+    ...source.modelLineages.flatMap((lineage) =>
+      lineage.parentModelLineageIds.map((parentId) => ({
+        id: `${lineage.id}:derived_from:${parentId}`,
+        from: lineage.id,
+        to: parentId,
+        kind: 'derived_from' as const,
+        status: 'active' as const,
+      })),
+    ),
+    ...source.correlations.flatMap((correlation) =>
+      correlation.modelLineageIds.map((lineageId) => ({
+        id: `${correlation.id}:lineage:${lineageId}`,
+        from: correlation.id,
+        to: lineageId,
+        kind: 'correlates_with' as const,
+        status:
+          correlation.status === 'independent'
+            ? ('active' as const)
+            : ('unresolved' as const),
+      })),
+    ),
+    ...source.dissentReports.flatMap((dissent) => [
+      {
+        id: `${dissent.id}:position:${dissent.positionId}`,
+        from: dissent.id,
+        to: dissent.positionId,
+        kind: 'dissents_from' as const,
+        status: projectionStatus(dissent.status),
+      },
+      ...dissent.claimIds.map((claimId) => ({
+        id: `${dissent.id}:claim:${claimId}`,
+        from: dissent.id,
+        to: claimId,
+        kind: 'references_claim' as const,
+        status: projectionStatus(dissent.status),
+      })),
+    ]),
+    ...source.rejectedResidue.map((residue) => ({
+      id: `${residue.id}:source:${residue.sourceId}`,
+      from: residue.id,
+      to: residue.sourceId,
+      kind: 'rejected_for' as const,
+      status: 'rejected' as const,
+    })),
+    ...source.cells.flatMap((cell) =>
+      cell.receiptIds.map((receiptId) => ({
+        id: `${cell.id}:receipt:${receiptId}`,
+        from: cell.id,
+        to: receiptId,
+        kind: 'emitted_receipt' as const,
+        status: projectionStatus(cell.status),
+      })),
+    ),
+  ];
 
   const temporalExecution = source.temporalExecution
     ? {
@@ -110,7 +296,7 @@ export function buildObservatoryProjectionV1(
       updatedAt: source.program.updatedAt,
     },
     nodes,
-    edges: [...evidenceEdges, ...dependencyEdges].sort(compareId),
+    edges: [...evidenceEdges, ...dependencyEdges, ...cellEdges].sort(compareId),
     timeline: [
       ...source.auditEvents,
       ...(temporalExecution?.events ?? []),
@@ -151,6 +337,13 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
     source.assessments.map((assessment) => [assessment.id, assessment]),
   );
   const lineages = new Set(source.sourceLineages.map(({ id }) => id));
+  const cells = new Set(source.cells.map(({ id }) => id));
+  const positions = new Set(source.positions.map(({ id }) => id));
+  const reviews = new Set(source.reviews.map(({ id }) => id));
+  const modelLineages = new Set(source.modelLineages.map(({ id }) => id));
+  const correlations = new Set(source.correlations.map(({ id }) => id));
+  const residues = new Set(source.rejectedResidue.map(({ id }) => id));
+  const receipts = new Set(source.receipts.map(({ id }) => id));
   assertUnique(source.claims, 'claim');
   assertUnique(source.evidence, 'evidence');
   assertUnique(source.assessments, 'assessment');
@@ -158,6 +351,28 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
   assertUnique(source.claimDependencies, 'claim dependency');
   assertUnique(source.sourceLineages, 'source lineage');
   assertUnique(source.auditEvents, 'audit event');
+  assertUnique(source.cells, 'cell');
+  assertUnique(source.positions, 'position');
+  assertUnique(source.reviews, 'review');
+  assertUnique(source.modelLineages, 'model lineage');
+  assertUnique(source.correlations, 'correlation');
+  assertUnique(source.dissentReports, 'dissent');
+  assertUnique(source.rejectedResidue, 'rejected residue');
+  assertUnique(source.receipts, 'receipt');
+  assertAcyclic(
+    source.sourceLineages.map(({ id, parentLineageIds }) => ({
+      id,
+      parents: parentLineageIds,
+    })),
+    'source lineage',
+  );
+  assertAcyclic(
+    source.modelLineages.map(({ id, parentModelLineageIds }) => ({
+      id,
+      parents: parentModelLineageIds,
+    })),
+    'model lineage',
+  );
   for (const claim of source.claims) {
     if (claim.programId !== source.program.id)
       throw new Error(`claim ${claim.id} does not belong to projected program`);
@@ -208,6 +423,115 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
       throw new Error(`audit event ${event.id} references unknown claim`);
     if (event.evidenceIds.some((id) => !evidence.has(id)))
       throw new Error(`audit event ${event.id} references unknown evidence`);
+  }
+  for (const cell of source.cells) {
+    assertRecordDigest(cell, 'cell');
+    assertNotFutureAuthority(cell, source.authoritativeRevision, 'cell');
+    if (cell.programId !== source.program.id)
+      throw new Error(`cell ${cell.id} does not belong to projected program`);
+    if (
+      cell.criterionId !== source.criterion.id ||
+      cell.criterionVersion !== String(source.criterion.version) ||
+      cell.criterionDigest !== source.criterion.canonicalDigest
+    )
+      throw new Error(`cell ${cell.id} has criterion drift`);
+    for (const receiptId of cell.receiptIds)
+      if (!receipts.has(receiptId))
+        throw new Error(`cell ${cell.id} references unknown receipt`);
+  }
+  for (const position of source.positions) {
+    assertRecordDigest(position, 'position');
+    assertNotFutureAuthority(
+      position,
+      source.authoritativeRevision,
+      'position',
+    );
+    if (!cells.has(position.cellId))
+      throw new Error(`position ${position.id} references unknown cell`);
+    if (!modelLineages.has(position.modelProfileId))
+      throw new Error(
+        `position ${position.id} references unknown model lineage`,
+      );
+    if (position.claimIds.some((id) => !claims.has(id)))
+      throw new Error(`position ${position.id} references unknown claim`);
+    if (position.evidenceIds.some((id) => !evidence.has(id)))
+      throw new Error(`position ${position.id} references unknown evidence`);
+    if (
+      position.criterionId !== source.criterion.id ||
+      position.criterionVersion !== String(source.criterion.version) ||
+      position.criterionDigest !== source.criterion.canonicalDigest
+    )
+      throw new Error(`position ${position.id} has criterion drift`);
+    if (
+      position.rejectedResidueId !== undefined &&
+      !residues.has(position.rejectedResidueId)
+    )
+      throw new Error(`position ${position.id} references unknown residue`);
+  }
+  for (const review of source.reviews) {
+    assertRecordDigest(review, 'review');
+    assertNotFutureAuthority(review, source.authoritativeRevision, 'review');
+    if (!cells.has(review.cellId))
+      throw new Error(`review ${review.id} references unknown cell`);
+    if (!positions.has(review.positionId))
+      throw new Error(`review ${review.id} references unknown position`);
+    if (!modelLineages.has(review.reviewerModelProfileId))
+      throw new Error(`review ${review.id} references unknown model lineage`);
+    for (const receiptId of review.receiptIds)
+      if (!receipts.has(receiptId))
+        throw new Error(`review ${review.id} references unknown receipt`);
+  }
+  for (const lineage of source.modelLineages) {
+    assertRecordDigest(lineage, 'model lineage');
+    assertNotFutureAuthority(
+      lineage,
+      source.authoritativeRevision,
+      'model lineage',
+    );
+    for (const parentId of lineage.parentModelLineageIds)
+      if (!modelLineages.has(parentId))
+        throw new Error(`model lineage ${lineage.id} has dangling parent`);
+  }
+  for (const correlation of source.correlations) {
+    assertRecordDigest(correlation, 'correlation');
+    assertNotFutureAuthority(
+      correlation,
+      source.authoritativeRevision,
+      'correlation',
+    );
+    for (const lineageId of correlation.modelLineageIds)
+      if (!modelLineages.has(lineageId))
+        throw new Error(
+          `correlation ${correlation.id} references unknown lineage`,
+        );
+  }
+  for (const dissent of source.dissentReports) {
+    assertRecordDigest(dissent, 'dissent');
+    assertNotFutureAuthority(dissent, source.authoritativeRevision, 'dissent');
+    if (!positions.has(dissent.positionId))
+      throw new Error(`dissent ${dissent.id} references unknown position`);
+    if (dissent.claimIds.some((id) => !claims.has(id)))
+      throw new Error(`dissent ${dissent.id} references unknown claim`);
+  }
+  for (const residue of source.rejectedResidue) {
+    assertRecordDigest(residue, 'rejected residue');
+    assertNotFutureAuthority(
+      residue,
+      source.authoritativeRevision,
+      'rejected residue',
+    );
+    const knownSource =
+      (residue.sourceKind === 'position' && positions.has(residue.sourceId)) ||
+      (residue.sourceKind === 'review' && reviews.has(residue.sourceId)) ||
+      (residue.sourceKind === 'cell' && cells.has(residue.sourceId)) ||
+      (residue.sourceKind === 'correlation' &&
+        correlations.has(residue.sourceId));
+    if (!knownSource)
+      throw new Error(`rejected residue ${residue.id} has a dangling source`);
+  }
+  for (const receipt of source.receipts) {
+    assertRecordDigest(receipt, 'receipt');
+    assertNotFutureAuthority(receipt, source.authoritativeRevision, 'receipt');
   }
   const evidenceById = new Map(source.evidence.map((item) => [item.id, item]));
   const edgesByPair = new Map(
@@ -324,6 +648,16 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
   }
 }
 
+function projectionStatus(
+  status: string,
+): ObservatoryProjectionV1['edges'][number]['status'] {
+  if (status === 'rejected' || status === 'failed') return 'rejected';
+  if (status === 'unresolved' || status === 'planned' || status === 'assigned')
+    return 'unresolved';
+  if (status === 'cancelled') return 'expired';
+  return 'active';
+}
+
 function compareTimeline(
   left: { occurredAt: string; id: string },
   right: { occurredAt: string; id: string },
@@ -351,4 +685,46 @@ function assertUnique(records: readonly { id: string }[], kind: string): void {
       throw new Error(`duplicate ${kind} id ${record.id}`);
     ids.add(record.id);
   }
+}
+
+function assertRecordDigest(
+  record: { id: string; recordDigest: string },
+  kind: string,
+): void {
+  const withoutDigest: Record<string, unknown> = { ...record };
+  delete withoutDigest.recordDigest;
+  const actual = canonicalDigest(withoutDigest);
+  if (record.recordDigest !== actual)
+    throw new Error(`${kind} ${record.id} digest mismatch`);
+}
+
+function assertNotFutureAuthority(
+  record: { id: string; authoritativeRevision: number },
+  authoritativeRevision: number,
+  kind: string,
+): void {
+  if (record.authoritativeRevision > authoritativeRevision)
+    throw new Error(`${kind} ${record.id} references future authority`);
+}
+
+function assertAcyclic(
+  graph: readonly { id: string; parents: readonly string[] }[],
+  kind: string,
+): void {
+  const records = new Map(graph.map((record) => [record.id, record.parents]));
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (id: string): void => {
+    if (visited.has(id)) return;
+    if (visiting.has(id)) throw new Error(`${kind} cycle at ${id}`);
+    visiting.add(id);
+    for (const parent of records.get(id) ?? []) {
+      if (!records.has(parent))
+        throw new Error(`${kind} ${id} references dangling parent ${parent}`);
+      visit(parent);
+    }
+    visiting.delete(id);
+    visited.add(id);
+  };
+  for (const id of records.keys()) visit(id);
 }

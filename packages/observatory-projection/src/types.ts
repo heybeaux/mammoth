@@ -125,6 +125,124 @@ export const TemporalExecutionLinkSchema = z
   })
   .strict();
 
+export const P4RecordStatusSchema = z.enum([
+  'active',
+  'expired',
+  'rejected',
+  'unresolved',
+]);
+
+const ProjectionDigestRecordSchema = z.object({
+  recordDigest: DigestSchema,
+  authoritativeRevision: z.number().int().nonnegative(),
+});
+
+export const CellProjectionInputSchema = ProjectionDigestRecordSchema.extend({
+  id: EntityIdSchema,
+  programId: EntityIdSchema,
+  cellPlanId: EntityIdSchema,
+  cellPlanVersion: NonEmptyStringSchema,
+  branchId: NonEmptyStringSchema,
+  role: z.enum([
+    'landscape',
+    'divergence',
+    'prior-art',
+    'falsification',
+    'experiment-design',
+    'review',
+    'synthesis',
+  ]),
+  status: z.enum([
+    'planned',
+    'running',
+    'blocked',
+    'succeeded',
+    'failed',
+    'cancelled',
+  ]),
+  criterionId: EntityIdSchema,
+  criterionVersion: NonEmptyStringSchema,
+  criterionDigest: DigestSchema,
+  workItemIds: z.array(EntityIdSchema),
+  receiptIds: z.array(EntityIdSchema),
+}).strict();
+
+export const PositionProjectionInputSchema =
+  ProjectionDigestRecordSchema.extend({
+    id: EntityIdSchema,
+    cellId: EntityIdSchema,
+    claimIds: z.array(EntityIdSchema),
+    evidenceIds: z.array(EntityIdSchema),
+    modelProfileId: EntityIdSchema,
+    criterionId: EntityIdSchema,
+    criterionVersion: NonEmptyStringSchema,
+    criterionDigest: DigestSchema,
+    status: z.enum(['proposed', 'admitted', 'rejected', 'unresolved']),
+    rejectedResidueId: EntityIdSchema.optional(),
+  }).strict();
+
+export const ReviewProjectionInputSchema = ProjectionDigestRecordSchema.extend({
+  id: EntityIdSchema,
+  cellId: EntityIdSchema,
+  positionId: EntityIdSchema,
+  reviewerModelProfileId: EntityIdSchema,
+  assignmentId: EntityIdSchema,
+  verdict: z.enum(['approve', 'reject', 'abstain', 'needs_human']),
+  status: z.enum(['assigned', 'completed', 'rejected', 'cancelled']),
+  receiptIds: z.array(EntityIdSchema),
+}).strict();
+
+export const ModelLineageProjectionInputSchema =
+  ProjectionDigestRecordSchema.extend({
+    id: EntityIdSchema,
+    provider: NonEmptyStringSchema,
+    family: NonEmptyStringSchema,
+    checkpoint: NonEmptyStringSchema,
+    modelProfileVersion: NonEmptyStringSchema,
+    parentModelLineageIds: z.array(EntityIdSchema),
+    sharedDerivationIds: z.array(EntityIdSchema),
+    correlationGroupId: EntityIdSchema.optional(),
+    unknownLineage: z.boolean(),
+  }).strict();
+
+export const CorrelationProjectionInputSchema =
+  ProjectionDigestRecordSchema.extend({
+    id: EntityIdSchema,
+    modelLineageIds: z.array(EntityIdSchema).min(2),
+    policyVersion: NonEmptyStringSchema,
+    score: z.number().min(0).max(1),
+    status: z.enum(['independent', 'correlated', 'unknown_penalized']),
+    reasonCodes: z.array(NonEmptyStringSchema),
+  }).strict();
+
+export const DissentProjectionInputSchema = ProjectionDigestRecordSchema.extend(
+  {
+    id: EntityIdSchema,
+    positionId: EntityIdSchema,
+    claimIds: z.array(EntityIdSchema),
+    status: z.enum(['minority', 'unresolved', 'contradicted', 'preserved']),
+    reasonCodes: z.array(NonEmptyStringSchema),
+  },
+).strict();
+
+export const RejectedResidueProjectionInputSchema =
+  ProjectionDigestRecordSchema.extend({
+    id: EntityIdSchema,
+    sourceId: EntityIdSchema,
+    sourceKind: z.enum(['position', 'review', 'cell', 'correlation']),
+    reasonCodes: z.array(NonEmptyStringSchema).min(1),
+    retainedArtifactDigest: DigestSchema,
+  }).strict();
+
+export const ReceiptProjectionInputSchema = ProjectionDigestRecordSchema.extend(
+  {
+    id: EntityIdSchema,
+    workItemId: EntityIdSchema,
+    status: z.enum(['succeeded', 'failed', 'cancelled', 'partial']),
+    artifactDigest: DigestSchema,
+  },
+).strict();
+
 export const ObservatoryProjectionInputV1Schema = z
   .object({
     schemaVersion: z.literal(1),
@@ -143,6 +261,14 @@ export const ObservatoryProjectionInputV1Schema = z
     sourceLineages: z.array(SourceLineageSchema),
     auditEvents: z.array(AuthoritativeAuditEventSchema),
     temporalExecution: TemporalExecutionLinkSchema.optional(),
+    cells: z.array(CellProjectionInputSchema).default([]),
+    positions: z.array(PositionProjectionInputSchema).default([]),
+    reviews: z.array(ReviewProjectionInputSchema).default([]),
+    modelLineages: z.array(ModelLineageProjectionInputSchema).default([]),
+    correlations: z.array(CorrelationProjectionInputSchema).default([]),
+    dissentReports: z.array(DissentProjectionInputSchema).default([]),
+    rejectedResidue: z.array(RejectedResidueProjectionInputSchema).default([]),
+    receipts: z.array(ReceiptProjectionInputSchema).default([]),
     dossier: DossierSnapshotSchema,
   })
   .strict()
@@ -208,9 +334,110 @@ export const EvidenceNodeSchema = z
   })
   .strict();
 
+export const CellNodeSchema = z
+  .object({
+    kind: z.literal('research_cell'),
+    id: EntityIdSchema,
+    cellPlanId: EntityIdSchema,
+    cellPlanVersion: NonEmptyStringSchema,
+    branchId: NonEmptyStringSchema,
+    role: CellProjectionInputSchema.shape.role,
+    status: CellProjectionInputSchema.shape.status,
+    criterionId: EntityIdSchema,
+    criterionVersion: NonEmptyStringSchema,
+    criterionDigest: DigestSchema,
+  })
+  .strict();
+
+export const PositionNodeSchema = z
+  .object({
+    kind: z.literal('position'),
+    id: EntityIdSchema,
+    status: PositionProjectionInputSchema.shape.status,
+    criterionId: EntityIdSchema,
+    criterionVersion: NonEmptyStringSchema,
+    criterionDigest: DigestSchema,
+    modelProfileId: EntityIdSchema,
+    claimIds: z.array(EntityIdSchema),
+    evidenceIds: z.array(EntityIdSchema),
+  })
+  .strict();
+
+export const ReviewNodeSchema = z
+  .object({
+    kind: z.literal('review'),
+    id: EntityIdSchema,
+    assignmentId: EntityIdSchema,
+    verdict: ReviewProjectionInputSchema.shape.verdict,
+    status: ReviewProjectionInputSchema.shape.status,
+    reviewerModelProfileId: EntityIdSchema,
+  })
+  .strict();
+
+export const ModelLineageNodeSchema = z
+  .object({
+    kind: z.literal('model_lineage'),
+    id: EntityIdSchema,
+    provider: NonEmptyStringSchema,
+    family: NonEmptyStringSchema,
+    checkpoint: NonEmptyStringSchema,
+    modelProfileVersion: NonEmptyStringSchema,
+    unknownLineage: z.boolean(),
+    correlationGroupId: EntityIdSchema.optional(),
+  })
+  .strict();
+
+export const CorrelationNodeSchema = z
+  .object({
+    kind: z.literal('correlation'),
+    id: EntityIdSchema,
+    policyVersion: NonEmptyStringSchema,
+    score: z.number().min(0).max(1),
+    status: CorrelationProjectionInputSchema.shape.status,
+    reasonCodes: z.array(NonEmptyStringSchema),
+  })
+  .strict();
+
+export const DissentNodeSchema = z
+  .object({
+    kind: z.literal('dissent'),
+    id: EntityIdSchema,
+    status: DissentProjectionInputSchema.shape.status,
+    reasonCodes: z.array(NonEmptyStringSchema),
+  })
+  .strict();
+
+export const RejectedResidueNodeSchema = z
+  .object({
+    kind: z.literal('rejected_residue'),
+    id: EntityIdSchema,
+    sourceKind: RejectedResidueProjectionInputSchema.shape.sourceKind,
+    reasonCodes: z.array(NonEmptyStringSchema),
+    retainedArtifactDigest: DigestSchema,
+  })
+  .strict();
+
+export const ReceiptNodeSchema = z
+  .object({
+    kind: z.literal('receipt'),
+    id: EntityIdSchema,
+    workItemId: EntityIdSchema,
+    status: ReceiptProjectionInputSchema.shape.status,
+    artifactDigest: DigestSchema,
+  })
+  .strict();
+
 export const ObservatoryNodeSchema = z.discriminatedUnion('kind', [
   ClaimNodeSchema,
   EvidenceNodeSchema,
+  CellNodeSchema,
+  PositionNodeSchema,
+  ReviewNodeSchema,
+  ModelLineageNodeSchema,
+  CorrelationNodeSchema,
+  DissentNodeSchema,
+  RejectedResidueNodeSchema,
+  ReceiptNodeSchema,
 ]);
 
 export const ObservatoryEdgeSchema = z
@@ -218,7 +445,24 @@ export const ObservatoryEdgeSchema = z
     id: EntityIdSchema,
     from: EntityIdSchema,
     to: EntityIdSchema,
-    kind: z.enum(['supports', 'contradicts', 'context', 'depends_on']),
+    kind: z.enum([
+      'supports',
+      'contradicts',
+      'context',
+      'depends_on',
+      'has_position',
+      'proposed_by',
+      'reviews',
+      'reviewed_by',
+      'derived_from',
+      'shares_lineage',
+      'correlates_with',
+      'dissents_from',
+      'rejected_for',
+      'emitted_receipt',
+      'references_claim',
+      'references_evidence',
+    ]),
     status: z.enum(['active', 'expired', 'rejected', 'unresolved']),
     dependencyKind: ClaimDependencyKindSchema.optional(),
     locator: EvidenceLocatorSchema.optional(),

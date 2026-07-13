@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { RuntimeResult } from '@mammoth/runtime';
 import {
   LocalWorkflowStore,
@@ -169,6 +170,33 @@ describe('operator commands', () => {
       audit: { schemaVersion: 1, events: [] },
       revalidation: { schemaVersion: 1, schedules: [] },
     });
+  });
+
+  it('inspects a read-only Observatory projection contract without runtime mutation', async () => {
+    const fixture = await setup();
+    const projectionPath = fileURLToPath(
+      new URL(
+        '../../../evals/fixtures/p2/observatory-projection.json',
+        import.meta.url,
+      ),
+    );
+    expect(
+      await executeCli(
+        ['projection-inspect', projectionPath, '--json'],
+        fixture.dependencies,
+      ),
+    ).toBe(0);
+    expect(lastJson(fixture.stdout)).toMatchObject({
+      command: 'projection-inspect',
+      schemaVersion: 1,
+      sourceRevision: '12',
+      complete: true,
+      nodeCount: 5,
+      edgeCount: 3,
+      timelineEventCount: 2,
+      p4NodeCounts: {},
+    });
+    expect(fixture.calls).toEqual([]);
   });
 
   it('cancels pending work atomically', async () => {

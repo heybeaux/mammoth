@@ -5,6 +5,7 @@ import {
   type TemporalResearchProgramClient,
 } from '@mammoth/temporal-adapter/research-client';
 import { loadTemporalAdapterConfig } from '@mammoth/temporal-adapter/config';
+import { inspectObservatoryProjection } from './operator.js';
 import { assertProgramId, parseArgs } from './parser.js';
 import { CliError, type CliIo } from './types.js';
 
@@ -33,7 +34,9 @@ export async function executeTemporalCli(
       );
     }
     let output: unknown;
-    if (command.name === 'run') {
+    if (command.name === 'projection-inspect') {
+      output = await inspectObservatoryProjection(command.projectionPath);
+    } else if (command.name === 'run') {
       const programId = await readProgramId(command.charterPath);
       const identity = dependencies.identity(programId);
       output = {
