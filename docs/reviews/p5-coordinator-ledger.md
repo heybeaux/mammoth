@@ -286,3 +286,58 @@ pnpm verify:p5: passed, 7/7 gates
 Remaining gap: `verify:p5` now exists and is non-recursive, but P5 still needs
 the full clean-checkout ladder, independent non-author adversarial review,
 review fixes/re-review, PR/CI/merge, exact receipt, and annotated release tag.
+
+### Local Ladder
+
+Candidate head: `f4a5520` (`fix: clean P5 lint gates`).
+
+Result: local integration ladder passed after a credentialed P2 tail.
+
+Commands and results:
+
+```text
+pnpm format:check: passed
+pnpm lint: passed
+pnpm typecheck: passed
+pnpm test: passed
+pnpm build: passed
+pnpm verify:evidence: passed
+pnpm verify:audit: passed
+pnpm verify:phase-1: passed
+pnpm verify:phase-2: passed
+pnpm verify:adapters: passed
+pnpm verify:m2: passed
+pnpm verify:m3: passed
+pnpm verify:mvp: passed
+pnpm verify:p2: first attempt failed closed because MAMMOTH_PG_PASSWORD was not exported
+credentialed pnpm verify:p2: passed
+credentialed pnpm verify:p3: passed
+credentialed pnpm verify:p4: passed
+credentialed pnpm verify:p5: passed
+credentialed pnpm eval:offline: passed
+```
+
+The credentialed tail used a disposable `MAMMOTH_PG_PASSWORD` from
+`openssl rand -hex 24` and an isolated `mktemp` `MAMMOTH_PROFILE_ROOT`.
+
+### Independent Review
+
+State: spawn requested. Not active by Mammoth's live-registry definition.
+
+Agent id: `019f5dad-3127-7ab1-a95e-0c120a3c2be7`
+
+Worktree: `/private/tmp/mammoth-p5-adversarial-review`
+
+Branch: `review/p5-adversarial`
+
+Reviewed candidate: `f4a5520`
+
+Objective and acceptance evidence: independent non-author semantic/code review of
+P5 candidate for invariant violations, fake or weak gates, authority drift,
+Temporal shadow state, reviewer-context leakage, process-order isolation,
+duplicate budget/effect/cancellation bugs, migration/projection gaps, CI
+visibility issues, and receipt truthfulness risks.
+
+Owned paths: none; read-only review.
+
+Handoff recipient: P5 coordinator in `/private/tmp/mammoth-p5-integration`.
