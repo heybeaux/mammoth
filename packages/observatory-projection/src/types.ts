@@ -330,6 +330,64 @@ export const ReceiptProjectionInputSchema = ProjectionDigestRecordSchema.extend(
   },
 ).strict();
 
+export const P5IsolationProjectionInputSchema =
+  ProjectionDigestRecordSchema.extend({
+    id: EntityIdSchema,
+    workflowId: NonEmptyStringSchema,
+    isolationProtocolVersion: z.literal('1.0.0'),
+    sanitizedContextContractVersion: z.literal('1.0.0'),
+    assignmentPolicyVersion: z.literal('1.0.0'),
+    positionId: EntityIdSchema,
+    reviewId: EntityIdSchema,
+    assignmentId: EntityIdSchema,
+    sanitizedContextDigest: DigestSchema,
+    committedPositionDigest: DigestSchema,
+    revealedPositionDigest: DigestSchema.optional(),
+    commitSequence: z.array(
+      z.enum([
+        'budget_reserved',
+        'position_dispatched',
+        'position_committed',
+        'position_revealed',
+        'review_assigned',
+        'review_committed',
+        'budget_settled',
+      ]),
+    ),
+    authorAttribution: z
+      .object({
+        authorAgentId: EntityIdSchema,
+        authorModelProfileVersionId: EntityIdSchema,
+      })
+      .strict(),
+    reviewerVisibleFields: z.array(NonEmptyStringSchema),
+    prohibitedReviewerFieldDigests: z.array(DigestSchema),
+    correlationId: EntityIdSchema.optional(),
+    dissentId: EntityIdSchema.optional(),
+    residueIds: z.array(EntityIdSchema),
+    reservation: z
+      .object({
+        reservationId: EntityIdSchema,
+        amountUsd: z.number().nonnegative(),
+        receiptId: EntityIdSchema,
+      })
+      .strict(),
+    settlement: z
+      .object({
+        settlementId: EntityIdSchema,
+        consumedUsd: z.number().nonnegative(),
+        releasedUsd: z.number().nonnegative(),
+        receiptId: EntityIdSchema,
+      })
+      .strict()
+      .optional(),
+    partialResultReceiptIds: z.array(EntityIdSchema),
+    cancellationReceiptId: EntityIdSchema.optional(),
+    retryReceiptIds: z.array(EntityIdSchema),
+    effectReceiptIds: z.array(EntityIdSchema),
+    temporalCarryDigest: DigestSchema.optional(),
+  }).strict();
+
 export const ObservatoryProjectionInputV1Schema = z
   .object({
     schemaVersion: z.literal(1),
@@ -356,6 +414,7 @@ export const ObservatoryProjectionInputV1Schema = z
     dissentReports: z.array(DissentProjectionInputSchema).default([]),
     rejectedResidue: z.array(RejectedResidueProjectionInputSchema).default([]),
     receipts: z.array(ReceiptProjectionInputSchema).default([]),
+    isolationRuns: z.array(P5IsolationProjectionInputSchema).default([]),
     dossier: DossierSnapshotSchema,
   })
   .strict()
@@ -523,6 +582,36 @@ export const ReceiptNodeSchema = z
   })
   .strict();
 
+export const P5IsolationNodeSchema = z
+  .object({
+    kind: z.literal('p5_isolation'),
+    id: EntityIdSchema,
+    workflowId: NonEmptyStringSchema,
+    isolationProtocolVersion: z.literal('1.0.0'),
+    sanitizedContextContractVersion: z.literal('1.0.0'),
+    assignmentPolicyVersion: z.literal('1.0.0'),
+    positionId: EntityIdSchema,
+    reviewId: EntityIdSchema,
+    assignmentId: EntityIdSchema,
+    sanitizedContextDigest: DigestSchema,
+    committedPositionDigest: DigestSchema,
+    sequenceState: z.enum([
+      'committed',
+      'revealed',
+      'reviewed',
+      'settled',
+      'partial',
+    ]),
+    authorAgentId: EntityIdSchema,
+    authorModelProfileVersionId: EntityIdSchema,
+    reservationId: EntityIdSchema,
+    reservedUsd: z.number().nonnegative(),
+    consumedUsd: z.number().nonnegative(),
+    releasedUsd: z.number().nonnegative(),
+    cancellationReceiptId: EntityIdSchema.optional(),
+  })
+  .strict();
+
 export const ObservatoryNodeSchema = z.discriminatedUnion('kind', [
   ClaimNodeSchema,
   EvidenceNodeSchema,
@@ -534,6 +623,7 @@ export const ObservatoryNodeSchema = z.discriminatedUnion('kind', [
   DissentNodeSchema,
   RejectedResidueNodeSchema,
   ReceiptNodeSchema,
+  P5IsolationNodeSchema,
 ]);
 
 export const ObservatoryEdgeSchema = z

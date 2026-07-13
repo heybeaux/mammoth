@@ -147,6 +147,30 @@ export function buildObservatoryProjectionV1(
       status: receipt.status,
       artifactDigest: receipt.artifactDigest,
     })),
+    ...source.isolationRuns.map((run) => ({
+      kind: 'p5_isolation' as const,
+      id: run.id,
+      workflowId: run.workflowId,
+      isolationProtocolVersion: run.isolationProtocolVersion,
+      sanitizedContextContractVersion: run.sanitizedContextContractVersion,
+      assignmentPolicyVersion: run.assignmentPolicyVersion,
+      positionId: run.positionId,
+      reviewId: run.reviewId,
+      assignmentId: run.assignmentId,
+      sanitizedContextDigest: run.sanitizedContextDigest,
+      committedPositionDigest: run.committedPositionDigest,
+      sequenceState: isolationSequenceState(run),
+      authorAgentId: run.authorAttribution.authorAgentId,
+      authorModelProfileVersionId:
+        run.authorAttribution.authorModelProfileVersionId,
+      reservationId: run.reservation.reservationId,
+      reservedUsd: run.reservation.amountUsd,
+      consumedUsd: run.settlement?.consumedUsd ?? 0,
+      releasedUsd: run.settlement?.releasedUsd ?? 0,
+      ...(run.cancellationReceiptId === undefined
+        ? {}
+        : { cancellationReceiptId: run.cancellationReceiptId }),
+    })),
   ].sort(compareId);
 
   const evidenceEdges: ObservatoryProjectionV1['edges'] =
@@ -288,6 +312,47 @@ export function buildObservatoryProjectionV1(
         status: projectionStatus(cell.status),
       })),
     ),
+    ...source.isolationRuns.flatMap((run) => [
+      {
+        id: `${run.id}:position:${run.positionId}`,
+        from: run.id,
+        to: run.positionId,
+        kind: 'references_claim' as const,
+        status: isolationProjectionStatus(run),
+      },
+      {
+        id: `${run.id}:review:${run.reviewId}`,
+        from: run.id,
+        to: run.reviewId,
+        kind: 'reviews' as const,
+        status: isolationProjectionStatus(run),
+      },
+      {
+        id: `${run.id}:reservation:${run.reservation.receiptId}`,
+        from: run.id,
+        to: run.reservation.receiptId,
+        kind: 'emitted_receipt' as const,
+        status: isolationProjectionStatus(run),
+      },
+      ...(run.settlement === undefined
+        ? []
+        : [
+            {
+              id: `${run.id}:settlement:${run.settlement.receiptId}`,
+              from: run.id,
+              to: run.settlement.receiptId,
+              kind: 'emitted_receipt' as const,
+              status: isolationProjectionStatus(run),
+            },
+          ]),
+      ...run.partialResultReceiptIds.map((receiptId) => ({
+        id: `${run.id}:partial:${receiptId}`,
+        from: run.id,
+        to: receiptId,
+        kind: 'emitted_receipt' as const,
+        status: 'unresolved' as const,
+      })),
+    ]),
   ];
 
   const temporalExecution = source.temporalExecution
@@ -377,6 +442,7 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
   assertUnique(source.dissentReports, 'dissent');
   assertUnique(source.rejectedResidue, 'rejected residue');
   assertUnique(source.receipts, 'receipt');
+  assertUnique(source.isolationRuns, 'P5 isolation run');
   assertAcyclic(
     source.sourceLineages.map(({ id, parentLineageIds }) => ({
       id,
@@ -595,6 +661,79 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
     assertRecordDigest(receipt, 'receipt');
     assertNotFutureAuthority(receipt, source.authoritativeRevision, 'receipt');
   }
+  for (const run of source.isolationRuns) {
+    assertRecordDigest(run, 'P5 isolation run');
+    assertNotFutureAuthority(
+      run,
+      source.authoritativeRevision,
+      'P5 isolation run',
+    );
+    if (!positions.has(run.positionId))
+      throw new Error(`P5 isolation run ${run.id} references unknown position`);
+    if (!reviews.has(run.reviewId))
+      throw new Error(`P5 isolation run ${run.id} references unknown review`);
+    if (
+      !receipts.has(run.reservation.receiptId) ||
+      (run.settlement !== undefined &&
+        !receipts.has(run.settlement.receiptId)) ||
+      run.partialResultReceiptIds.some((id) => !receipts.has(id)) ||
+      run.retryReceiptIds.some((id) => !receipts.has(id)) ||
+      run.effectReceiptIds.some((id) => !receipts.has(id)) ||
+      (run.cancellationReceiptId !== undefined &&
+        !receipts.has(run.cancellationReceiptId))
+    )
+      throw new Error(`P5 isolation run ${run.id} references unknown receipt`);
+    if (run.correlationId !== undefined && !correlations.has(run.correlationId))
+      throw new Error(
+        `P5 isolation run ${run.id} references unknown correlation`,
+      );
+    if (
+      run.dissentId !== undefined &&
+      !source.dissentReports.some((dissent) => dissent.id === run.dissentId)
+    )
+      throw new Error(`P5 isolation run ${run.id} references unknown dissent`);
+    if (run.residueIds.some((id) => !residues.has(id)))
+      throw new Error(`P5 isolation run ${run.id} references unknown residue`);
+    assertP5Sequence(run.commitSequence, run.id);
+    const position = source.positions.find(({ id }) => id === run.positionId);
+    const review = source.reviews.find(({ id }) => id === run.reviewId);
+    if (position?.contract.canonicalDigest !== run.committedPositionDigest)
+      throw new Error(`P5 isolation run ${run.id} position digest mismatch`);
+    if (
+      run.revealedPositionDigest !== undefined &&
+      run.revealedPositionDigest !== run.committedPositionDigest
+    )
+      throw new Error(`P5 isolation run ${run.id} reveal digest mismatch`);
+    if (review?.assignmentId !== run.assignmentId)
+      throw new Error(`P5 isolation run ${run.id} assignment mismatch`);
+    const prohibited = new Set([
+      'authorAgentId',
+      'authorModelProfileVersionId',
+      'authorModelProfileId',
+      'authorProvider',
+      'authorConfidence',
+      'candidatePopularity',
+      'previousReviewerVerdicts',
+      'upstreamPassMarkers',
+    ]);
+    if (run.reviewerVisibleFields.some((field) => prohibited.has(field)))
+      throw new Error(`P5 isolation run ${run.id} leaks reviewer context`);
+    if (
+      run.settlement !== undefined &&
+      run.settlement.consumedUsd + run.settlement.releasedUsd >
+        run.reservation.amountUsd
+    )
+      throw new Error(`P5 isolation run ${run.id} overspends reservation`);
+    if (
+      source.temporalExecution &&
+      JSON.stringify(source.temporalExecution).includes(
+        run.committedPositionDigest,
+      )
+    )
+      throw new Error(
+        `P5 isolation run ${run.id} hides product state in Temporal history`,
+      );
+  }
   const evidenceById = new Map(source.evidence.map((item) => [item.id, item]));
   const edgesByPair = new Map(
     source.claimEvidenceEdges.map((edge) => [
@@ -707,6 +846,43 @@ function validateRelationships(source: ObservatoryProjectionInputV1): void {
       throw new Error(
         'Temporal fail-closed startup metric disagrees with operation logs',
       );
+  }
+}
+
+function isolationSequenceState(
+  run: ObservatoryProjectionInputV1['isolationRuns'][number],
+): 'committed' | 'revealed' | 'reviewed' | 'settled' | 'partial' {
+  if (run.cancellationReceiptId !== undefined) return 'partial';
+  if (run.commitSequence.includes('budget_settled')) return 'settled';
+  if (run.commitSequence.includes('review_committed')) return 'reviewed';
+  if (run.commitSequence.includes('position_revealed')) return 'revealed';
+  return 'committed';
+}
+
+function isolationProjectionStatus(
+  run: ObservatoryProjectionInputV1['isolationRuns'][number],
+): ObservatoryProjectionV1['edges'][number]['status'] {
+  return run.cancellationReceiptId === undefined ? 'active' : 'unresolved';
+}
+
+function assertP5Sequence(sequence: readonly string[], id: string): void {
+  const expected = [
+    'budget_reserved',
+    'position_dispatched',
+    'position_committed',
+    'position_revealed',
+    'review_assigned',
+    'review_committed',
+    'budget_settled',
+  ];
+  let previousIndex = -1;
+  for (const boundary of sequence) {
+    const index = expected.indexOf(boundary);
+    if (index <= previousIndex)
+      throw new Error(`P5 isolation run ${id} has impossible sequence`);
+    if (index !== previousIndex + 1)
+      throw new Error(`P5 isolation run ${id} has impossible sequence`);
+    previousIndex = index;
   }
 }
 
