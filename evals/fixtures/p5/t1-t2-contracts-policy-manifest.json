@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "v0.5.0-isolated-divergence",
+  "scope": "T1/T2 pure contracts and policy",
+  "contractVersions": {
+    "isolationProtocol": "1.0.0",
+    "sanitizedReviewContext": "1.0.0",
+    "reviewAssignmentPolicy": "1.0.0"
+  },
+  "cases": [
+    {
+      "id": "p5-t1-early-peer-reveal",
+      "gate": "isolation",
+      "expectedResult": "reject"
+    },
+    {
+      "id": "p5-t1-reveal-without-durable-commit",
+      "gate": "isolation",
+      "expectedResult": "reject"
+    },
+    {
+      "id": "p5-t1-commit-digest-drift",
+      "gate": "isolation",
+      "expectedResult": "reject"
+    },
+    {
+      "id": "p5-t1-mutable-criterion-or-model-ref",
+      "gate": "isolation",
+      "expectedResult": "reject"
+    },
+    {
+      "id": "p5-t1-sanitized-context-prohibited-fields",
+      "gate": "sanitized_review_context",
+      "expectedResult": "reject"
+    },
+    {
+      "id": "p5-t1-sanitized-context-digest-confusion",
+      "gate": "sanitized_review_context",
+      "expectedResult": "reject"
+    },
+    {
+      "id": "p5-t2-self-review-same-profile-role",
+      "gate": "assignment_policy",
+      "expectedResult": "reject"
+    },
+    {
+      "id": "p5-t2-alias-checkpoint-equivalent-review",
+      "gate": "assignment_policy",
+      "expectedResult": "reject"
+    },
+    {
+      "id": "p5-t2-correlated-or-unknown-lineage",
+      "gate": "assignment_policy",
+      "expectedResult": "reject"
+    },
+    {
+      "id": "p5-t2-dissent-and-residue-retention",
+      "gate": "residue_policy",
+      "expectedResult": "retain"
+    }
+  ],
+  "codeOwnedGate": "packages/domain/test/research-cell.test.ts"
+}
