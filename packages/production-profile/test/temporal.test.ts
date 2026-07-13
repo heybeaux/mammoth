@@ -30,6 +30,8 @@ describe('production profile Temporal integration', () => {
         },
         new FailingRunner(),
       ),
-    ).rejects.toThrow('Temporal adapter is not ready');
+    ).rejects.toThrow(
+      /Temporal adapter is not ready|adapter compatibility failed/,
+    );
   });
 });

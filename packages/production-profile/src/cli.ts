@@ -1,37 +1,51 @@
 #!/usr/bin/env node
 import { loadProfileConfig } from './config.js';
-import { NativePostgresService } from './service.js';
+import { createProductionProfile } from './profile.js';
 import { verifyBackupRestore, verifyLifecycle } from './verify.js';
 
 async function main(): Promise<void> {
   const command = process.argv[2];
   const config = loadProfileConfig(process.env);
-  const service = new NativePostgresService(config);
+  const profile = createProductionProfile(config, process.env);
   switch (command) {
+    case 'bootstrap':
+      await profile.bootstrap();
+      break;
     case 'start':
-      await service.start();
+      console.log(JSON.stringify(await profile.start(), null, 2));
       break;
     case 'stop':
-      await service.stop();
+      await profile.stop();
       break;
     case 'kill':
-      await service.kill();
+      await profile.kill();
       break;
-    case 'status':
-      if (!(await service.ready()))
-        throw new Error(
-          `profile is not ready at ${config.host}:${String(config.port)}`,
-        );
+    case 'status': {
+      const status = await profile.assertReady();
+      console.log(JSON.stringify(status, null, 2));
       break;
+    }
     case 'verify-lifecycle':
-      console.log(JSON.stringify(await verifyLifecycle(config), null, 2));
+      console.log(
+        JSON.stringify(
+          await profile.runVerified(() => verifyLifecycle(config)),
+          null,
+          2,
+        ),
+      );
       break;
     case 'verify-backup':
-      console.log(JSON.stringify(await verifyBackupRestore(config), null, 2));
+      console.log(
+        JSON.stringify(
+          await profile.runVerified(() => verifyBackupRestore(config)),
+          null,
+          2,
+        ),
+      );
       break;
     default:
       throw new Error(
-        'usage: mammoth-profile <start|stop|kill|status|verify-lifecycle|verify-backup>',
+        'usage: mammoth-profile <bootstrap|start|stop|kill|status|verify-lifecycle|verify-backup>',
       );
   }
 }
