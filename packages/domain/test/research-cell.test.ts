@@ -459,6 +459,37 @@ describe('admission and review policy', () => {
       expect(correlatedReview.reasonCodes).toContain('correlated_review');
     }
 
+    const sharedDerivationReview = admitResearchReview({
+      raw: review({
+        reviewerModelProfileVersionId: correlatedPeerModel.id,
+      }),
+      assignment: assignment({
+        reviewerModelProfileVersionId: correlatedPeerModel.id,
+        targetModelProfileVersionId: correlatedModel.id,
+      }),
+      universe,
+      requireIndependentReviewer: true,
+    });
+    expect(sharedDerivationReview.ok).toBe(false);
+    if (!sharedDerivationReview.ok) {
+      expect(sharedDerivationReview.reasonCodes).toContain('correlated_review');
+    }
+
+    const unknownLineageReview = admitResearchReview({
+      raw: review({
+        reviewerModelProfileVersionId: unknownModel.id,
+      }),
+      assignment: assignment({
+        reviewerModelProfileVersionId: unknownModel.id,
+      }),
+      universe,
+      requireIndependentReviewer: true,
+    });
+    expect(unknownLineageReview.ok).toBe(false);
+    if (!unknownLineageReview.ok) {
+      expect(unknownLineageReview.reasonCodes).toContain('correlated_review');
+    }
+
     expect(
       admitResearchReview({
         raw: review(),

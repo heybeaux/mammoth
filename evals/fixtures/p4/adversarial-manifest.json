@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "contractVersion": "1.0.0",
+  "lineagePolicyVersion": "1.0.0",
+  "admissionPolicyVersion": "1.0.0",
+  "cases": [
+    {
+      "id": "unsupported-agreement-one",
+      "expected": "unsupported"
+    },
+    {
+      "id": "unsupported-agreement-hundred",
+      "expected": "unsupported"
+    },
+    {
+      "id": "alias-checkpoint-correlation",
+      "expected": "correlated_review"
+    },
+    {
+      "id": "unknown-lineage-independence",
+      "expected": "correlated_review"
+    },
+    {
+      "id": "same-profile-same-role-self-review",
+      "expected": "self_review"
+    },
+    {
+      "id": "shared-derivation-review",
+      "expected": "correlated_review"
+    },
+    {
+      "id": "valid-cross-family-review",
+      "expected": "admitted"
+    },
+    {
+      "id": "silent-criterion-edit",
+      "expected": "criterion_drift"
+    },
+    {
+      "id": "explicit-criterion-branch",
+      "expected": "admitted_on_branch"
+    },
+    {
+      "id": "missing-proposal-references",
+      "expected": "missing_references"
+    },
+    {
+      "id": "cyclic-and-dangling-lineage",
+      "expected": "lineage_rejected"
+    },
+    {
+      "id": "rejected-position-audit-residue",
+      "expected": "retained"
+    },
+    {
+      "id": "future-authority-and-digest-mismatch",
+      "expected": "projection_rejected"
+    },
+    {
+      "id": "projection-restart-determinism",
+      "expected": "deterministic"
+    }
+  ]
+}

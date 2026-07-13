@@ -1,6 +1,6 @@
 # Mammoth P4 Research-Cell Contract Checkpoint
 
-> Status: active
+> Status: implementation verification
 >
 > Baseline: `v0.3.0-temporal-control-plane`
 >
@@ -26,10 +26,28 @@ P4 does not claim peer-isolated execution, blind review, managed Temporal, or th
       CI and `v0.3.0-temporal-control-plane` pointing to the code-bearing merge.
 - [x] The P4-P6 handover is present and its architecture boundaries are accepted.
 - [x] P4 owns a clean integration worktree and path-disjoint worker worktrees.
-- [ ] Freeze the P4 contract version, policy version, stable-ID derivations,
+- [x] Freeze the P4 contract version, policy version, stable-ID derivations,
       migration range, projection authority, and verifier fixture manifest.
 
 Entry evidence is recorded in the P4 ADR and this plan before integration.
+
+## Frozen entry decisions
+
+- Research-cell contract: `1.0.0`.
+- Model-lineage and admission policies: `1.0.0`.
+- Workflow application/carry major: `1`; stable cell-plan/work-item/workflow IDs
+  are derived by the code-owned `packages/workflow/src/p4-contract.ts` helpers
+  from program, criterion ID/version/digest, cell-plan ID/version, branch, and
+  role. Parser re-derivation is the acceptance authority.
+- Postgres migration range: P3 versions `1-4` to P4 version `5`
+  (`research_cell_persistence`), with checksummed forward-only migration
+  enforcement.
+- Projection authority: `ObservatoryProjectionV1` remains a deterministic,
+  read-only view over validated domain contracts and authoritative revisions;
+  it fails closed on drift, future authority, broken references, cycles, and
+  digest mismatch.
+- Adversarial fixture manifest:
+  `evals/fixtures/p4/adversarial-manifest.json`.
 
 ## Delivery slices
 
