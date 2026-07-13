@@ -535,3 +535,35 @@ Note: the first clean-worktree `pnpm format:check` attempt failed before this
 ladder because dependencies had not yet been installed in the fresh checkout
 (`prettier: command not found`). After `pnpm install --frozen-lockfile`, the full
 ladder above passed.
+
+### PR CI Repair
+
+PR: <https://github.com/heybeaux/mammoth/pull/37>
+
+First CI run: <https://github.com/heybeaux/mammoth/actions/runs/29293571386>
+
+Result: failed in `Verify P3 Temporal acceptance`.
+
+Failure: the P5 live workflow tests used
+`TestWorkflowEnvironment.createTimeSkipping()`. On the Ubuntu GitHub runner,
+Temporal SDK `1.20.2` attempted to download the Java time-skipping test server
+from
+`https://temporal.download/temporal-test-server/default?arch=amd64&platform=linux&sdk-name=sdk-typescript&sdk-version=1.20.2`
+and received `404 Not Found`. Earlier live tests using
+`TestWorkflowEnvironment.createLocal()` had passed in the same CI run.
+
+Fix: changed `test/p5-live-workflow.test.ts` to use
+`TestWorkflowEnvironment.createLocal()`. The P5 tests do not depend on
+time-skipping semantics; they require a real local Temporal service, live worker
+execution, query state, cancellation, duplicate Activity delivery, worker/client
+recovery, history fetch, and replay. The local dev-server path is therefore both
+closer to the P5 production-shaped live-service requirement and compatible with
+CI.
+
+Verification:
+
+```text
+pnpm --filter @mammoth/temporal-adapter exec vitest run test/p5-live-workflow.test.ts --test-timeout 120000 --no-file-parallelism: passed, 1 file / 7 tests
+pnpm verify:p3: passed, 4/4 gates
+pnpm verify:p5: passed, 7/7 gates
+```

@@ -59,7 +59,7 @@ const identity: P5DivergenceReviewIdentity = {
 
 describe('P5 live Temporal divergence/review workflow', () => {
   it('runs with stable IDs, query state, continue-as-new, and replayable history', async () => {
-    const testEnv = await TestWorkflowEnvironment.createTimeSkipping();
+    const testEnv = await TestWorkflowEnvironment.createLocal();
     const taskQueue = 'mammoth-p5-live-workflow';
     const workflowsPath = fileURLToPath(
       new URL('../src/p5-workflows.ts', import.meta.url),
@@ -159,7 +159,7 @@ describe('P5 live Temporal divergence/review workflow', () => {
   ] as const)(
     'records honest P5 cancellation receipts for %s',
     async (cancelAt: P5CancellationPoint) => {
-      const testEnv = await TestWorkflowEnvironment.createTimeSkipping();
+      const testEnv = await TestWorkflowEnvironment.createLocal();
       const taskQueue = `mammoth-p5-live-cancel-${cancelAt}`;
       const workflowsPath = fileURLToPath(
         new URL('../src/p5-workflows.ts', import.meta.url),
@@ -208,7 +208,7 @@ describe('P5 live Temporal divergence/review workflow', () => {
   );
 
   it('recovers a P5 run after ambiguous Activity delivery, worker replacement, and client handle loss', async () => {
-    const testEnv = await TestWorkflowEnvironment.createTimeSkipping();
+    const testEnv = await TestWorkflowEnvironment.createLocal();
     const taskQueue = 'mammoth-p5-live-worker-replacement';
     const workflowsPath = fileURLToPath(
       new URL('../src/p5-workflows.ts', import.meta.url),
