@@ -1,4 +1,13 @@
 import { resolve } from 'node:path';
+import { workflowTaskQueueTarget } from '@mammoth/adapter-contracts';
+
+export const REGISTERED_TEMPORAL_TASK_QUEUE = workflowTaskQueueTarget({
+  contractMajor: 1,
+  kind: 'research-program',
+  name: 'ResearchProgramWorkflow',
+  version: 1,
+  taskQueue: 'research-control',
+}).physical;
 
 export interface TemporalAdapterConfig {
   readonly root: string;
@@ -47,9 +56,8 @@ export function loadTemporalAdapterConfig(
       env.MAMMOTH_TEMPORAL_NAMESPACE ?? defaultNamespace(env, ci),
       'MAMMOTH_TEMPORAL_NAMESPACE',
     ),
-    taskQueue: nonEmpty(
-      env.MAMMOTH_TEMPORAL_TASK_QUEUE ?? 'mammoth-research-control-v1',
-      'MAMMOTH_TEMPORAL_TASK_QUEUE',
+    taskQueue: registeredTaskQueue(
+      env.MAMMOTH_TEMPORAL_TASK_QUEUE ?? REGISTERED_TEMPORAL_TASK_QUEUE,
     ),
     retentionDays: integer(
       env,
@@ -91,6 +99,16 @@ export function loadTemporalAdapterConfig(
       60_000,
     ),
   };
+}
+
+function registeredTaskQueue(value: string): string {
+  const queue = nonEmpty(value, 'MAMMOTH_TEMPORAL_TASK_QUEUE');
+  if (queue !== REGISTERED_TEMPORAL_TASK_QUEUE) {
+    throw new TemporalConfigError(
+      `MAMMOTH_TEMPORAL_TASK_QUEUE must match registered workflow queue ${REGISTERED_TEMPORAL_TASK_QUEUE}`,
+    );
+  }
+  return queue;
 }
 
 function defaultNamespace(env: NodeJS.ProcessEnv, ci: boolean): string {

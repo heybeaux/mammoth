@@ -12,7 +12,7 @@ describe('Temporal adapter configuration', () => {
       MAMMOTH_TEMPORAL_HOST: '127.0.0.2',
       MAMMOTH_TEMPORAL_PORT: '17233',
       MAMMOTH_TEMPORAL_NAMESPACE: 'mammoth-ci',
-      MAMMOTH_TEMPORAL_TASK_QUEUE: 'research-control-ci',
+      MAMMOTH_TEMPORAL_TASK_QUEUE: 'mammoth-research-control-v1',
       MAMMOTH_TEMPORAL_RETENTION_DAYS: '7',
       MAMMOTH_TEMPORAL_SERVICE_VERSION: '1.8.0',
       MAMMOTH_TEMPORAL_WORKFLOW_BUNDLE_ID: 'probe-v1',
@@ -28,7 +28,7 @@ describe('Temporal adapter configuration', () => {
       host: '127.0.0.2',
       port: 17233,
       namespace: 'mammoth-ci',
-      taskQueue: 'research-control-ci',
+      taskQueue: 'mammoth-research-control-v1',
       retentionDays: 7,
       serviceVersion: '1.8.0',
       workflowBundleId: 'probe-v1',
@@ -55,6 +55,11 @@ describe('Temporal adapter configuration', () => {
         MAMMOTH_TEMPORAL_SERVICE_VERSION: 'latest',
       }),
     ).toThrow('exact x.y.z version');
+    expect(() =>
+      loadTemporalAdapterConfig({
+        MAMMOTH_TEMPORAL_TASK_QUEUE: 'research-control-ci',
+      }),
+    ).toThrow('must match registered workflow queue');
   });
 
   it('uses run-unique CI namespace and disposable retention defaults', () => {

@@ -155,6 +155,31 @@ describe('Temporal dev service lifecycle arguments', () => {
       expect(control.childKills).toBe(1);
     });
   });
+
+  it('cleans up the child and ownership after readiness timeout', async () => {
+    await withProfile(async (baseConfig) => {
+      const config = { ...baseConfig, startupTimeoutMs: 10 };
+      const runner = new LifecycleRunner({ becomesHealthyOnSpawn: false });
+      const control = new FakeProcessControl(runner);
+      const service = new TemporalDevServerService(config, runner, control);
+      await expect(service.start()).rejects.toThrow('did not become ready');
+      expect(control.childKills).toBe(1);
+      await expect(readOwnership(config)).resolves.toBeUndefined();
+      await expect(service.stop()).resolves.toBeUndefined();
+    });
+  });
+
+  it('cleans up the child and ownership after namespace bootstrap failure', async () => {
+    await withProfile(async (config) => {
+      const runner = new LifecycleRunner({ namespaceCreateFails: true });
+      const control = new FakeProcessControl(runner);
+      const service = new TemporalDevServerService(config, runner, control);
+      await expect(service.start()).rejects.toThrow('namespace create failed');
+      expect(control.childKills).toBe(1);
+      await expect(readOwnership(config)).resolves.toBeUndefined();
+      await expect(service.stop()).resolves.toBeUndefined();
+    });
+  });
 });
 
 class VersionRunner implements CommandRunner {
@@ -172,6 +197,13 @@ class VersionRunner implements CommandRunner {
 class LifecycleRunner implements CommandRunner {
   running = false;
 
+  constructor(
+    readonly options: {
+      readonly becomesHealthyOnSpawn?: boolean;
+      readonly namespaceCreateFails?: boolean;
+    } = {},
+  ) {}
+
   run(_command: string, args: readonly string[]): Promise<CommandResult> {
     if (args.includes('--version')) {
       return Promise.resolve({
@@ -186,6 +218,16 @@ class LifecycleRunner implements CommandRunner {
         stderr: '',
         exitCode: this.running ? 0 : 1,
       });
+    }
+    if (args.includes('namespace') && args.includes('describe')) {
+      return Promise.resolve({ stdout: '', stderr: '', exitCode: 1 });
+    }
+    if (
+      args.includes('namespace') &&
+      args.includes('create') &&
+      this.options.namespaceCreateFails === true
+    ) {
+      return Promise.reject(new Error('namespace create failed'));
     }
     return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 });
   }
@@ -202,7 +244,9 @@ class FakeProcessControl implements TemporalProcessControl {
   spawn(command: string, args: readonly string[]): TemporalOwnedChild {
     this.spawned += 1;
     const pid = 777;
-    if (this.runner) this.runner.running = true;
+    if (this.runner) {
+      this.runner.running = this.runner.options.becomesHealthyOnSpawn !== false;
+    }
     this.identities.set(pid, {
       pid,
       startTime: 'Mon Jul 13 00:00:00 2026',

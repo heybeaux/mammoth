@@ -94,46 +94,54 @@ export class TemporalDevServerService {
     child.onceExit(() => {
       if (this.#child === child) this.#child = undefined;
     });
-    const pid = child.pid;
-    if (pid === undefined || !Number.isSafeInteger(pid) || pid <= 0) {
-      child.kill('SIGTERM');
-      this.#child = undefined;
-      throw new TemporalProcessOwnershipError(
-        'Temporal child did not expose a valid process id',
-      );
-    }
-    const identity = await this.processControl.inspect(pid);
-    if (
-      identity === undefined ||
-      !commandMatchesConfig(identity.command, this.config)
-    ) {
-      child.kill('SIGTERM');
-      this.#child = undefined;
-      throw new TemporalProcessOwnershipError(
-        'Temporal child process identity could not be verified',
-      );
-    }
-    await writeFile(
-      this.#ownership,
-      `${JSON.stringify({
-        schemaVersion: 1,
-        ...identity,
-        commandFingerprint: commandFingerprint(this.config),
-      } satisfies TemporalProcessOwnership)}\n`,
-      { mode: 0o600 },
-    );
-    const deadline = Date.now() + this.config.startupTimeoutMs;
-    while (Date.now() < deadline) {
-      if (await this.serviceReady()) {
-        await ensureTemporalNamespace(this.config, this.runner);
-        return;
+    try {
+      const pid = child.pid;
+      if (pid === undefined || !Number.isSafeInteger(pid) || pid <= 0) {
+        throw new TemporalProcessOwnershipError(
+          'Temporal child did not expose a valid process id',
+        );
       }
-      await delay(250);
+      const identity = await this.processControl.inspect(pid);
+      if (
+        identity === undefined ||
+        !commandMatchesConfig(identity.command, this.config)
+      ) {
+        throw new TemporalProcessOwnershipError(
+          'Temporal child process identity could not be verified',
+        );
+      }
+      await writeFile(
+        this.#ownership,
+        `${JSON.stringify({
+          schemaVersion: 1,
+          ...identity,
+          commandFingerprint: commandFingerprint(this.config),
+        } satisfies TemporalProcessOwnership)}\n`,
+        { mode: 0o600 },
+      );
+      const deadline = Date.now() + this.config.startupTimeoutMs;
+      while (Date.now() < deadline) {
+        if (await this.serviceReady()) {
+          await ensureTemporalNamespace(this.config, this.runner);
+          return;
+        }
+        await delay(250);
+      }
+      const detail = await readFile(this.#log, 'utf8').catch(() => '<no log>');
+      throw new Error(
+        `Temporal dev server did not become ready within ${String(this.config.startupTimeoutMs)}ms\n${detail.slice(-8_000)}`,
+      );
+    } catch (error: unknown) {
+      try {
+        await this.cleanupFailedStart(child);
+      } catch (cleanupError: unknown) {
+        throw new AggregateError(
+          [asError(error), asError(cleanupError)],
+          'Temporal startup failed and cleanup was incomplete',
+        );
+      }
+      throw error;
     }
-    const detail = await readFile(this.#log, 'utf8').catch(() => '<no log>');
-    throw new Error(
-      `Temporal dev server did not become ready within ${String(this.config.startupTimeoutMs)}ms\n${detail.slice(-8_000)}`,
-    );
   }
 
   async stop(): Promise<void> {
@@ -203,6 +211,16 @@ export class TemporalDevServerService {
       await delay(100);
     }
     throw new TemporalShutdownError(this.config.shutdownTimeoutMs);
+  }
+
+  private async cleanupFailedStart(child: TemporalOwnedChild): Promise<void> {
+    if (this.#child === child) this.#child = undefined;
+    try {
+      child.kill('SIGTERM');
+      await this.waitUntilStopped();
+    } finally {
+      await rm(this.#ownership, { force: true });
+    }
   }
 }
 
@@ -375,6 +393,10 @@ function delay(ms: number): Promise<void> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asError(value: unknown): Error {
+  return value instanceof Error ? value : new Error('Unknown Temporal failure');
 }
 
 function isNoSuchProcess(error: unknown): boolean {
