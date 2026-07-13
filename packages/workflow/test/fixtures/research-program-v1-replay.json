@@ -1,0 +1,61 @@
+{
+  "input": {
+    "identity": {
+      "programId": "program.alpha",
+      "criterionVersion": "criterion.v1",
+      "branchId": "main"
+    },
+    "workflowVersion": 1,
+    "cycle": 0
+  },
+  "history": [
+    {
+      "sequence": 1,
+      "type": "activity-completed",
+      "stageId": "commit-budget",
+      "resultDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "productRevisionId": "revision-1"
+    },
+    {
+      "sequence": 2,
+      "type": "activity-completed",
+      "stageId": "snapshot-source",
+      "resultDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "productRevisionId": "revision-2"
+    },
+    {
+      "sequence": 3,
+      "type": "activity-completed",
+      "stageId": "assess-claims",
+      "resultDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "productRevisionId": "revision-3"
+    },
+    {
+      "sequence": 4,
+      "type": "activity-completed",
+      "stageId": "persist-ledger",
+      "resultDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "productRevisionId": "revision-4"
+    },
+    {
+      "sequence": 5,
+      "type": "activity-completed",
+      "stageId": "compile-report",
+      "resultDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "productRevisionId": "revision-5"
+    },
+    {
+      "sequence": 6,
+      "type": "activity-completed",
+      "stageId": "commit-receipt",
+      "resultDigest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+      "productRevisionId": "revision-6"
+    }
+  ],
+  "expected": {
+    "workflowId": "mammoth:23-ResearchProgramWorkflow:v1:13-program.alpha:12-criterion.v1:4-main",
+    "terminalStage": "commit-receipt",
+    "lastResultDigest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+    "productRevisionId": "revision-6"
+  }
+}
