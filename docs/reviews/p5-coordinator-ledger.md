@@ -357,3 +357,44 @@ Findings:
 4. Blocking: `evals/reports/v0.5.0-isolated-divergence.md` is absent.
 
 Required response: fix and re-review before any PR merge or release claim.
+
+### Independent Review Fix Response
+
+Candidate head before commit: uncommitted review-fix slice after `78fcb43`
+(`docs: record P5 adversarial findings`).
+
+Findings addressed:
+
+1. Temporal execution: added a real P5 Temporal workflow entry point,
+   live-worker test, stable workflow ID assertion, query state, continue-as-new,
+   and history replay. The P5 workflow imports `@mammoth/workflow/p5-contract`
+   through a workflow-safe subpath so the bundle does not include Node-backed
+   workflow package root exports.
+2. Postgres enforcement: expanded migration version `6`
+   `p5_isolated_divergence` with database trigger guards for P5 isolation commit
+   metadata, commit-before-reveal audit sequence, sanitized context assignment
+   consistency and attribution leakage, budget reservation lifecycle
+   immutability/transition rules, settlement/provider/cancellation ceiling
+   checks, and immutable authority rows.
+3. Verifier strength: changed the P5 Temporal gate to execute
+   `@mammoth/temporal-adapter test:live`, added a frozen case-to-executable-gate
+   map, reports case IDs per passing gate, and validates that production P5
+   Postgres/Temporal targets expose the required guards/live workflow test.
+
+Verification:
+
+```text
+pnpm --filter @mammoth/temporal-adapter test:live: passed, 4 files / 5 tests
+pnpm --filter @mammoth/postgres-adapter test: passed, 5 files / 51 tests
+pnpm --filter @mammoth/p5-acceptance test: passed, 1 file / 5 tests
+pnpm verify:p5: passed, 7/7 gates, including live Temporal P5 workflow gate
+pnpm typecheck: passed
+pnpm lint: passed
+```
+
+Remaining before release: finding 4 remains intentionally open until after code
+PR merge/main verification because the exact P5 receipt must name the real merge,
+main CI, and annotated tag target. The fixed candidate still requires
+independent re-review, clean-checkout ladder, PR, CI repair if needed, merge,
+post-merge main CI, receipt PR/merge, and annotated
+`v0.5.0-isolated-divergence` tag.

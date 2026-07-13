@@ -802,6 +802,367 @@ create index mammoth_p5_budget_reservations_program_idx
   on mammoth_p5_budget_reservations (program_id, work_item_id, state);
 create index mammoth_p5_cancellation_receipts_program_idx
   on mammoth_p5_cancellation_receipts (program_id, work_item_id, cancellation_phase);
+
+create function mammoth_p5_immutable_authority_row()
+returns trigger
+language plpgsql
+as $$
+begin
+  raise exception 'immutable P5 authority row cannot be changed';
+end;
+$$;
+
+create trigger mammoth_p5_isolation_commits_immutable
+  before update or delete on mammoth_p5_isolation_commits
+  for each row execute function mammoth_p5_immutable_authority_row();
+create trigger mammoth_p5_isolation_reveals_immutable
+  before update or delete on mammoth_p5_isolation_reveals
+  for each row execute function mammoth_p5_immutable_authority_row();
+create trigger mammoth_p5_sanitized_contexts_immutable
+  before update or delete on mammoth_p5_sanitized_review_contexts
+  for each row execute function mammoth_p5_immutable_authority_row();
+create trigger mammoth_p5_budget_settlements_immutable
+  before update or delete on mammoth_p5_budget_settlements
+  for each row execute function mammoth_p5_immutable_authority_row();
+create trigger mammoth_p5_budget_releases_immutable
+  before update or delete on mammoth_p5_budget_releases
+  for each row execute function mammoth_p5_immutable_authority_row();
+create trigger mammoth_p5_provider_charges_immutable
+  before update or delete on mammoth_p5_provider_charges
+  for each row execute function mammoth_p5_immutable_authority_row();
+create trigger mammoth_p5_cancellations_immutable
+  before update or delete on mammoth_p5_cancellation_receipts
+  for each row execute function mammoth_p5_immutable_authority_row();
+
+create function mammoth_p5_require_budget_amount(value jsonb, label text)
+returns void
+language plpgsql
+as $$
+begin
+  if coalesce(jsonb_typeof(value), '') <> 'object'
+    or coalesce(jsonb_typeof(value -> 'costUsd'), '') <> 'number'
+    or coalesce(jsonb_typeof(value -> 'tokens'), '') <> 'number'
+    or coalesce(jsonb_typeof(value -> 'durationMs'), '') <> 'number'
+  then
+    raise exception 'P5 % budget amount must include costUsd, tokens, and durationMs numbers', label;
+  end if;
+  if (value ->> 'costUsd')::numeric < 0
+    or (value ->> 'tokens')::numeric < 0
+    or (value ->> 'durationMs')::numeric < 0
+  then
+    raise exception 'P5 % budget amount cannot be negative', label;
+  end if;
+end;
+$$;
+
+create function mammoth_p5_amount_within_ceiling(amount jsonb, ceiling jsonb)
+returns boolean
+language sql
+immutable
+as $$
+  select (amount ->> 'costUsd')::numeric <= (ceiling ->> 'costUsd')::numeric
+     and (amount ->> 'tokens')::numeric <= (ceiling ->> 'tokens')::numeric
+     and (amount ->> 'durationMs')::numeric <= (ceiling ->> 'durationMs')::numeric;
+$$;
+
+create function mammoth_p5_guard_isolation_commit()
+returns trigger
+language plpgsql
+as $$
+declare
+  position_record record;
+begin
+  select cell_plan_id, program_id, work_item_id, criterion_id,
+         criterion_digest, input_digest, position_digest
+    into position_record
+    from mammoth_research_positions
+   where id = new.position_id;
+  if position_record is null then
+    raise exception 'P5 isolation commit position is missing';
+  end if;
+  if position_record.cell_plan_id <> new.cell_plan_id
+    or position_record.program_id <> new.program_id
+    or position_record.work_item_id <> new.work_item_id
+    or position_record.criterion_id <> new.criterion_id
+    or position_record.criterion_digest <> new.criterion_digest
+    or position_record.input_digest <> new.input_digest
+    or position_record.position_digest <> new.position_digest
+  then
+    raise exception 'P5 isolation commit metadata mismatch';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p5_isolation_commit_guard
+  before insert on mammoth_p5_isolation_commits
+  for each row execute function mammoth_p5_guard_isolation_commit();
+
+create function mammoth_p5_guard_isolation_reveal()
+returns trigger
+language plpgsql
+as $$
+declare
+  commit_record record;
+begin
+  select cell_plan_id, program_id, audit_sequence
+    into commit_record
+    from mammoth_p5_isolation_commits
+   where position_id = new.position_id;
+  if commit_record is null then
+    raise exception 'P5 reveal requires prior isolation commit';
+  end if;
+  if commit_record.cell_plan_id <> new.cell_plan_id
+    or commit_record.program_id <> new.program_id
+  then
+    raise exception 'P5 reveal metadata mismatch';
+  end if;
+  if new.audit_sequence <= commit_record.audit_sequence then
+    raise exception 'P5 reveal audit sequence must follow commit sequence';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p5_isolation_reveal_guard
+  before insert on mammoth_p5_isolation_reveals
+  for each row execute function mammoth_p5_guard_isolation_reveal();
+
+create function mammoth_p5_guard_sanitized_review_context()
+returns trigger
+language plpgsql
+as $$
+declare
+  assignment_record record;
+begin
+  select program_id, target_position_id
+    into assignment_record
+    from mammoth_review_assignments
+   where id = new.assignment_id;
+  if assignment_record is null then
+    raise exception 'P5 sanitized context assignment is missing';
+  end if;
+  if assignment_record.program_id <> new.program_id
+    or assignment_record.target_position_id <> new.target_position_id
+  then
+    raise exception 'P5 sanitized context assignment mismatch';
+  end if;
+  if new.payload ?| array[
+    'authorAgentId',
+    'targetAuthorAgentId',
+    'targetModelProfileVersionId',
+    'targetAuthorModelProfileVersionId',
+    'rawReviewerIdentity',
+    'attribution'
+  ] then
+    raise exception 'P5 sanitized context contains forbidden attribution';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p5_sanitized_context_guard
+  before insert on mammoth_p5_sanitized_review_contexts
+  for each row execute function mammoth_p5_guard_sanitized_review_context();
+
+create function mammoth_p5_guard_budget_reservation_insert()
+returns trigger
+language plpgsql
+as $$
+declare
+  attempt_record record;
+begin
+  perform mammoth_p5_require_budget_amount(new.ceiling, 'ceiling');
+  select program_id, work_item_id
+    into attempt_record
+    from mammoth_p5_cell_attempts
+   where id = new.attempt_id;
+  if attempt_record is null then
+    raise exception 'P5 budget reservation attempt is missing';
+  end if;
+  if attempt_record.program_id <> new.program_id
+    or attempt_record.work_item_id <> new.work_item_id
+  then
+    raise exception 'P5 budget reservation attempt mismatch';
+  end if;
+  if new.state <> 'reserved' or new.revision <> 0 then
+    raise exception 'P5 budget reservation must start reserved at revision zero';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p5_budget_reservation_insert_guard
+  before insert on mammoth_p5_budget_reservations
+  for each row execute function mammoth_p5_guard_budget_reservation_insert();
+
+create function mammoth_p5_guard_budget_reservation_update()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.id <> new.id
+    or old.stable_identity <> new.stable_identity
+    or old.program_id <> new.program_id
+    or old.work_item_id <> new.work_item_id
+    or old.attempt_id <> new.attempt_id
+    or old.ceiling <> new.ceiling
+    or old.created_at <> new.created_at
+  then
+    raise exception 'P5 budget reservation identity fields are immutable';
+  end if;
+  if old.state <> 'reserved' then
+    raise exception 'P5 terminal budget reservation cannot change';
+  end if;
+  if new.state not in ('settled', 'released', 'cancelled')
+    or new.revision <> old.revision + 1
+  then
+    raise exception 'P5 budget reservation transition is invalid';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p5_budget_reservation_update_guard
+  before update on mammoth_p5_budget_reservations
+  for each row execute function mammoth_p5_guard_budget_reservation_update();
+create trigger mammoth_p5_budget_reservation_delete_guard
+  before delete on mammoth_p5_budget_reservations
+  for each row execute function mammoth_p5_immutable_authority_row();
+
+create function mammoth_p5_guard_budget_settlement()
+returns trigger
+language plpgsql
+as $$
+declare
+  reservation_record record;
+begin
+  perform mammoth_p5_require_budget_amount(new.amount, 'settlement');
+  select ceiling, state
+    into reservation_record
+    from mammoth_p5_budget_reservations
+   where id = new.reservation_id;
+  if reservation_record is null then
+    raise exception 'P5 budget settlement reservation is missing';
+  end if;
+  if reservation_record.state not in ('reserved', 'settled') then
+    raise exception 'P5 budget settlement requires an unsettled reservation';
+  end if;
+  if not mammoth_p5_amount_within_ceiling(new.amount, reservation_record.ceiling) then
+    raise exception 'P5 budget settlement exceeds reservation ceiling';
+  end if;
+  if exists (
+    select 1 from mammoth_p5_budget_releases where reservation_id = new.reservation_id
+  ) then
+    raise exception 'P5 budget settlement cannot follow release';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p5_budget_settlement_guard
+  before insert on mammoth_p5_budget_settlements
+  for each row execute function mammoth_p5_guard_budget_settlement();
+
+create function mammoth_p5_guard_budget_release()
+returns trigger
+language plpgsql
+as $$
+declare
+  reservation_record record;
+begin
+  select state
+    into reservation_record
+    from mammoth_p5_budget_reservations
+   where id = new.reservation_id;
+  if reservation_record is null then
+    raise exception 'P5 budget release reservation is missing';
+  end if;
+  if reservation_record.state not in ('reserved', 'released', 'cancelled') then
+    raise exception 'P5 budget release requires an unsettled reservation';
+  end if;
+  if exists (
+    select 1 from mammoth_p5_budget_settlements where reservation_id = new.reservation_id
+  ) then
+    raise exception 'P5 budget release cannot follow settlement';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p5_budget_release_guard
+  before insert on mammoth_p5_budget_releases
+  for each row execute function mammoth_p5_guard_budget_release();
+
+create function mammoth_p5_guard_provider_charge()
+returns trigger
+language plpgsql
+as $$
+declare
+  reservation_record record;
+begin
+  perform mammoth_p5_require_budget_amount(new.amount, 'provider charge');
+  select ceiling
+    into reservation_record
+    from mammoth_p5_budget_reservations
+   where id = new.reservation_id;
+  if reservation_record is null then
+    raise exception 'P5 provider charge reservation is missing';
+  end if;
+  if not mammoth_p5_amount_within_ceiling(new.amount, reservation_record.ceiling) then
+    raise exception 'P5 provider charge exceeds reservation ceiling';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p5_provider_charge_guard
+  before insert on mammoth_p5_provider_charges
+  for each row execute function mammoth_p5_guard_provider_charge();
+
+create function mammoth_p5_guard_cancellation_receipt()
+returns trigger
+language plpgsql
+as $$
+declare
+  reservation_record record;
+  attempt_record record;
+begin
+  perform mammoth_p5_require_budget_amount(new.consumed, 'cancellation consumed');
+  perform mammoth_p5_require_budget_amount(new.released, 'cancellation released');
+  select program_id, work_item_id
+    into attempt_record
+    from mammoth_p5_cell_attempts
+   where id = new.attempt_id;
+  if attempt_record is null then
+    raise exception 'P5 cancellation attempt is missing';
+  end if;
+  if attempt_record.program_id <> new.program_id
+    or attempt_record.work_item_id <> new.work_item_id
+  then
+    raise exception 'P5 cancellation attempt mismatch';
+  end if;
+  if new.reservation_id is not null then
+    select ceiling
+      into reservation_record
+      from mammoth_p5_budget_reservations
+     where id = new.reservation_id;
+    if reservation_record is null then
+      raise exception 'P5 cancellation reservation is missing';
+    end if;
+    if not mammoth_p5_amount_within_ceiling(new.consumed, reservation_record.ceiling)
+      or not mammoth_p5_amount_within_ceiling(new.released, reservation_record.ceiling)
+    then
+      raise exception 'P5 cancellation amount exceeds reservation ceiling';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p5_cancellation_receipt_guard
+  before insert on mammoth_p5_cancellation_receipts
+  for each row execute function mammoth_p5_guard_cancellation_receipt();
 `.trim(),
   }),
 ]);

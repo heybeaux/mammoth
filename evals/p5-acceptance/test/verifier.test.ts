@@ -30,6 +30,9 @@ describe('P5 acceptance verifier', () => {
     expect(result.ok).toBe(true);
     expect(result.gates).toHaveLength(P5_GATES.length);
     expect(commands).toHaveLength(P5_GATES.length);
+    expect(result.gates.flatMap(({ caseIds }) => caseIds ?? [])).toEqual(
+      expect.arrayContaining([...REQUIRED_P5_CASES]),
+    );
   });
 
   it('fails closed when a gate target is missing or red', async () => {
@@ -38,9 +41,7 @@ describe('P5 acceptance verifier', () => {
       validateTarget: () => Promise.resolve(undefined),
       run: () => Promise.resolve({ exitCode: 0 }),
     };
-    expect((await verifyP5(repositoryRoot(), missing, [firstGate])).ok).toBe(
-      false,
-    );
+    expect((await verifyP5(repositoryRoot(), missing)).ok).toBe(false);
 
     const red: P5VerifierDependencies = {
       exists: () => Promise.resolve(true),
@@ -48,10 +49,14 @@ describe('P5 acceptance verifier', () => {
       run: () =>
         Promise.resolve({ exitCode: 1, diagnostic: 'injected failure' }),
     };
-    expect(await verifyP5(repositoryRoot(), red, [firstGate])).toMatchObject({
-      ok: false,
-      gates: [{ status: 'failed', diagnostic: 'injected failure' }],
-    });
+    const redResult = await verifyP5(repositoryRoot(), red);
+    expect(redResult.ok).toBe(false);
+    expect(
+      redResult.gates.every(
+        ({ status, diagnostic }) =>
+          status === 'failed' && diagnostic === 'injected failure',
+      ),
+    ).toBe(true);
   });
 
   it('rejects duplicate gate identifiers', async () => {
@@ -105,10 +110,12 @@ describe('P5 acceptance verifier', () => {
         },
         run: () => Promise.resolve({ exitCode: 0 }),
       },
-      [P5_GATES.find(({ id }) => id === 'postgres-p5-migration') ?? firstGate],
     );
     expect(result.ok).toBe(false);
-    expect(result.gates[0]?.diagnostic).toMatch(/P5 version 6/);
+    expect(
+      result.gates.find(({ id }) => id === 'postgres-p5-migration')
+        ?.diagnostic,
+    ).toMatch(/P5 version 6/);
   });
 });
 

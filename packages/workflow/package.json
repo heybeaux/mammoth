@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./p3-contract": "./src/p3-contract.ts"
+    "./p3-contract": "./src/p3-contract.ts",
+    "./p4-contract": "./src/p4-contract.ts",
+    "./p5-contract": "./src/p5-contract.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

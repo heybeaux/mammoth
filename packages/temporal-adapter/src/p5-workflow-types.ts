@@ -2,7 +2,7 @@ import type {
   P5CancellationPoint,
   P5DivergenceReviewIdentity,
   P5DurableBoundary,
-} from '@mammoth/workflow';
+} from '@mammoth/workflow/p5-contract';
 
 export interface P5DivergenceReviewWorkflowInput {
   readonly identity: P5DivergenceReviewIdentity;

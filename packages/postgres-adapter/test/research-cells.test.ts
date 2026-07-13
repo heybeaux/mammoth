@@ -214,6 +214,24 @@ describe('research-cell migration', () => {
     expect(foundationMigrations[5]?.sql).toContain(
       "isolation_protocol_version text not null check (isolation_protocol_version = '1.0.0')",
     );
+    expect(foundationMigrations[5]?.sql).toContain(
+      'P5 isolation commit metadata mismatch',
+    );
+    expect(foundationMigrations[5]?.sql).toContain(
+      'P5 reveal audit sequence must follow commit sequence',
+    );
+    expect(foundationMigrations[5]?.sql).toContain(
+      'P5 sanitized context contains forbidden attribution',
+    );
+    expect(foundationMigrations[5]?.sql).toContain(
+      'P5 budget reservation transition is invalid',
+    );
+    expect(foundationMigrations[5]?.sql).toContain(
+      'P5 budget settlement exceeds reservation ceiling',
+    );
+    expect(foundationMigrations[5]?.sql).toContain(
+      'P5 cancellation amount exceeds reservation ceiling',
+    );
   });
 
   it('installs P5 research-cell schema on an empty database and is repeatable after restart', async () => {

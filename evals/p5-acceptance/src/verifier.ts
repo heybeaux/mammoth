@@ -16,6 +16,7 @@ export interface P5GateResult extends P5GateSpec {
   readonly status: P5GateStatus;
   readonly exitCode?: number;
   readonly diagnostic?: string;
+  readonly caseIds?: readonly string[];
 }
 
 export interface P5VerificationResult {
@@ -65,6 +66,73 @@ export const REQUIRED_P5_CASES = [
   'future-projection-authority-and-deterministic-restart-digest',
 ] as const;
 
+export const P5_CASE_EXECUTION_GATES: Readonly<
+  Record<(typeof REQUIRED_P5_CASES)[number], readonly string[]>
+> = {
+  'early-peer-read-before-commit': ['domain-isolation-policy'],
+  'reveal-without-durable-commit': [
+    'domain-isolation-policy',
+    'persistence-budget-lifecycle',
+  ],
+  'reveal-mismatched-digest': [
+    'domain-isolation-policy',
+    'postgres-p5-migration',
+  ],
+  'reveal-stale-criterion': ['domain-isolation-policy'],
+  'valid-commit-then-peer-reveal': [
+    'domain-isolation-policy',
+    'persistence-budget-lifecycle',
+  ],
+  'reviewer-context-prohibited-fields': [
+    'domain-isolation-policy',
+    'postgres-p5-migration',
+  ],
+  'reviewer-context-nested-future-fields': ['domain-isolation-policy'],
+  'reviewer-context-digest-confusion': ['domain-isolation-policy'],
+  'authoritative-attribution-retained-while-reviewer-input-sanitized': [
+    'domain-isolation-policy',
+    'projection-operator-inspection',
+  ],
+  'same-profile-same-role-self-review': ['domain-isolation-policy'],
+  'alias-checkpoint-equivalent-self-review': ['domain-isolation-policy'],
+  'correlated-unknown-and-valid-panels': ['domain-isolation-policy'],
+  'minority-and-unresolved-conflict-survive': [
+    'domain-isolation-policy',
+    'projection-operator-inspection',
+  ],
+  'abstained-invalid-rejected-timed-out-never-started-reviews-retained': [
+    'domain-isolation-policy',
+    'projection-operator-inspection',
+  ],
+  'duplicate-position-review-budget-effect-cancellation-delivery': [
+    'persistence-budget-lifecycle',
+    'temporal-execution-recovery',
+  ],
+  'overspend-settlement-beyond-reservation-release-after-settlement': [
+    'persistence-budget-lifecycle',
+    'postgres-p5-migration',
+    'projection-operator-inspection',
+  ],
+  'cancellation-before-dispatch-through-settlement': [
+    'persistence-budget-lifecycle',
+    'temporal-execution-recovery',
+  ],
+  'worker-client-and-service-death-at-durable-boundaries': [
+    'temporal-execution-recovery',
+  ],
+  'continue-as-new-and-replay-supported-versions': [
+    'workflow-contracts',
+    'temporal-execution-recovery',
+  ],
+  'migration-interruption-stale-fencing-digest-corruption-broken-references': [
+    'persistence-budget-lifecycle',
+    'postgres-p5-migration',
+  ],
+  'future-projection-authority-and-deterministic-restart-digest': [
+    'projection-operator-inspection',
+  ],
+};
+
 export const P5_GATES: readonly P5GateSpec[] = [
   {
     id: 'fixture-manifest',
@@ -104,9 +172,9 @@ export const P5_GATES: readonly P5GateSpec[] = [
   {
     id: 'temporal-execution-recovery',
     description:
-      'Temporal divergence/review shell, idempotent Activities, cancellation, and recovery fixtures',
+      'Live Temporal divergence/review worker, idempotent Activities, cancellation, continue-as-new, and replay fixtures',
     requiredPath: 'packages/temporal-adapter/package.json',
-    command: ['pnpm', '--filter', '@mammoth/temporal-adapter', 'test'],
+    command: ['pnpm', '--filter', '@mammoth/temporal-adapter', 'test:live'],
   },
   {
     id: 'projection-operator-inspection',
@@ -160,6 +228,14 @@ export async function verifyP5FixtureManifest(
       `P5_FIXTURE_MANIFEST_DRIFT:missing=${missing.join(',')};extra=${extra.join(',')}`,
     );
   }
+  const mapped = Object.keys(P5_CASE_EXECUTION_GATES);
+  const missingExecution = ids.filter((id) => !mapped.includes(id));
+  const staleExecution = mapped.filter((id) => !ids.includes(id));
+  if (missingExecution.length > 0 || staleExecution.length > 0) {
+    throw new Error(
+      `P5_FIXTURE_EXECUTION_DRIFT:missing=${missingExecution.join(',')};extra=${staleExecution.join(',')}`,
+    );
+  }
 }
 
 export async function verifyP5(
@@ -168,6 +244,7 @@ export async function verifyP5(
   gates: readonly P5GateSpec[] = P5_GATES,
 ): Promise<P5VerificationResult> {
   assertUniqueGateIds(gates);
+  assertFixtureExecutionGates(gates);
   await verifyP5FixtureManifest(repository);
   const results: P5GateResult[] = [];
   for (const gate of gates) {
@@ -194,6 +271,7 @@ export async function verifyP5(
       ...gate,
       status: execution.exitCode === 0 ? 'passed' : 'failed',
       exitCode: execution.exitCode,
+      caseIds: caseIdsForGate(gate.id),
       ...(execution.diagnostic === undefined
         ? {}
         : { diagnostic: execution.diagnostic }),
@@ -215,6 +293,27 @@ function assertUniqueGateIds(gates: readonly P5GateSpec[]): void {
       throw new Error(`P5_VERIFIER_DUPLICATE_GATE:${gate.id}`);
     ids.add(gate.id);
   }
+}
+
+function assertFixtureExecutionGates(gates: readonly P5GateSpec[]): void {
+  const gateIds = new Set(gates.map(({ id }) => id));
+  const missing = new Set<string>();
+  for (const gateIdList of Object.values(P5_CASE_EXECUTION_GATES)) {
+    for (const gateId of gateIdList) {
+      if (!gateIds.has(gateId)) missing.add(gateId);
+    }
+  }
+  if (missing.size > 0) {
+    throw new Error(
+      `P5_VERIFIER_CASE_GATE_MISSING:${[...missing].sort().join(',')}`,
+    );
+  }
+}
+
+function caseIdsForGate(gateId: string): readonly string[] {
+  return REQUIRED_P5_CASES.filter((caseId) =>
+    P5_CASE_EXECUTION_GATES[caseId].includes(gateId),
+  );
 }
 
 const systemDependencies: P5VerifierDependencies = {
@@ -250,6 +349,25 @@ const systemDependencies: P5VerifierDependencies = {
       );
       if (!testSource.includes('p5_isolated_divergence'))
         return 'Postgres lifecycle tests do not cover the P5 migration';
+      if (
+        !source.includes('mammoth_p5_guard_isolation_commit') ||
+        !source.includes('mammoth_p5_guard_sanitized_review_context') ||
+        !source.includes('mammoth_p5_guard_budget_settlement') ||
+        !source.includes('mammoth_p5_guard_cancellation_receipt')
+      )
+        return 'production Postgres migration lacks executable P5 invariant guards';
+    }
+    if (target.id === 'temporal-execution-recovery') {
+      const document: unknown = JSON.parse(
+        await readFile(absolutePath, 'utf8'),
+      );
+      if (!isRecord(document) || !isRecord(document.scripts))
+        return 'Temporal adapter package scripts are unreadable';
+      if (
+        document.scripts['test:live'] !==
+        'pnpm --filter @mammoth/adapter-contracts build && pnpm --filter @mammoth/workflow build && vitest run test/live-probe.test.ts test/research-workflow.test.ts test/research-cli.test.ts test/p5-live-workflow.test.ts --test-timeout 120000 --no-file-parallelism'
+      )
+        return 'Temporal P5 gate must execute the live P5 workflow test';
     }
     return undefined;
   },
