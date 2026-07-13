@@ -32,6 +32,7 @@
     "verify:p2:lifecycle": "pnpm --filter @mammoth/production-profile verify:lifecycle",
     "verify:p2:backup": "pnpm --filter @mammoth/production-profile verify:backup",
     "verify:p2:profile": "bash infra/verify-production-profile.sh",
+    "verify:p3": "tsx scripts/verify-p3.ts",
     "eval:offline": "tsx scripts/verify-phase-0.ts"
   },
   "devDependencies": {

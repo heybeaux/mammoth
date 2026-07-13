@@ -104,3 +104,6 @@ operations also fail on an absent namespace or compatible worker.
 Inspect `$MAMMOTH_PROFILE_ROOT/postgres.log` and
 `$MAMMOTH_PROFILE_ROOT/temporal.log` for service startup failures. Data is
 persistent and is never automatically deleted by these commands.
+
+P3 process/service recovery diagnostics and the coordinated Temporal-history
+backup contract are documented in [P3_RECOVERY.md](P3_RECOVERY.md).

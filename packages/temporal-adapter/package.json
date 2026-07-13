@@ -7,23 +7,42 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./src/config.ts",
+      "import": "./dist/config.js"
+    },
+    "./research-client": {
+      "types": "./src/research-client.ts",
+      "import": "./dist/research-client.js"
     }
   },
   "bin": {
-    "mammoth-temporal": "./src/cli.ts"
+    "mammoth-temporal": "./src/cli.ts",
+    "mammoth-temporal-research": "./src/research-cli.ts"
   },
   "scripts": {
     "build": "pnpm --filter @mammoth/adapter-contracts build && tsc -p tsconfig.build.json",
     "status": "tsx src/cli.ts status",
     "start": "tsx src/cli.ts start",
     "stop": "tsx src/cli.ts stop",
-    "test": "pnpm --filter @mammoth/adapter-contracts build && vitest run",
+    "test": "pnpm --filter @mammoth/adapter-contracts build && vitest run test/config.test.ts test/readiness.test.ts test/service.test.ts test/activity-policy.test.ts test/production-activities.test.ts",
+    "test:live": "pnpm --filter @mammoth/adapter-contracts build && pnpm --filter @mammoth/workflow build && vitest run test/live-probe.test.ts test/research-workflow.test.ts test/research-cli.test.ts --test-timeout 120000 --no-file-parallelism",
+    "test:recovery": "pnpm --filter @mammoth/adapter-contracts build && vitest run test/recovery-probe.test.ts test/process-recovery.test.ts --test-timeout 120000",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mammoth/adapter-contracts": "workspace:*"
+    "@mammoth/adapter-contracts": "workspace:*",
+    "@mammoth/work-queue": "workspace:*",
+    "@mammoth/workflow": "workspace:*",
+    "@temporalio/activity": "1.20.2",
+    "@temporalio/client": "1.20.2",
+    "@temporalio/common": "1.20.2",
+    "@temporalio/worker": "1.20.2",
+    "@temporalio/workflow": "1.20.2"
   },
   "devDependencies": {
+    "@temporalio/testing": "1.20.2",
     "@types/node": "^22.0.0",
     "tsx": "^4.20.3",
     "typescript": "^5.8.0",

@@ -33,6 +33,22 @@ export const TEMPORAL_WORKFLOW_CAPABILITIES = [
   'health-reporting',
 ] as const satisfies readonly AdapterCapability[];
 
+export const ACTIVITY_EFFECT_CONTRACT_MAJOR = 2 as const;
+export const ACTIVITY_EFFECT_CONTRACT_VERSION = '2.0.0' as const;
+export const ACTIVITY_EFFECT_CAPABILITIES = [
+  'stable-effect-identity',
+  'attributable-attempts',
+  'effect-lifecycle',
+  'completed-effect-lookup',
+  'strict-result-mapping',
+  'provider-idempotency',
+  'delivery-independent-replay',
+  'fenced-work-completion',
+  'cooperative-cancellation',
+  'durable-restart',
+  'health-reporting',
+] as const satisfies readonly AdapterCapability[];
+
 export interface LocalAdapterDescriptor extends AdapterDescriptor {
   readonly role: LocalAdapterRole;
 }
@@ -147,9 +163,17 @@ export const TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT = requirement(
   TEMPORAL_WORKFLOW_CAPABILITIES,
 );
 
+export const ACTIVITY_EFFECT_REQUIREMENT = {
+  kind: 'activity-effect',
+  contractMajor: ACTIVITY_EFFECT_CONTRACT_MAJOR,
+  capabilities: ACTIVITY_EFFECT_CAPABILITIES,
+  requireProductionProfile: true,
+} as const satisfies AdapterRequirement;
+
 export const P3_TEMPORAL_PRODUCTION_LIKE_REQUIREMENTS = [
   ...PRODUCTION_LIKE_LOCAL_REQUIREMENTS,
   TEMPORAL_WORKFLOW_RUNTIME_REQUIREMENT,
+  ACTIVITY_EFFECT_REQUIREMENT,
 ] as const satisfies readonly AdapterRequirement[];
 
 function requirement(
