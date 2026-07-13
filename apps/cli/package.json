@@ -10,14 +10,16 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && esbuild src/bin.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/bin.js",
+    "build": "tsc -p tsconfig.build.json && esbuild src/bin.ts --bundle --splitting --platform=node --format=esm --target=node22 --external:@temporalio/* --external:@grpc/* --outdir=dist",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@mammoth/runtime": "workspace:*",
     "@mammoth/temporal-adapter": "workspace:*",
-    "@mammoth/workflow": "workspace:*"
+    "@mammoth/workflow": "workspace:*",
+    "@temporalio/client": "1.20.2",
+    "@temporalio/workflow": "1.20.2"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -41,9 +41,18 @@ importers:
       '@mammoth/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
+      '@mammoth/temporal-adapter':
+        specifier: workspace:*
+        version: link:../../packages/temporal-adapter
       '@mammoth/workflow':
         specifier: workspace:*
         version: link:../../packages/workflow
+      '@temporalio/client':
+        specifier: 1.20.2
+        version: 1.20.2
+      '@temporalio/workflow':
+        specifier: 1.20.2
+        version: 1.20.2
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -87,6 +96,18 @@ importers:
       typescript:
         specifier: ^5.8.0
         version: 5.8.3
+
+  evals/p3-acceptance:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.15.34
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
 
   packages/adapter-contracts:
     dependencies:
@@ -337,6 +358,9 @@ importers:
       '@mammoth/work-queue':
         specifier: workspace:*
         version: link:../work-queue
+      '@mammoth/workflow':
+        specifier: workspace:*
+        version: link:../workflow
       '@temporalio/activity':
         specifier: 1.20.2
         version: 1.20.2
