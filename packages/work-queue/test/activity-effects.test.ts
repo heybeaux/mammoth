@@ -163,9 +163,12 @@ describe('major-2 Activity effect execution', () => {
     let providerCalls = 0;
     const provider = {
       name: 'fixture-provider',
-      execute: async () => {
+      execute: () => {
         providerCalls += 1;
-        return { receipt: {}, result: { artifactId: 'artifact-1' } };
+        return Promise.resolve({
+          receipt: {},
+          result: { artifactId: 'artifact-1' },
+        });
       },
     };
     const input = invocation();
@@ -183,8 +186,9 @@ describe('major-2 Activity effect execution', () => {
           ...(await replay.resolveWork()),
           state: 'completed' as const,
         }),
-        advanceWork: async () => {
+        advanceWork: () => {
           advances += 1;
+          return Promise.resolve();
         },
       }),
     ).resolves.toEqual({ artifactId: 'artifact-1' });
@@ -196,10 +200,11 @@ describe('major-2 Activity effect execution', () => {
     const store = new MemoryStore();
     const configured = options(invocation(), store, {
       name: 'fixture-provider',
-      execute: async () => ({
-        receipt: {},
-        result: { artifactId: 'forbidden' },
-      }),
+      execute: () =>
+        Promise.resolve({
+          receipt: {},
+          result: { artifactId: 'forbidden' },
+        }),
     });
     await expect(
       executeActivityEffect({

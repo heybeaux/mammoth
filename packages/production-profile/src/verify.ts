@@ -184,13 +184,14 @@ async function seedActivityEffect(connection: PostgresConnection): Promise<{
     invocation,
     provider: {
       name: provider,
-      execute: async (key) => {
+      execute: (key) => {
         providerCalls += 1;
-        if (key !== idempotencyKey) throw new Error('provider key drifted');
-        return {
+        if (key !== idempotencyKey)
+          return Promise.reject(new Error('provider key drifted'));
+        return Promise.resolve({
           receipt: { providerOperationId: 'p3-profile-operation' },
           result,
-        };
+        });
       },
     },
     store: effects,
@@ -259,9 +260,9 @@ async function verifyActivityEffect(
     invocation: duplicateInvocation,
     provider: {
       name: fixture.provider,
-      execute: async () => {
+      execute: () => {
         duplicateProviderCalls += 1;
-        throw new Error('duplicate provider effect');
+        return Promise.reject(new Error('duplicate provider effect'));
       },
     },
     store: effects,
