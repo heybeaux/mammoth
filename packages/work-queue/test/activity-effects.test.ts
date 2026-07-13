@@ -374,6 +374,29 @@ describe('major-2 Activity effect execution', () => {
     ).rejects.toMatchObject({ code: 'provider_result_ambiguous' });
   });
 
+  it('records a provider commit with an invalid result as visible non-retryable ambiguity', async () => {
+    const store = new MemoryStore();
+    await expect(
+      executeActivityEffect(
+        options(invocation(), store, {
+          name: 'fixture-provider',
+          execute: () =>
+            Promise.resolve({
+              receipt: { providerId: 'committed-before-validation' },
+              result: { artifactId: 42 } as unknown as Result,
+            }),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'invalid_provider_result',
+      retryable: false,
+    });
+    expect([...store.effects.values()][0]).toMatchObject({
+      state: 'ambiguous',
+    });
+    expect(store.failures.at(-1)?.code).toBe('invalid_provider_result');
+  });
+
   it('persists validated heartbeat progress before reporting it to the worker', async () => {
     const store = new MemoryStore();
     const reported: HeartbeatProgressV1[] = [];
