@@ -240,6 +240,9 @@ importers:
       '@mammoth/adapter-contracts':
         specifier: workspace:*
         version: link:../adapter-contracts
+      '@mammoth/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@mammoth/persistence':
         specifier: workspace:*
         version: link:../persistence
@@ -247,9 +250,6 @@ importers:
         specifier: workspace:*
         version: link:../work-queue
     devDependencies:
-      '@mammoth/domain':
-        specifier: workspace:*
-        version: link:../domain
       '@types/node':
         specifier: ^22.0.0
         version: 22.15.34
