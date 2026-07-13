@@ -86,7 +86,20 @@
       "id": "projection-restart-determinism",
       "evaluator": "projection_determinism",
       "input": {
-        "reorder": ["claims", "evidence", "assessments", "auditEvents"]
+        "reorder": [
+          "claims",
+          "evidence",
+          "assessments",
+          "auditEvents",
+          "cells",
+          "positions",
+          "reviews",
+          "modelLineages",
+          "correlations",
+          "dissentReports",
+          "rejectedResidue",
+          "receipts"
+        ]
       },
       "expected": "deterministic"
     }
