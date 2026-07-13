@@ -172,8 +172,7 @@ and adapter/restart verification before the T3 gate can be claimed complete.
 
 ### T4/T5 Workflow And Projection
 
-State: spawn requested; fresh worktree artifacts observed. Not active by Mammoth's
-live-registry definition.
+State: integrated.
 
 Worker runtime: Codex worker fallback. Durable OpenClaw `sessions_spawn` and live
 registry tools were not exposed in this turn's tool surface, so this worker must
@@ -224,6 +223,25 @@ Fresh evidence: after spawn, the worktree showed changes in
 `packages/temporal-adapter/src/p5-workflow-shell.ts`, and
 `packages/temporal-adapter/src/p5-workflow-types.ts`. These paths are within the
 T4/T5 assignment.
+
+Completion handoff: worker returned completed status with commit
+`a084e951ec8ecd714dada3e77e32dee11981780d`. It reported
+`pnpm --filter @mammoth/workflow test`, `pnpm --filter @mammoth/temporal-adapter
+test`, `pnpm --filter @mammoth/observatory-projection test`, `pnpm typecheck`,
+and targeted Prettier checks passing. It reported live Temporal process/service
+recovery was not run and persistence internals were not touched.
+
+Integration: coordinator cherry-picked the owned commit as `2d0e191` on
+`feat/p5-isolated-divergence`. Integration verification:
+`pnpm --filter @mammoth/workflow test` passed with 5 files and 26 tests;
+`pnpm --filter @mammoth/temporal-adapter test` passed with 6 files and 39 tests;
+`pnpm --filter @mammoth/observatory-projection test` passed with 1 file and 12
+tests; `pnpm typecheck` passed.
+
+Remaining integration gap: this slice proves the offline deterministic shell and
+projection contracts. P5 still needs the live Temporal process/service recovery
+fixture matrix and integration with authoritative P5 Postgres ports before the
+T4/T5 gate can be claimed complete.
 
 ## Coordinator-Owned T6
 
