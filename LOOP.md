@@ -1,11 +1,13 @@
-# Autonomous P4 Delivery Loop
+# Autonomous P5 Delivery Loop
 
 ## Mission
 
-Operate continuously until `v0.4.0-research-cell-contracts` is merged, verified,
-tagged, and recorded under `P4_PLAN.md`. Preserve the P2 Postgres/CAS authority
-boundary and P3 Temporal control plane while delivering deterministic research-
-cell, model-lineage, admission, persistence, carriage, and projection contracts.
+Operate continuously until `v0.5.0-isolated-divergence` is merged, verified,
+tagged, and recorded under `P5_PLAN.md`. Preserve the P2 Postgres/CAS authority
+boundary, P3 Temporal control plane, and P4 research-cell/model-lineage contracts
+while delivering commit-before-reveal divergence, sanitized blind review,
+correlation-aware assignment, dissent retention, honest budgets/cancellation, and
+restart-safe execution.
 
 Routine reversible choices, ADR-backed decisions, delegation, PRs, reviews, CI
 repair, and sequencing do not require human contact.
@@ -14,12 +16,12 @@ repair, and sequencing do not require human contact.
 
 - **Coordinator/integrator:** contracts, priorities, ownership, integration, CI,
   receipt, release, and checkpoint decision.
-- **Domain/policy builder:** schemas, identities, lineage, correlation, admission,
-  and adversarial fixtures.
-- **Persistence builder:** ports, migrations, constraints, fencing, integrity, and
-  restart evidence.
-- **Workflow/projection builder:** deterministic carriage/reconstruction and
-  read-only fail-closed projection.
+- **Isolation/policy builder:** commit/reveal state machine, sanitized context,
+  assignment, correlation, dissent, residue, and adversarial fixtures.
+- **Persistence/budget builder:** ports, migrations, constraints, fencing,
+  reservations, settlements, receipts, and restart evidence.
+- **Workflow/projection builder:** divergence/review workflows, Activities,
+  recovery/replay probes, and read-only fail-closed projection.
 - **Adversarial reviewer:** independently attacks epistemic and authority claims;
   an author never self-certifies the exit gate.
 
@@ -32,19 +34,21 @@ it and never assign overlapping workers to one worktree.
 ## Loop
 
 1. **Orient** — fetch `main`; inspect worktrees, PRs, CI, active workers,
-   `P4_PLAN.md`, ADRs, migrations, receipts, and the highest unproved predicate.
+   `P5_PLAN.md`, ADRs, migrations, receipts, and the highest unproved predicate.
 2. **Claim** — freeze the smallest testable slice, owner, paths, dependencies,
    contract impact, adversarial risks, commands, and independent reviewer.
 3. **Delegate** — use path-disjoint durable workers and prove actual liveness.
-4. **Build** — contracts/policy first, then persistence, workflow carriage,
-   projection/CLI, and acceptance.
-5. **Attack** — exercise unsupported consensus, aliases, unknown/correlated
-   lineage, self-review, criterion drift, missing refs, cycles, digest mismatch,
-   migration interruption, stale fencing, future authority, and restart.
+4. **Build** — isolation/review contracts first, then persistence and budgets,
+   Temporal execution/recovery, projection/operator inspection, and acceptance.
+5. **Attack** — exercise early peer exposure, reviewer-context leakage,
+   self-review, correlated panels, criterion drift, dissent deletion, duplicate
+   delivery/charges, reservation overspend, partial cancellation, migration
+   interruption, stale fencing, future authority, and restart at every boundary.
 6. **Review** — inspect dependency direction, hidden stores, authority drift,
    deleted rejection residue, direct adapter imports, Temporal shadow state,
-   projection writes, fake receipts, and claims of P5 isolation.
-7. **Verify** — run focused gates, `pnpm verify:p4`, and the full clean-checkout
+   projection writes, fake receipts, process-order "isolation," and hidden
+   author/popularity/verdict fields.
+7. **Verify** — run focused gates, `pnpm verify:p5`, and the full clean-checkout
    ladder; capture exact evidence in the receipt.
 8. **Integrate** — resolve without discarding work, push, open a PR, repair CI,
    resolve independent findings, merge, and verify `main`.
@@ -58,11 +62,11 @@ receipts outrank prose or worker confidence.
 ## Dependency order
 
 ```text
-P3 reconfirmation
-  -> P4 contract/policy freeze
-  -> authoritative persistence
-  -> workflow carriage and reconstruction
-  -> read-only projection and CLI inspection
+P4 reconfirmation
+  -> P5 isolation/review contract freeze
+  -> authoritative persistence and budget lifecycle
+  -> Temporal divergence/review execution and recovery
+  -> read-only projection and operator inspection
   -> adversarial verifier and clean-checkout receipt
   -> independent review, PR, main CI, annotated tag
 ```
@@ -87,7 +91,7 @@ disjoint. The coordinator serializes cross-package reconciliation.
 
 Do not send progress updates or request routine confirmation. Escalate only when:
 
-- the full P4 stopping condition is satisfied;
+- the full P5 stopping condition is satisfied;
 - an irreversible/destructive action outside disposable test infrastructure is
   required;
 - credentials, account authority, billing, legal/licensing input, or a security
@@ -101,11 +105,11 @@ Otherwise choose the safest reversible option, document it, and continue.
 
 ## Stopping condition
 
-Stop only when every `P4_PLAN.md` gate and fixture passes; the clean-checkout
+Stop only when every `P5_PLAN.md` gate and fixture passes; the clean-checkout
 ladder is green; a non-author semantic/adversarial review is resolved and
-re-reviewed; `pnpm verify:p4` is enforced in default-branch CI; the PR is merged;
+re-reviewed; `pnpm verify:p5` is enforced in default-branch CI; the PR is merged;
 post-merge `main` CI is green; the receipt is exact; and the annotated
-`v0.4.0-research-cell-contracts` tag points to the code-bearing merge.
+`v0.5.0-isolated-divergence` tag points to the code-bearing merge.
 
 Then send Beaux one concise report with the PR, merge SHA, tag, receipt, CI run,
-clean-checkout commands, review findings/fixes, limitations, and P5 deferral.
+clean-checkout commands, review findings/fixes, limitations, and P6 deferral.

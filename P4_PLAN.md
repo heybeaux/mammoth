@@ -1,6 +1,7 @@
 # Mammoth P4 Research-Cell Contract Checkpoint
 
-> Status: candidate verification — independent findings and release gates pending
+> Status: complete — see
+> [`evals/reports/v0.4.0-research-cell-contracts.md`](evals/reports/v0.4.0-research-cell-contracts.md)
 >
 > Baseline: `v0.3.0-temporal-control-plane`
 >

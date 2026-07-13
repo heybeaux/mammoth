@@ -6,10 +6,11 @@
 >
 > Direction: production adapters first, then broader research-cell orchestration.
 >
-> Completed checkpoints: [`P2_PLAN.md`](P2_PLAN.md), [`P3_PLAN.md`](P3_PLAN.md)
+> Completed checkpoints: [`P2_PLAN.md`](P2_PLAN.md), [`P3_PLAN.md`](P3_PLAN.md),
+> [`P4_PLAN.md`](P4_PLAN.md)
 >
-> Active checkpoint: [`P4_PLAN.md`](P4_PLAN.md) — research-cell contracts and
-> model lineage
+> Active checkpoint: [`P5_PLAN.md`](P5_PLAN.md) — isolated divergence and blind
+> review
 
 ## Outcome
 
@@ -163,11 +164,12 @@ cannot become release scope until P2 and P3 pass their exit gates.
 
 ## Active implementation checkpoint
 
-The active checkpoint is P4 research-cell contracts and lineage. Its exact entry
+The active checkpoint is P5 isolated divergence and blind review. Its exact entry
 gate, slices, adversarial fixtures, verifier, receipt, release label, and stopping
-condition are frozen in [`P4_PLAN.md`](P4_PLAN.md).
+condition are frozen in [`P5_PLAN.md`](P5_PLAN.md).
 
 The read-only visualization track is specified in
 [`docs/OBSERVATORY.md`](docs/OBSERVATORY.md). A high-fidelity shell and 3D
-prototype remain downstream of the stable projection contract; P3 may only add
-Temporal-linked projection metadata and fixtures.
+prototype remain downstream of the stable projection contract; P5 may extend only
+the read-only projection and operator-inspection surface needed to prove isolation,
+attribution, dissent, spend, cancellation, and recovery.
