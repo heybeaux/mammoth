@@ -45,7 +45,7 @@ export interface WorkflowRuntimeLifecycle {
 
 export interface WorkflowStartRequest {
   readonly workflowName: string;
-  readonly workflowVersion: string;
+  readonly workflowVersion: number;
   readonly workflowId: string;
   readonly taskQueue: string;
   readonly inputDigest: string;
@@ -58,7 +58,7 @@ export interface WorkflowExecutionReference {
   readonly workflowId: string;
   readonly runId: string;
   readonly workflowName: string;
-  readonly workflowVersion: string;
+  readonly workflowVersion: number;
 }
 
 export interface WorkflowDescription extends WorkflowExecutionReference {

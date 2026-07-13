@@ -1,6 +1,6 @@
 # ADR 0005: Activity effect lifecycle and replay
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-07-13
 - Checkpoint: `v0.3.0-temporal-control-plane`
 - Contract: new `activity-effect` adapter kind, major `2`

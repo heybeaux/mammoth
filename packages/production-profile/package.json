@@ -10,8 +10,8 @@
     "mammoth-profile": "./src/cli.ts"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "test": "vitest run",
+    "build": "pnpm --filter @mammoth/postgres-adapter build && pnpm --filter @mammoth/temporal-adapter build && tsc -p tsconfig.build.json",
+    "test": "pnpm --filter @mammoth/postgres-adapter build && pnpm --filter @mammoth/temporal-adapter build && vitest run",
     "typecheck": "tsc --noEmit",
     "verify:lifecycle": "tsx src/cli.ts verify-lifecycle",
     "verify:backup": "tsx src/cli.ts verify-backup"
