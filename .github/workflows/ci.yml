@@ -15,7 +15,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - name: Check out repository
@@ -88,3 +88,6 @@ jobs:
         env:
           MAMMOTH_PROFILE_ROOT: ${{ runner.temp }}/mammoth-production-profile
         run: pnpm verify:p2:profile
+
+      - name: Verify P3 Temporal acceptance
+        run: pnpm verify:p3
