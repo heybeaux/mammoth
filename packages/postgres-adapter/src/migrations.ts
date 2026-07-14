@@ -469,6 +469,7 @@ create table mammoth_rejected_audit_residue (
   reason_code text not null,
   policy_version text not null,
   policy_digest text not null check (policy_digest ~ '^sha256:[0-9a-f]{64}$'),
+  policy_evaluation_digest text not null check (policy_evaluation_digest ~ '^sha256:[0-9a-f]{64}$'),
   reason_codes jsonb not null check (
     jsonb_typeof(reason_codes) = 'array' and jsonb_array_length(reason_codes) > 0
   ),
@@ -1710,6 +1711,722 @@ create trigger mammoth_p6_topology_receipts_update_guard
 create trigger mammoth_p6_topology_receipts_delete_guard
   before delete on mammoth_p6_topology_receipts
   for each row execute function mammoth_p6_forbid_authority_delete();
+`.trim(),
+  }),
+  defineMigration({
+    version: 8,
+    name: 'p7_provider_model_work',
+    sql: `
+create table mammoth_p7_model_work (
+  id text primary key,
+  stable_identity text not null unique check (stable_identity ~ '^sha256:[0-9a-f]{64}$'),
+  program_id text not null,
+  topology_id text not null references mammoth_p6_topology_plans(id),
+  cell_id text not null references mammoth_p6_topology_cells(id),
+  topology_attempt_id text not null references mammoth_p6_topology_attempts(id),
+  reservation_id text not null references mammoth_p6_topology_budget_reservations(id),
+  provider_effect_key text not null unique check (provider_effect_key ~ '^sha256:[0-9a-f]{64}$'),
+  authoritative_request jsonb not null,
+  state text not null check (state in (
+    'planned','in_flight','ambiguous','completed','failed','cancelled'
+  )),
+  revision bigint not null check (revision >= 0),
+  created_at timestamptz not null,
+  updated_at timestamptz not null
+);
+
+create table mammoth_p7_provider_attempts (
+  id text primary key,
+  stable_identity text not null unique check (stable_identity ~ '^sha256:[0-9a-f]{64}$'),
+  model_work_id text not null references mammoth_p7_model_work(id),
+  model_work_identity_digest text not null check (model_work_identity_digest ~ '^sha256:[0-9a-f]{64}$'),
+  attempt_ordinal integer not null check (attempt_ordinal > 0),
+  provider text not null,
+  concrete_model text not null,
+  checkpoint text not null,
+  capability_manifest_digest text not null check (capability_manifest_digest ~ '^sha256:[0-9a-f]{64}$'),
+  authoritative_request jsonb not null,
+  predecessor_attempt_id text references mammoth_p7_provider_attempts(id),
+  predecessor_reason text,
+  state text not null check (state in ('planned','in_flight','ambiguous','completed','failed')),
+  revision bigint not null check (revision >= 0),
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  unique (model_work_id, attempt_ordinal),
+  check ((attempt_ordinal = 1) = (predecessor_attempt_id is null)),
+  check ((predecessor_attempt_id is null) = (predecessor_reason is null))
+);
+
+create table mammoth_p7_capability_decisions (
+  id text primary key,
+  stable_identity text not null unique check (stable_identity ~ '^sha256:[0-9a-f]{64}$'),
+  model_work_id text not null references mammoth_p7_model_work(id),
+  provider_attempt_id text not null references mammoth_p7_provider_attempts(id),
+  manifest jsonb not null,
+  decision text not null check (decision in ('allowed','denied')),
+  reason text not null,
+  recorded_at timestamptz not null,
+  decision_digest text not null unique check (decision_digest ~ '^sha256:[0-9a-f]{64}$')
+);
+
+create table mammoth_p7_egress_decisions (
+  id text primary key,
+  stable_identity text not null unique check (stable_identity ~ '^sha256:[0-9a-f]{64}$'),
+  model_work_id text not null references mammoth_p7_model_work(id),
+  provider_attempt_id text not null references mammoth_p7_provider_attempts(id),
+  reservation_id text not null references mammoth_p6_topology_budget_reservations(id),
+  data_classification text not null check (data_classification in ('local_only','cloud_allowed')),
+  provider text not null,
+  concrete_model text not null,
+  checkpoint text not null,
+  destination_origin text not null,
+  allowed_tools jsonb not null check (allowed_tools = '[]'::jsonb),
+  prompt_digest text not null check (prompt_digest ~ '^sha256:[0-9a-f]{64}$'),
+  policy_version text not null check (policy_version = '1.0.0'),
+  policy_digest text not null check (policy_digest ~ '^sha256:[0-9a-f]{64}$'),
+  decision text not null check (decision in ('allowed','denied')),
+  reason text not null,
+  recorded_at timestamptz not null,
+  decision_digest text not null unique check (decision_digest ~ '^sha256:[0-9a-f]{64}$')
+);
+
+create table mammoth_p7_artifact_references (
+  id text primary key,
+  stable_identity text not null unique check (stable_identity ~ '^sha256:[0-9a-f]{64}$'),
+  model_work_id text not null references mammoth_p7_model_work(id),
+  provider_attempt_id text not null references mammoth_p7_provider_attempts(id),
+  kind text not null check (kind in (
+    'canonical_prompt','raw_provider_response','typed_output','validation_residue'
+  )),
+  digest text not null check (digest ~ '^sha256:[0-9a-f]{64}$'),
+  byte_length bigint not null check (byte_length >= 0),
+  data_classification text not null check (data_classification = 'local_only'),
+  retention text not null check (retention in ('retained','deleted_after_validation')),
+  deletion_receipt_digest text check (deletion_receipt_digest is null or deletion_receipt_digest ~ '^sha256:[0-9a-f]{64}$'),
+  validation_verdict text not null check (validation_verdict in ('pending','accepted','rejected')),
+  created_at timestamptz not null,
+  unique (model_work_id, kind, digest),
+  check ((retention = 'deleted_after_validation') = (deletion_receipt_digest is not null))
+);
+
+create table mammoth_p7_validation_residue (
+  id text primary key,
+  stable_identity text not null unique check (stable_identity ~ '^sha256:[0-9a-f]{64}$'),
+  model_work_id text not null references mammoth_p7_model_work(id),
+  provider_attempt_id text not null references mammoth_p7_provider_attempts(id),
+  artifact_id text not null references mammoth_p7_artifact_references(id),
+  verdict text not null check (verdict in ('accepted','rejected')),
+  code text not null,
+  redacted_summary text not null,
+  recorded_at timestamptz not null,
+  residue_digest text not null unique check (residue_digest ~ '^sha256:[0-9a-f]{64}$')
+);
+
+create table mammoth_p7_provider_charges (
+  id text primary key,
+  stable_identity text not null unique check (stable_identity ~ '^sha256:[0-9a-f]{64}$'),
+  model_work_id text not null references mammoth_p7_model_work(id),
+  provider_attempt_id text not null references mammoth_p7_provider_attempts(id),
+  reservation_id text not null references mammoth_p6_topology_budget_reservations(id),
+  provider_effect_key text not null unique check (provider_effect_key ~ '^sha256:[0-9a-f]{64}$'),
+  provider text not null,
+  provider_operation_id text not null,
+  usage jsonb not null,
+  price_version text not null,
+  currency_conversion_policy text not null,
+  charged_at timestamptz not null,
+  receipt_digest text not null unique check (receipt_digest ~ '^sha256:[0-9a-f]{64}$'),
+  unique (provider, provider_operation_id)
+);
+
+create table mammoth_p7_budget_settlements (
+  id text primary key references mammoth_p6_topology_budget_settlements(id),
+  stable_identity text not null unique check (stable_identity ~ '^sha256:[0-9a-f]{64}$'),
+  model_work_id text not null references mammoth_p7_model_work(id),
+  reservation_id text not null unique references mammoth_p6_topology_budget_reservations(id),
+  provider_charge_id text not null unique references mammoth_p7_provider_charges(id),
+  amount jsonb not null,
+  settled_at timestamptz not null,
+  receipt_digest text not null unique check (receipt_digest ~ '^sha256:[0-9a-f]{64}$')
+);
+
+create table mammoth_p7_budget_releases (
+  id text primary key references mammoth_p6_topology_budget_releases(id),
+  stable_identity text not null unique check (stable_identity ~ '^sha256:[0-9a-f]{64}$'),
+  model_work_id text not null references mammoth_p7_model_work(id),
+  reservation_id text not null unique references mammoth_p6_topology_budget_reservations(id),
+  reason text not null,
+  released_at timestamptz not null,
+  receipt_digest text not null unique check (receipt_digest ~ '^sha256:[0-9a-f]{64}$')
+);
+
+create table mammoth_p7_cancellation_fences (
+  id text primary key,
+  stable_identity text not null unique check (stable_identity ~ '^sha256:[0-9a-f]{64}$'),
+  model_work_id text not null unique references mammoth_p7_model_work(id),
+  reservation_id text not null references mammoth_p6_topology_budget_reservations(id),
+  phase text not null check (phase in (
+    'before_call','during_call','after_response_before_cas',
+    'after_cas_before_admission','during_settlement','during_synthesis'
+  )),
+  reason text not null,
+  requested_at timestamptz not null,
+  fence_digest text not null unique check (fence_digest ~ '^sha256:[0-9a-f]{64}$')
+);
+
+create table mammoth_p7_reconstruction_links (
+  id text primary key,
+  stable_identity text not null unique check (stable_identity ~ '^sha256:[0-9a-f]{64}$'),
+  model_work_id text not null unique references mammoth_p7_model_work(id),
+  activity_effect_id text not null references mammoth_activity_effects(id),
+  topology_attempt_id text not null references mammoth_p6_topology_attempts(id),
+  reservation_id text not null references mammoth_p6_topology_budget_reservations(id),
+  artifact_ids jsonb not null,
+  provider_charge_id text references mammoth_p7_provider_charges(id),
+  settlement_id text references mammoth_p7_budget_settlements(id),
+  cancellation_fence_id text references mammoth_p7_cancellation_fences(id),
+  completed_receipt_digest text check (completed_receipt_digest is null or completed_receipt_digest ~ '^sha256:[0-9a-f]{64}$'),
+  recorded_at timestamptz not null,
+  link_digest text not null unique check (link_digest ~ '^sha256:[0-9a-f]{64}$')
+);
+
+create index mammoth_p7_model_work_program_idx
+  on mammoth_p7_model_work (program_id, topology_id, state);
+create index mammoth_p7_attempt_model_work_idx
+  on mammoth_p7_provider_attempts (model_work_id, attempt_ordinal, state);
+create index mammoth_p7_artifact_model_work_idx
+  on mammoth_p7_artifact_references (model_work_id, kind, validation_verdict);
+
+create function mammoth_p7_require_usage(value jsonb, label text)
+returns void
+language plpgsql
+as $$
+begin
+  if coalesce(jsonb_typeof(value), '') <> 'object'
+    or (select count(*) from jsonb_object_keys(value)) <> 5
+    or coalesce(jsonb_typeof(value -> 'inputTokens'), '') <> 'number'
+    or coalesce(jsonb_typeof(value -> 'outputTokens'), '') <> 'number'
+    or coalesce(jsonb_typeof(value -> 'currencyMicros'), '') <> 'number'
+    or coalesce(jsonb_typeof(value -> 'wallClockMs'), '') <> 'number'
+    or coalesce(jsonb_typeof(value -> 'toolCalls'), '') <> 'number'
+  then
+    raise exception 'P7 % must contain the exact usage fields', label;
+  end if;
+  if (value ->> 'inputTokens')::numeric < 0
+    or (value ->> 'outputTokens')::numeric < 0
+    or (value ->> 'currencyMicros')::numeric < 0
+    or (value ->> 'wallClockMs')::numeric < 0
+    or (value ->> 'toolCalls')::numeric <> 0
+  then
+    raise exception 'P7 % usage values are invalid', label;
+  end if;
+end;
+$$;
+
+create function mammoth_p7_forbid_authority_mutation()
+returns trigger
+language plpgsql
+as $$
+begin
+  raise exception 'P7 authority rows are immutable';
+end;
+$$;
+
+create function mammoth_p7_guard_model_work_insert()
+returns trigger
+language plpgsql
+as $$
+declare
+  topology_attempt record;
+  reservation record;
+begin
+  select topology_id, cell_id, program_id into topology_attempt
+    from mammoth_p6_topology_attempts where id = new.topology_attempt_id;
+  select topology_id, cell_id, attempt_id, program_id, ceiling, state into reservation
+    from mammoth_p6_topology_budget_reservations where id = new.reservation_id;
+  if topology_attempt is null or reservation is null
+    or topology_attempt.topology_id <> new.topology_id
+    or topology_attempt.cell_id <> new.cell_id
+    or topology_attempt.program_id <> new.program_id
+    or reservation.topology_id <> new.topology_id
+    or reservation.cell_id <> new.cell_id
+    or reservation.attempt_id <> new.topology_attempt_id
+    or reservation.program_id <> new.program_id
+    or reservation.state <> 'reserved'
+    or (new.authoritative_request #>> '{budget,currencyMicros}')::numeric / 1000000 > (reservation.ceiling ->> 'costUsd')::numeric
+    or ((new.authoritative_request #>> '{budget,inputTokens}')::numeric
+      + (new.authoritative_request #>> '{budget,outputTokens}')::numeric) > (reservation.ceiling ->> 'tokens')::numeric
+    or (new.authoritative_request #>> '{budget,wallClockMs}')::numeric > (reservation.ceiling ->> 'durationMs')::numeric
+  then
+    raise exception 'P7 model-work P6 authority references do not match';
+  end if;
+  if new.stable_identity <> new.authoritative_request #>> '{identity,identityDigest}'
+    or new.program_id <> new.authoritative_request #>> '{identity,programId}'
+    or new.topology_id <> new.authoritative_request #>> '{identity,topologyId}'
+    or new.cell_id <> new.authoritative_request #>> '{identity,cellId}'
+    or new.provider_effect_key <> new.authoritative_request #>> '{effect,idempotencyKey}'
+    or new.state <> 'planned' or new.revision <> 0
+  then
+    raise exception 'P7 model-work authoritative request does not match columns';
+  end if;
+  perform mammoth_p7_require_usage(new.authoritative_request -> 'budget', 'budget');
+  return new;
+end;
+$$;
+
+create trigger mammoth_p7_model_work_insert_guard
+  before insert on mammoth_p7_model_work
+  for each row execute function mammoth_p7_guard_model_work_insert();
+
+create function mammoth_p7_guard_model_work_update()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.id is distinct from new.id
+    or old.stable_identity is distinct from new.stable_identity
+    or old.program_id is distinct from new.program_id
+    or old.topology_id is distinct from new.topology_id
+    or old.cell_id is distinct from new.cell_id
+    or old.topology_attempt_id is distinct from new.topology_attempt_id
+    or old.reservation_id is distinct from new.reservation_id
+    or old.provider_effect_key is distinct from new.provider_effect_key
+    or old.authoritative_request is distinct from new.authoritative_request
+    or new.revision <> old.revision + 1
+  then
+    raise exception 'P7 model-work identity is immutable and revisions are CAS guarded';
+  end if;
+  if old.state in ('completed','failed','cancelled')
+    or (old.state = 'planned' and new.state not in ('in_flight','failed','cancelled'))
+    or (old.state = 'in_flight' and new.state not in ('ambiguous','completed','failed','cancelled'))
+    or (old.state = 'ambiguous' and new.state not in ('completed','failed','cancelled'))
+  then
+    raise exception 'P7 model-work state transition is invalid';
+  end if;
+  if new.state = 'completed' and exists (
+    select 1 from mammoth_p7_cancellation_fences where model_work_id = new.id
+  ) then
+    raise exception 'P7 cancelled model work cannot complete';
+  end if;
+  if new.state = 'completed' and not exists (
+    select 1 from mammoth_p7_provider_attempts attempt
+     where attempt.model_work_id = new.id and attempt.state = 'completed'
+       and exists (
+         select 1 from mammoth_p7_capability_decisions capability
+          where capability.provider_attempt_id = attempt.id
+            and capability.decision = 'allowed'
+       )
+       and exists (
+         select 1 from mammoth_p7_egress_decisions egress
+          where egress.provider_attempt_id = attempt.id
+            and egress.decision = 'allowed'
+       )
+       and exists (
+         select 1 from mammoth_p7_artifact_references artifact
+          where artifact.provider_attempt_id = attempt.id
+            and artifact.kind = 'typed_output'
+            and artifact.validation_verdict = 'accepted'
+       )
+       and exists (
+         select 1 from mammoth_p7_provider_charges charge
+          join mammoth_p7_budget_settlements settlement
+            on settlement.provider_charge_id = charge.id
+          where charge.provider_attempt_id = attempt.id
+            and settlement.model_work_id = new.id
+       )
+  ) then
+    raise exception 'P7 model work lacks completion authority';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p7_model_work_update_guard
+  before update on mammoth_p7_model_work
+  for each row execute function mammoth_p7_guard_model_work_update();
+create trigger mammoth_p7_model_work_delete_guard
+  before delete on mammoth_p7_model_work
+  for each row execute function mammoth_p7_forbid_authority_mutation();
+
+create function mammoth_p7_guard_provider_attempt()
+returns trigger
+language plpgsql
+as $$
+declare
+  work record;
+  predecessor record;
+begin
+  select stable_identity, authoritative_request into work
+    from mammoth_p7_model_work where id = new.model_work_id;
+  if work is null
+    or new.model_work_identity_digest <> work.stable_identity
+    or new.model_work_identity_digest <> new.authoritative_request #>> '{identity,identityDigest}'
+    or new.stable_identity <> new.authoritative_request #>> '{attempt,attemptDigest}'
+    or new.attempt_ordinal <> (new.authoritative_request #>> '{attempt,attemptOrdinal}')::integer
+    or new.provider <> new.authoritative_request #>> '{attempt,provider}'
+    or new.concrete_model <> new.authoritative_request #>> '{attempt,concreteModel}'
+    or new.checkpoint <> new.authoritative_request #>> '{attempt,checkpoint}'
+    or new.capability_manifest_digest <> new.authoritative_request #>> '{capabilityManifestDigest}'
+    or new.state <> 'planned' or new.revision <> 0
+  then
+    raise exception 'P7 provider-attempt identity mismatch';
+  end if;
+  if new.predecessor_attempt_id is not null then
+    select model_work_id, state into predecessor
+      from mammoth_p7_provider_attempts where id = new.predecessor_attempt_id;
+    if predecessor is null or predecessor.model_work_id <> new.model_work_id
+      or predecessor.state <> 'failed'
+      or new.authoritative_request #>> '{attempt,predecessorAttemptDigest}'
+        <> (select stable_identity from mammoth_p7_provider_attempts
+              where id = new.predecessor_attempt_id)
+    then
+      raise exception 'P7 provider predecessor is not terminal';
+    end if;
+  elsif new.attempt_ordinal <> 1
+    or new.stable_identity <> work.authoritative_request #>> '{attempt,attemptDigest}'
+  then
+    raise exception 'P7 initial provider attempt does not match model-work request';
+  end if;
+  if exists (
+    select 1 from mammoth_p7_cancellation_fences
+     where model_work_id = new.model_work_id
+  ) then
+    raise exception 'P7 cancelled model work cannot start a provider attempt';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p7_provider_attempt_guard
+  before insert on mammoth_p7_provider_attempts
+  for each row execute function mammoth_p7_guard_provider_attempt();
+
+create function mammoth_p7_guard_provider_attempt_update()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.id is distinct from new.id
+    or old.stable_identity is distinct from new.stable_identity
+    or old.model_work_id is distinct from new.model_work_id
+    or old.model_work_identity_digest is distinct from new.model_work_identity_digest
+    or old.attempt_ordinal is distinct from new.attempt_ordinal
+    or old.provider is distinct from new.provider
+    or old.concrete_model is distinct from new.concrete_model
+    or old.checkpoint is distinct from new.checkpoint
+    or old.capability_manifest_digest is distinct from new.capability_manifest_digest
+    or old.authoritative_request is distinct from new.authoritative_request
+    or old.predecessor_attempt_id is distinct from new.predecessor_attempt_id
+    or old.predecessor_reason is distinct from new.predecessor_reason
+    or new.revision <> old.revision + 1
+  then
+    raise exception 'P7 provider-attempt identity is immutable and revisions are CAS guarded';
+  end if;
+  if old.state in ('completed','failed')
+    or (old.state = 'planned' and new.state not in ('in_flight','failed'))
+    or (old.state = 'in_flight' and new.state not in ('ambiguous','completed','failed'))
+    or (old.state = 'ambiguous' and new.state not in ('completed','failed'))
+  then
+    raise exception 'P7 provider-attempt state transition is invalid';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p7_provider_attempt_update_guard
+  before update on mammoth_p7_provider_attempts
+  for each row execute function mammoth_p7_guard_provider_attempt_update();
+create trigger mammoth_p7_provider_attempt_delete_guard
+  before delete on mammoth_p7_provider_attempts
+  for each row execute function mammoth_p7_forbid_authority_mutation();
+
+create function mammoth_p7_guard_capability()
+returns trigger
+language plpgsql
+as $$
+declare
+  attempt record;
+begin
+  select model_work_id, provider, concrete_model, checkpoint,
+         capability_manifest_digest into attempt
+    from mammoth_p7_provider_attempts where id = new.provider_attempt_id;
+  if attempt is null or attempt.model_work_id <> new.model_work_id
+    or attempt.provider <> (new.manifest ->> 'provider')
+    or attempt.concrete_model <> (new.manifest ->> 'concreteModel')
+    or attempt.checkpoint <> (new.manifest ->> 'checkpoint')
+    or attempt.capability_manifest_digest <> (new.manifest ->> 'manifestDigest')
+  then
+    raise exception 'P7 capability decision manifest mismatch';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p7_capability_guard
+  before insert on mammoth_p7_capability_decisions
+  for each row execute function mammoth_p7_guard_capability();
+
+create function mammoth_p7_guard_artifact()
+returns trigger
+language plpgsql
+as $$
+begin
+  if not exists (
+    select 1 from mammoth_p7_provider_attempts
+     where id = new.provider_attempt_id and model_work_id = new.model_work_id
+  ) then
+    raise exception 'P7 artifact provider-attempt mismatch';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p7_artifact_guard
+  before insert on mammoth_p7_artifact_references
+  for each row execute function mammoth_p7_guard_artifact();
+
+create function mammoth_p7_guard_residue()
+returns trigger
+language plpgsql
+as $$
+begin
+  if not exists (
+    select 1 from mammoth_p7_artifact_references
+     where id = new.artifact_id and model_work_id = new.model_work_id
+       and provider_attempt_id = new.provider_attempt_id
+  ) then
+    raise exception 'P7 validation residue artifact mismatch';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p7_residue_guard
+  before insert on mammoth_p7_validation_residue
+  for each row execute function mammoth_p7_guard_residue();
+
+create function mammoth_p7_guard_egress()
+returns trigger
+language plpgsql
+as $$
+declare
+  work record;
+  attempt record;
+begin
+  select reservation_id, authoritative_request into work
+    from mammoth_p7_model_work where id = new.model_work_id;
+  select model_work_id, provider, concrete_model, checkpoint, authoritative_request into attempt
+    from mammoth_p7_provider_attempts where id = new.provider_attempt_id;
+  if work is null or attempt is null
+    or attempt.model_work_id <> new.model_work_id
+    or new.reservation_id <> work.reservation_id
+    or new.provider <> attempt.provider
+    or new.concrete_model <> attempt.concrete_model
+    or new.checkpoint <> attempt.checkpoint
+    or new.prompt_digest <> attempt.authoritative_request #>> '{canonicalPromptDigest}'
+  then
+    raise exception 'P7 egress decision identity mismatch';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p7_egress_guard
+  before insert on mammoth_p7_egress_decisions
+  for each row execute function mammoth_p7_guard_egress();
+
+create function mammoth_p7_guard_charge()
+returns trigger
+language plpgsql
+as $$
+declare
+  work record;
+  attempt record;
+begin
+  perform mammoth_p7_require_usage(new.usage, 'provider charge');
+  select reservation_id, provider_effect_key into work
+    from mammoth_p7_model_work where id = new.model_work_id;
+  select model_work_id, provider, authoritative_request into attempt
+    from mammoth_p7_provider_attempts where id = new.provider_attempt_id;
+  if work is null or attempt is null
+    or attempt.model_work_id <> new.model_work_id
+    or new.reservation_id <> work.reservation_id
+    or new.provider_effect_key <> attempt.authoritative_request #>> '{effect,idempotencyKey}'
+    or new.provider <> attempt.provider
+  then
+    raise exception 'P7 provider charge identity mismatch';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p7_provider_charge_guard
+  before insert on mammoth_p7_provider_charges
+  for each row execute function mammoth_p7_guard_charge();
+
+create function mammoth_p7_guard_settlement()
+returns trigger
+language plpgsql
+as $$
+declare
+  charge record;
+  work record;
+  p6_settlement record;
+begin
+  perform mammoth_p7_require_usage(new.amount, 'budget settlement');
+  select model_work_id, reservation_id, provider_attempt_id, usage into charge
+    from mammoth_p7_provider_charges where id = new.provider_charge_id;
+  select authoritative_request into work
+    from mammoth_p7_provider_attempts where id = charge.provider_attempt_id;
+  select reservation_id into p6_settlement
+    from mammoth_p6_topology_budget_settlements where id = new.id;
+  if charge is null or work is null
+    or p6_settlement is null
+    or p6_settlement.reservation_id <> new.reservation_id
+    or charge.model_work_id <> new.model_work_id
+    or charge.reservation_id <> new.reservation_id
+    or charge.usage <> new.amount
+    or (new.amount ->> 'inputTokens')::numeric > (work.authoritative_request #>> '{budget,inputTokens}')::numeric
+    or (new.amount ->> 'outputTokens')::numeric > (work.authoritative_request #>> '{budget,outputTokens}')::numeric
+    or (new.amount ->> 'currencyMicros')::numeric > (work.authoritative_request #>> '{budget,currencyMicros}')::numeric
+    or (new.amount ->> 'wallClockMs')::numeric > (work.authoritative_request #>> '{budget,wallClockMs}')::numeric
+  then
+    raise exception 'P7 budget settlement exceeds or mismatches reservation';
+  end if;
+  if exists (
+    select 1 from mammoth_p7_budget_releases where reservation_id = new.reservation_id
+  ) then
+    raise exception 'P7 released reservation cannot settle';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p7_budget_settlement_guard
+  before insert on mammoth_p7_budget_settlements
+  for each row execute function mammoth_p7_guard_settlement();
+
+create function mammoth_p7_guard_release()
+returns trigger
+language plpgsql
+as $$
+begin
+  if not exists (
+    select 1 from mammoth_p6_topology_budget_releases
+     where id = new.id and reservation_id = new.reservation_id
+  ) then
+    raise exception 'P7 budget release requires P6 authority';
+  end if;
+  if exists (
+    select 1 from mammoth_p7_budget_settlements where reservation_id = new.reservation_id
+  ) then
+    raise exception 'P7 settled reservation cannot release';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p7_budget_release_guard
+  before insert on mammoth_p7_budget_releases
+  for each row execute function mammoth_p7_guard_release();
+
+create function mammoth_p7_guard_cancellation()
+returns trigger
+language plpgsql
+as $$
+begin
+  if not exists (
+    select 1 from mammoth_p7_model_work
+     where id = new.model_work_id and reservation_id = new.reservation_id
+  ) then
+    raise exception 'P7 cancellation reservation mismatch';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p7_cancellation_guard
+  before insert on mammoth_p7_cancellation_fences
+  for each row execute function mammoth_p7_guard_cancellation();
+
+create function mammoth_p7_guard_reconstruction()
+returns trigger
+language plpgsql
+as $$
+declare
+  work record;
+begin
+  select topology_attempt_id, reservation_id into work
+    from mammoth_p7_model_work where id = new.model_work_id;
+  if work is null
+    or work.topology_attempt_id <> new.topology_attempt_id
+    or work.reservation_id <> new.reservation_id
+    or jsonb_typeof(new.artifact_ids) <> 'array'
+    or exists (
+      select 1 from jsonb_array_elements_text(new.artifact_ids)
+        as artifact_ref(artifact_id)
+       where not exists (
+         select 1 from mammoth_p7_artifact_references artifact
+          where artifact.id = artifact_ref.artifact_id
+            and artifact.model_work_id = new.model_work_id
+       )
+    )
+    or (new.provider_charge_id is not null and not exists (
+      select 1 from mammoth_p7_provider_charges
+       where id = new.provider_charge_id and model_work_id = new.model_work_id
+    ))
+    or (new.settlement_id is not null and not exists (
+      select 1 from mammoth_p7_budget_settlements
+       where id = new.settlement_id and model_work_id = new.model_work_id
+    ))
+    or (new.settlement_id is not null and new.provider_charge_id is null)
+    or (new.settlement_id is not null and not exists (
+      select 1 from mammoth_p7_budget_settlements
+       where id = new.settlement_id
+         and provider_charge_id = new.provider_charge_id
+    ))
+    or (new.cancellation_fence_id is not null and not exists (
+      select 1 from mammoth_p7_cancellation_fences
+       where id = new.cancellation_fence_id and model_work_id = new.model_work_id
+    ))
+  then
+    raise exception 'P7 reconstruction link is incomplete';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p7_reconstruction_guard
+  before insert on mammoth_p7_reconstruction_links
+  for each row execute function mammoth_p7_guard_reconstruction();
+
+create trigger mammoth_p7_capability_update_guard
+  before update or delete on mammoth_p7_capability_decisions
+  for each row execute function mammoth_p7_forbid_authority_mutation();
+create trigger mammoth_p7_egress_update_guard
+  before update or delete on mammoth_p7_egress_decisions
+  for each row execute function mammoth_p7_forbid_authority_mutation();
+create trigger mammoth_p7_artifacts_update_guard
+  before update or delete on mammoth_p7_artifact_references
+  for each row execute function mammoth_p7_forbid_authority_mutation();
+create trigger mammoth_p7_residue_update_guard
+  before update or delete on mammoth_p7_validation_residue
+  for each row execute function mammoth_p7_forbid_authority_mutation();
+create trigger mammoth_p7_charges_update_guard
+  before update or delete on mammoth_p7_provider_charges
+  for each row execute function mammoth_p7_forbid_authority_mutation();
+create trigger mammoth_p7_settlements_update_guard
+  before update or delete on mammoth_p7_budget_settlements
+  for each row execute function mammoth_p7_forbid_authority_mutation();
+create trigger mammoth_p7_releases_update_guard
+  before update or delete on mammoth_p7_budget_releases
+  for each row execute function mammoth_p7_forbid_authority_mutation();
+create trigger mammoth_p7_cancellations_update_guard
+  before update or delete on mammoth_p7_cancellation_fences
+  for each row execute function mammoth_p7_forbid_authority_mutation();
+create trigger mammoth_p7_reconstruction_update_guard
+  before update or delete on mammoth_p7_reconstruction_links
+  for each row execute function mammoth_p7_forbid_authority_mutation();
 `.trim(),
   }),
 ]);

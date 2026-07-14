@@ -12,6 +12,7 @@ export const activityTypes = [
   'outbox-publication',
   'revalidation',
   'human-gate-handoff',
+  'model-provider',
 ] as const;
 export type ActivityTypeV1 = (typeof activityTypes)[number];
 
@@ -31,6 +32,7 @@ export const activityOperationKinds = [
   'revalidation.complete',
   'human-gate.open',
   'human-gate.notify',
+  'provider.chat-completion',
 ] as const;
 export type ActivityOperationKindV1 = (typeof activityOperationKinds)[number];
 export type Digest = `sha256:${string}`;
@@ -47,6 +49,7 @@ export const activityOperationKindsByType = Object.freeze({
   'outbox-publication': ['outbox.publish'],
   revalidation: ['revalidation.complete'],
   'human-gate-handoff': ['human-gate.open', 'human-gate.notify'],
+  'model-provider': ['provider.chat-completion'],
 } as const satisfies Readonly<
   Record<ActivityTypeV1, readonly ActivityOperationKindV1[]>
 >);
@@ -90,7 +93,9 @@ export interface ActivityPolicyV1 {
     | 'retrieval'
     | 'local-small'
     | 'research-control'
-    | 'human-gate';
+    | 'human-gate'
+    | 'local-large'
+    | 'cloud-frontier';
   readonly scheduleToCloseMs: number;
   readonly startToCloseMs: number;
   readonly heartbeatTimeoutMs?: number;
@@ -183,6 +188,15 @@ export const activityPolicies: Readonly<
     1_000,
     30_000,
   ),
+  'model-provider': policy(
+    'local-large',
+    15 * minute,
+    5 * minute,
+    3,
+    2_000,
+    minute,
+    15_000,
+  ),
 });
 
 export const retryableActivityFailureCodes = [
@@ -195,6 +209,10 @@ export const retryableActivityFailureCodes = [
   'database_serialization',
   'worker_interrupted',
   'provider_result_ambiguous',
+  'timeout_before_acceptance',
+  'rate_limited',
+  'provider_unavailable',
+  'transport_interrupted_before_acceptance',
 ] as const;
 export const nonRetryableActivityFailureCodes = [
   'invalid_input',
@@ -214,6 +232,16 @@ export const nonRetryableActivityFailureCodes = [
   'deterministic_parser_rejection',
   'deterministic_compiler_rejection',
   'invalid_provider_result',
+  'secret_detected',
+  'unsupported_capability',
+  'profile_drift',
+  'malformed_output',
+  'schema_incompatible',
+  'oversized_output',
+  'content_rejected',
+  'budget_exhausted',
+  'ambiguous_delivery',
+  'late_response',
 ] as const;
 export type ActivityFailureCode =
   | (typeof retryableActivityFailureCodes)[number]
