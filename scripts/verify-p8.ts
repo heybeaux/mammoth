@@ -151,37 +151,84 @@ export async function verifyP8(root: string): Promise<P8VerifierResult> {
     const spanById = new Map(
       manifest.evidenceSpans.map((span) => [span.id, span]),
     );
+    const claimById = new Map(
+      manifest.claims.map((claim) => [claim.id, claim]),
+    );
     const claimBoundSentences = manifest.blocks.flatMap((block) =>
       block.sentences.filter((sentence) => sentence.claimIds.length > 0),
     );
-    const nonQuoteDerivedSentences = claimBoundSentences.filter((sentence) => {
-      const quotes = sentence.locatorIds
-        .map((locatorId) => spanById.get(locatorId)?.locator.quote)
-        .filter((quote): quote is string => Boolean(quote));
-      return (
-        quotes.length === 0 ||
-        !quotes.some((quote) => sentence.text.includes(quote))
-      );
-    });
-    const sectionSentenceCounts = new Map(
+    const provenanceMismatches = claimBoundSentences.filter((sentence) =>
+      sentence.claimIds.some((claimId) => {
+        const claim = claimById.get(claimId);
+        return (
+          !claim ||
+          claim.evidenceSpanIds.some(
+            (spanId) =>
+              !sentence.locatorIds.includes(spanId) || !spanById.has(spanId),
+          )
+        );
+      }),
+    );
+    const sectionWordCounts = new Map(
       manifest.blocks.map((block) => [
         block.id,
-        block.sentences.filter((sentence) => sentence.claimIds.length > 0)
-          .length,
+        block.sentences
+          .flatMap((sentence) => sentence.text.split(/\s+/u))
+          .filter(Boolean).length,
       ]),
     );
     const thinSections = [
-      ['environmental_effects', 12],
-      ['community_economic_effects', 6],
-      ['distributional_environmental_justice', 4],
-      ['benefits_counterarguments', 4],
-      ['context_comparison', 4],
-      ['mitigations_policy_options', 6],
-      ['conflicts_uncertainties_gaps', 1],
+      ['environmental_effects', 500],
+      ['community_economic_effects', 240],
+      ['distributional_environmental_justice', 180],
+      ['benefits_counterarguments', 180],
+      ['context_comparison', 180],
+      ['mitigations_policy_options', 220],
+      ['conflicts_uncertainties_gaps', 140],
     ].filter(
       ([sectionId, minimum]) =>
-        (sectionSentenceCounts.get(String(sectionId)) ?? 0) < Number(minimum),
+        (sectionWordCounts.get(String(sectionId)) ?? 0) < Number(minimum),
     );
+    const forbiddenBoilerplate = [
+      /admitted source/giu,
+      /exact locator quote/giu,
+      /source-bound finding/giu,
+      /raw snapshot digest/giu,
+      /lineage family/giu,
+      /sha256:/giu,
+      /\bTj\b|\bT\*\b|\/F\d+|endstream/giu,
+    ];
+    const boilerplateHits = forbiddenBoilerplate.flatMap(
+      (pattern) => markdown.match(pattern) ?? [],
+    );
+    const repeatedLeadPhrases = [
+      'A complementary finding adds that',
+      'That account is qualified by a competing finding',
+    ].filter((phrase) => markdown.split(phrase).length - 1 > 8);
+    const malformedFragments = manifest.blocks
+      .flatMap((block) => block.sentences)
+      .filter(
+        (sentence) =>
+          sentence.text.trim().length < 20 ||
+          /\(\s*\d+\s+percent|\)\s*Tj|\bPublisher:\b|FEDERAL GRID RELIABILITY COMMISSION|Technical Report TR-|\bit (?:have|were|further estimate)\b/iu.test(
+            sentence.text,
+          ),
+      );
+    const executive = manifest.blocks.find(
+      (block) => block.id === 'executive_summary',
+    );
+    const executiveText =
+      executive?.sentences.map((sentence) => sentence.text).join(' ') ?? '';
+    const executiveAnswersQuestion =
+      executiveText.split(/\s+/u).length >= 180 &&
+      /benefit|jobs?|tax/iu.test(executiveText) &&
+      /electricity|grid/iu.test(executiveText) &&
+      /water/iu.test(executiveText) &&
+      /community|burden/iu.test(executiveText) &&
+      /conditional|depends|trade-off/iu.test(executiveText);
+    const compactCitationsPresent =
+      (markdown.match(/\[\d+(?:, \d+)*\]/gu)?.length ?? 0) >= 20 &&
+      markdown.includes('## References');
     const lowerMarkdown = markdown.toLowerCase();
     const requiredContentTerms = [
       'greenhouse',
@@ -245,12 +292,17 @@ export async function verifyP8(root: string): Promise<P8VerifierResult> {
       duplicateFactualSentenceRatioWithinThreshold:
         duplicateFactualSentenceRatio <=
         thresholds.readability.maxDuplicateFactualSentenceRatio,
-      substantiveWordCount: words.length >= 2500 && words.length <= 6000,
+      substantiveWordCount: words.length >= 2500 && words.length <= 5000,
       multipleSpansPerAdmittedSource:
         manifest.evidenceSpans.length >= 30 && thinSources.length === 0,
       modelAssistedClaimDensity: manifest.claims.length >= 40,
-      contentDerivedClaimText: nonQuoteDerivedSentences.length === 0,
+      exactClaimSpanBinding: provenanceMismatches.length === 0,
       comprehensiveSectionDepth: thinSections.length === 0,
+      noProvenanceBoilerplateInBody: boilerplateHits.length === 0,
+      noRepeatedNarrativeTemplates: repeatedLeadPhrases.length === 0,
+      noMalformedSourceFragments: malformedFragments.length === 0,
+      executiveSummaryAnswersQuestion: executiveAnswersQuestion,
+      compactHumanCitationsPresent: compactCitationsPresent,
       requiredDomainContentPresent: missingContentTerms.length === 0,
       unrelatedQuestionRejected: rejectsUnrelatedQuestion,
       exploreModeNotSilentlyDowngraded: rejectsExploreMode,
@@ -275,10 +327,19 @@ export async function verifyP8(root: string): Promise<P8VerifierResult> {
               )
             : [],
         thinSources,
-        nonQuoteDerivedSentences: nonQuoteDerivedSentences.map(
+        provenanceMismatches: provenanceMismatches.map(
           (sentence) => sentence.id,
         ),
         thinSections: thinSections.map(([sectionId]) => String(sectionId)),
+        boilerplateHits,
+        repeatedLeadPhrases,
+        malformedFragments: malformedFragments.map((sentence) => sentence.id),
+        executiveSummary: executiveAnswersQuestion
+          ? []
+          : ['does_not_directly_answer_question'],
+        compactCitations: compactCitationsPresent
+          ? []
+          : ['missing_or_too_sparse'],
         missingContentTerms,
       },
     };
