@@ -18,11 +18,11 @@ record.
 | Task ID                   | State           | Assignment block |
 | ------------------------- | --------------- | ---------------- |
 | P8-T0-acceptance-baseline | merged/verified | see below        |
-| P8-T1-T8-turnkey-slice    | producing       | see below        |
+| P8-T1-T8-turnkey-slice    | merged/verified | see below        |
 
-T1-T8 implementation is owned by the release controller in
-`/private/tmp/mammoth-p8-integration`, recreated from T0 merge commit `3fd25b7`.
-No other P8 worker owns a worktree.
+T1-T8 implementation was completed by the release controller in
+`/private/tmp/mammoth-p8-integration`. No other P8 worker owned the worktree
+during the final live exhibition and receipt sequence.
 
 ```text
 Task ID: P8-T1-T8-turnkey-slice
@@ -34,14 +34,16 @@ Acceptance evidence required: the golden command writes the complete report
   snapshot/lineage provenance, mandatory topics are covered, follow-up cycle,
   contradiction, rejected residue, limitations, and costs are visible; prior
   phase gates remain green; CI includes the P8 verifier
-State: producing (offline fixture slice merged to main as PR #52, then
-  independently reviewed as blocking; repair branch is open/in progress to make
-  the merged slice honest about unsupported product paths while full P8 remains
-  incomplete)
+State: merged/verified (offline slice PR #52 merged, live Brave-backed repair
+  PR #53 merged, authorized live exhibition produced the complete receipt-bearing
+  bundle, independent editorial review was non-blocking, annotated tag
+  v0.8.0-turnkey-research object bf1eaa74f25005f04bdfb29dcac28cdc36c4a46d
+  targets the code-bearing merge, and the receipt-only PR records the final
+  evidence)
 Runtime / session / run / resolved model: OpenClaw managed TaskFlow
   391de2f2-e399-4c36-8013-22e1769e3c1a / qwen subagent
 Worktree / branch / base SHA: /private/tmp/mammoth-p8-integration /
-  feat/p8-release-repair / 0109b3a
+  receipt/p8-turnkey-release / 2b2b41321a06e5d7cea7070f38a8d2a1fd945a25
 Owned paths: packages/domain/src/p8.ts, packages/domain/src/index.ts,
   packages/runtime/src/p8-turnkey.ts, packages/runtime/src/index.ts,
   apps/cli/src/bin.ts, apps/cli/src/p8-operator.ts, scripts/verify-p8.ts,
@@ -53,35 +55,41 @@ Contracts allowed to change: add p8.v1 domain contracts and non-recursive
 Dependencies / integration predecessor: T0 merge commit 3fd25b7; P7 command
   compatibility retained by routing existing P7 run IDs to the P7 operator
 Exact verification commands: PR #52 exact-head CI run 29358048198 passed on
-  814a6ad and merged-main CI run 29358953839 passed on 0109b3a, but CodeRabbit
-  was rate-limited and did not provide substantive review. Independent non-author
-  review on 0109b3a was BLOCKING. Repair branch local gates after fixes:
-  pnpm typecheck passed; pnpm verify:p8 passed with unrelated-question rejection,
-  explore-mode-not-downgraded check, returned-run-ID status check, and duplicate
-  factual sentence threshold; pnpm --filter @mammoth/cli test passed 23 tests.
+  814a6ad and merged-main CI run 29358953839 passed on 0109b3a. Independent
+  non-author review on 0109b3a was BLOCKING, so PR #53 added the authorized live
+  Brave-backed path. PR #53 exact-head CI run 29362369844 passed on
+  54f9a1dbfb169b8ec3c92bfd2caf05f5641b833c and merged as
+  2b2b41321a06e5d7cea7070f38a8d2a1fd945a25. Code-bearing main CI run
+  29363234888 verified the clean checkout ladder through visible
+  pnpm verify:p8. Live commands: pnpm mammoth research doctor returned ok with
+  credential and billing authorization; the exact data-center ask command wrote
+  research/data-center-impacts with run p8-run:6202fc8f432b8aeb, manifest digest
+  sha256:6202fc8f432b8aebd3edc0628ae763061bf5c6e33abaefcd6160585b2718c3c2,
+  receipt digest
+  sha256:82545b8c737516b2384cd48672267a5220c1d3003826bbd2fa87c1e5a5951d6e.
+  pnpm mammoth research inspect returned the same run and digests; secret leak
+  and locator/snapshot audits passed; screenshots were captured under
+  research/data-center-impacts/screenshots/.
 Handoff recipient: P8 release controller/integrator
 Independent reviewer: 2026-07-14 Codex non-author review on main 0109b3a:
-  BLOCKING. Critical findings: fixture synthesis rather than question-driven
-  research; no authoritative P8 workflow/state/effect ledger; returned run IDs
-  did not route to P8 operator. High findings: explore mode silently downgraded
-  to report; verify:p8 was self-fulfilling. Medium findings: synthetic budget
-  receipt accounting and duplicate factual sentence threshold not enforced.
+  BLOCKING, resolved by PR #53 and exact-head CI. Exact live-bundle editorial
+  review in research/data-center-impacts/independent-review.json: verdict
+  pass_with_notes, blockers none, digest
+  sha256:d795cdec1530d70540bc53ebfa8c162d3d1cd6bdd33e5ee90a0d0a5632d7166d.
 Last registry proof: release controller active in TaskFlow
   391de2f2-e399-4c36-8013-22e1769e3c1a
-Last artifact proof: merged PR #52 bundle plus repair branch diff in
-  /private/tmp/mammoth-p8-integration.
-Handoff / commit: PR #52 merged as 0109b3a; repair branch
-  feat/p8-release-repair pending commit/PR.
-Integration: current main is not P8-release-ready. The repair branch narrows the
-  claim by rejecting unsupported non-golden questions, preserving --mode instead
-  of silently downgrading explore, routing returned P8 run IDs, requiring both
-  Brave credential and explicit billing authorization in doctor, and extending
-  verify:p8 to catch those regressions plus duplicate factual sentences.
-Blockers / replacement audit: full P8 stopping condition remains unproved. Human
-  blocker for live exhibition: MAMMOTH_SEARCH_BRAVE_API_KEY and explicit Brave
-  Search API billing authorization are absent. Code blocker remains for true
-  question-driven discovery/acquisition/admission/durable workflow/explore-mode
-  implementation; PR #52 is only an offline fixture slice, not turnkey P8.
+Last artifact proof: live bundle research/data-center-impacts, screenshots,
+  independent-review.json, and release receipt
+  evals/reports/v0.8.0-turnkey-research.md.
+Handoff / commit: PR #53 merged as
+  2b2b41321a06e5d7cea7070f38a8d2a1fd945a25; receipt-only PR records final
+  evidence, tag, screenshots, and documentation truth updates.
+Integration: P8 is release-complete at the local CLI/product-receipt layer. The
+  deterministic offline verifier remains fixture-backed; the live Brave-backed
+  exhibition is separately authorized and receipt-bearing.
+Blockers / replacement audit: none remaining for P8. Future hosted API, desktop
+  UI, Observatory visualization, Parliament provider execution, and broader
+  production operations claims remain out of P8 scope.
 ```
 
 ```text

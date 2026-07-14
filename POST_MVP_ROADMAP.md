@@ -8,20 +8,21 @@
 >
 > Completed release checkpoints: [`P2_PLAN.md`](P2_PLAN.md),
 > [`P3_PLAN.md`](P3_PLAN.md), [`P4_PLAN.md`](P4_PLAN.md),
-> [`P5_PLAN.md`](P5_PLAN.md), [`P6_PLAN.md`](P6_PLAN.md)
+> [`P5_PLAN.md`](P5_PLAN.md), [`P6_PLAN.md`](P6_PLAN.md),
+> [`P7_PLAN.md`](P7_PLAN.md), [`P8_PLAN.md`](P8_PLAN.md)
 >
-> Merged substrate: [`P7_PLAN.md`](P7_PLAN.md)
+> Latest release receipt:
+> [`v0.8.0-turnkey-research.md`](evals/reports/v0.8.0-turnkey-research.md)
 >
-> Active checkpoint: [`P8_PLAN.md`](P8_PLAN.md) — Turnkey Research Product
+> Active checkpoint: post-P8 follow-up planning; no P9 release scope is frozen.
 
 ## Outcome
 
-The active checkpoint turns the production-shaped P2-P7 substrate into a product:
-a user supplies a plain-language question or theory, Mammoth performs bounded
-iterative discovery and evidence admission, and it returns a comprehensive cited
-report or exploration bundle. The substrate remains subordinate to that user
-outcome and every evidence, authority, durability, isolation, lineage, budget,
-and receipt invariant carries forward.
+P8 turns the production-shaped P2-P7 substrate into a local CLI product: a user
+supplies a plain-language question or theory, Mammoth performs bounded iterative
+discovery and evidence admission, and it returns a cited report bundle. The
+substrate remains subordinate to that user outcome and every evidence, authority,
+durability, isolation, lineage, budget, and receipt invariant carries forward.
 
 ## Release train
 
@@ -175,6 +176,8 @@ Frozen plan: [`P7_PLAN.md`](P7_PLAN.md). The merged P7 implementation proves the
 governed execution substrate described there. It does not prove question-driven
 source discovery or a comprehensive report product; those are P8 scope.
 
+Merged substrate: [`P7_PLAN.md`](P7_PLAN.md).
+
 ### P8 — Turnkey Research Product
 
 Deliver:
@@ -196,9 +199,10 @@ iterative gap research, restart/idempotency, budgets, cancellation, and hostile
 sources are proven; and independent review plus merged-main CI and receipt prove
 the exact candidate.
 
-Frozen entry contract: [`P8_PLAN.md`](P8_PLAN.md). Implementation may not begin
-until that plan PR and the separate T0 acceptance-baseline PR merge and
-implementation worktrees resync from the later T0 merge.
+Frozen entry contract: [`P8_PLAN.md`](P8_PLAN.md).
+
+Completed release receipt:
+[`v0.8.0-turnkey-research.md`](evals/reports/v0.8.0-turnkey-research.md).
 
 ## Dependency order
 
@@ -232,10 +236,9 @@ cannot become release scope until P2 and P3 pass their exit gates.
 
 ## Next implementation checkpoint
 
-The merged P7 code is the governed execution baseline. P8 Turnkey Research is the
-active plan-first checkpoint. Merge [`P8_PLAN.md`](P8_PLAN.md), reconcile the P7
-baseline honestly, then merge the T0 acceptance baseline and recreate
-implementation worktrees from that later merge before delegating product code.
+P8 Turnkey Research is complete at the local CLI and release-receipt layer. The
+next release scope is intentionally unfrozen; future work should start with a
+new plan and acceptance baseline rather than silently broadening P8.
 
 The read-only visualization track is specified in
 [`docs/OBSERVATORY.md`](docs/OBSERVATORY.md). A high-fidelity shell and 3D

@@ -2,20 +2,16 @@
 
 ## Mission and authority
 
-Build Mammoth from merged P7 substrate commit `2e35802` into the P8 Turnkey
-Research Product defined by `P8_PLAN.md`. P7 proved governed provider execution,
-durable receipts, reconstruction, dossier structure, and operator controls. It did
-**not** prove question-driven discovery, evidence extraction, iterative research,
-or a comprehensive user-ready report.
+Mammoth P8 Turnkey Research is complete as the local CLI release recorded in
+[`evals/reports/v0.8.0-turnkey-research.md`](evals/reports/v0.8.0-turnkey-research.md).
+P8 proves question-driven discovery, evidence extraction, iterative research, and
+a cited Markdown/HTML report bundle on top of the P7 governed execution
+substrate.
 
-`ARCHITECTURE.md` remains normative. `P8_PLAN.md` is the active acceptance and
-stopping authority, and `LOOP.md` is the execution protocol. Before the P8 entry
-plan and separate T0 acceptance-baseline PR merge, work is limited to inventory,
-contract discovery, ADRs, fixtures, spike reports, and planning. Implementation
-worktrees must be created or resynced from the T0 merge commit.
-
-No worker may claim Mammoth is a turnkey research product until the black-box
-data-center command and every P8 release predicate pass on merged `main`.
+`ARCHITECTURE.md` remains normative. `P8_PLAN.md` is the completed acceptance
+authority for the P8 release, and `LOOP.md` records the delivery protocol. Future
+work must use a new plan, ledger entry, and acceptance baseline instead of
+silently broadening P8.
 
 ## Required reading and assignment record
 
@@ -162,7 +158,7 @@ works only in process order.
 During work, run affected tests, typecheck, build, and the lane verifier. Handoffs
 must include P8 golden-path evidence relevant to the lane, not only package tests.
 Before merge or checkpoint, run the complete existing ladder through
-`pnpm verify:p7`, plus a non-recursive `pnpm verify:p8` that is visible in CI.
+`pnpm verify:p7`, plus the non-recursive `pnpm verify:p8` that is visible in CI.
 Also run format, lint, typecheck, tests, and build from a clean checkout.
 
 The deterministic P8 verifier uses a frozen data-center corpus and must not require
