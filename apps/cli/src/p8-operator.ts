@@ -82,14 +82,24 @@ export async function executeP8ResearchCli(
       const liveSearchCredential = process.env.MAMMOTH_SEARCH_BRAVE_API_KEY;
       const liveBillingAuthorization =
         process.env.MAMMOTH_SEARCH_BRAVE_BILLING_AUTHORIZATION;
+      const liveModelBaseUrl = process.env.MAMMOTH_P8_PROVIDER_BASE_URL;
+      const liveModel = process.env.MAMMOTH_P8_PROVIDER_MODEL;
+      const liveExplicitAuthorization =
+        process.env.MAMMOTH_P8_LIVE_RESEARCH === 'authorized';
       const liveReady =
+        liveExplicitAuthorization &&
         Boolean(liveSearchCredential) &&
-        liveBillingAuthorization === 'authorized';
+        liveBillingAuthorization === 'authorized' &&
+        Boolean(liveModelBaseUrl) &&
+        Boolean(liveModel);
       io.stdout(
         JSON.stringify({
           command,
           status: liveReady ? 'ok' : 'blocked_live_exhibition',
           localProfile: 'ok',
+          liveAuthorization: liveExplicitAuthorization
+            ? 'MAMMOTH_P8_LIVE_RESEARCH=authorized'
+            : 'MAMMOTH_P8_LIVE_RESEARCH=authorized missing; deterministic fixture mode remains active',
           liveSearch: liveSearchCredential
             ? 'brave-search/v1 credential present'
             : 'MAMMOTH_SEARCH_BRAVE_API_KEY missing; T8 live exhibition is credential-gated',
@@ -97,6 +107,10 @@ export async function executeP8ResearchCli(
             liveBillingAuthorization === 'authorized'
               ? 'Brave Search API billing explicitly authorized'
               : 'MAMMOTH_SEARCH_BRAVE_BILLING_AUTHORIZATION=authorized missing; T8 live exhibition cannot spend provider budget',
+          liveModelProvider:
+            liveModelBaseUrl && liveModel
+              ? 'OpenAI-compatible P8 synthesis provider configured'
+              : 'MAMMOTH_P8_PROVIDER_BASE_URL and MAMMOTH_P8_PROVIDER_MODEL required for live synthesis',
         }),
       );
       return 0;
