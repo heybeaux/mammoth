@@ -1,14 +1,10 @@
 {
-  "name": "@mammoth/workflow",
+  "name": "@mammoth/provider-port",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./p3-contract": "./src/p3-contract.ts",
-    "./p4-contract": "./src/p4-contract.ts",
-    "./p5-contract": "./src/p5-contract.ts",
-    "./p7-contract": "./src/p7-contract.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -16,7 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mammoth/domain": "workspace:*"
+    "@mammoth/domain": "workspace:*",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

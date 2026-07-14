@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0.0",
+  "contracts": {
+    "modelWorkRequest": "1.0.0",
+    "modelWorkResult": "1.0.0",
+    "providerError": "1.0.0",
+    "modelWorkPolicy": "1.0.0",
+    "capabilityManifest": "1.0.0",
+    "applicationContractMajor": 1,
+    "workflowVersion": 1,
+    "projectionExtension": "1.0.0"
+  },
+  "dependencyDirection": [
+    {
+      "source": "@mammoth/domain",
+      "mayDependOn": []
+    },
+    {
+      "source": "@mammoth/workflow",
+      "mayDependOn": ["@mammoth/domain"]
+    },
+    {
+      "source": "@mammoth/provider-port",
+      "mayDependOn": ["@mammoth/domain"]
+    },
+    {
+      "source": "p7-application-service",
+      "mayDependOn": [
+        "@mammoth/domain",
+        "@mammoth/workflow",
+        "@mammoth/provider-port"
+      ]
+    }
+  ],
+  "authority": {
+    "proposals": "provider",
+    "validationAndAdmission": "deterministic-application-service",
+    "productState": "postgres-cas",
+    "orchestration": "temporal",
+    "operatorProjection": "read-only"
+  },
+  "manifestDigest": "sha256:7ad95f77a182fd5e96399d208046226c15807ce8f14f9c6ea075a1212e5b7a71"
+}
