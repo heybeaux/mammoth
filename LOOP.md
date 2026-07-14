@@ -2,11 +2,12 @@
 
 ## Mission
 
-P5 `v0.5.0-isolated-divergence` is merged, verified, tagged, and recorded under
-`P5_PLAN.md`. P6 broader research topology is the active checkpoint and is frozen
-under `P6_PLAN.md` once that entry PR is merged. Preserve the P2 Postgres/CAS
-authority boundary, P3 Temporal control plane, P4 research-cell/model-lineage
-contracts, and P5 isolated-divergence/blind-review contracts.
+P6 `v0.6.0-research-topology` is merged, verified, tagged, and recorded under
+`P6_PLAN.md`. P7 Live Research Loop is next, but its acceptance contract is not
+yet frozen. The current loop is therefore plan-first: reconcile product boundaries,
+freeze a P7 plan in a distinct PR, then recreate or resync implementation worktrees.
+Preserve the P2 Postgres/CAS authority boundary, P3 Temporal control plane, P4-P5
+lineage/isolation/review contracts, and P6 topology/synthesis contracts.
 
 Routine reversible choices, ADR-backed decisions, delegation, PRs, reviews, CI
 repair, and sequencing do not require human contact.
@@ -15,11 +16,11 @@ repair, and sequencing do not require human contact.
 
 - **Coordinator/integrator:** contracts, priorities, ownership, integration, CI,
   receipt, release, and checkpoint decision.
-- **Isolation/policy builder:** commit/reveal state machine, sanitized context,
-  assignment, correlation, dissent, residue, and adversarial fixtures.
+- **Provider/model builder:** provider-neutral port, model-profile resolution,
+  governed egress, typed outputs, usage, cost, and effect receipts.
 - **Persistence/budget builder:** ports, migrations, constraints, fencing,
   reservations, settlements, receipts, and restart evidence.
-- **Workflow/projection builder:** divergence/review workflows, Activities,
+- **Workflow/operator builder:** topology entry point, live research Activities,
   recovery/replay probes, and read-only fail-closed projection.
 - **Adversarial reviewer:** independently attacks epistemic and authority claims;
   an author never self-certifies the exit gate.
@@ -33,23 +34,26 @@ it and never assign overlapping workers to one worktree.
 ## Loop
 
 1. **Orient** — fetch `main`; inspect worktrees, PRs, CI, active workers,
-   `P5_PLAN.md`, ADRs, migrations, receipts, and the highest unproved predicate.
+   `P6_PLAN.md`, its receipt, the P7 handover, ADRs, migrations, provider seams,
+   and the highest unproved predicate.
 2. **Claim** — freeze the smallest testable slice, owner, paths, dependencies,
    contract impact, adversarial risks, commands, and independent reviewer.
 3. **Delegate** — use path-disjoint durable workers and prove actual liveness.
-4. **Build** — isolation/review contracts first, then persistence and budgets,
-   Temporal execution/recovery, projection/operator inspection, and acceptance.
-5. **Attack** — exercise early peer exposure, reviewer-context leakage,
-   self-review, correlated panels, criterion drift, dissent deletion, duplicate
-   delivery/charges, reservation overspend, partial cancellation, migration
-   interruption, stale fencing, future authority, and restart at every boundary.
+4. **Build** — provider-neutral contracts first, then governed adapters, topology
+   operator entry, typed Activities, persistence/budgets, recovery, and projection.
+5. **Attack** — exercise malformed provider output, prompt injection, secret or
+   sensitive-data leakage, provider outage/throttling, alias drift, duplicate
+   calls/charges, budget exhaustion, cancellation, stale fencing, future authority,
+   and restart at every durable boundary.
 6. **Review** — inspect dependency direction, hidden stores, authority drift,
    deleted rejection residue, direct adapter imports, Temporal shadow state,
    projection writes, fake receipts, process-order "isolation," and hidden
    author/popularity/verdict fields.
-7. **Verify** — run focused gates, `pnpm verify:p5`, the active P6 verifier once
-   implemented, and the full clean-checkout ladder; capture exact evidence in
-   the receipt.
+7. **Verify** — run focused gates, every verifier through `pnpm verify:p6`, the
+   active P7 verifier once frozen and implemented, and the full clean-checkout
+   ladder. The P7 verifier must be non-recursive, exercise production-shaped
+   public boundaries, preserve every earlier gate, and keep live-provider
+   evaluations separately authorized. Capture exact evidence in the receipt.
 8. **Integrate** — resolve without discarding work, push, open a PR, repair CI,
    resolve independent findings, merge, and verify `main`.
 9. **Reconcile** — update plan, roadmap, receipt, and tag only from executed proof.
@@ -62,10 +66,11 @@ receipts outrank prose or worker confidence.
 ## Dependency order
 
 ```text
-P4 reconfirmation
-  -> P5 isolation/review contract freeze
-  -> authoritative persistence and budget lifecycle
-  -> Temporal divergence/review execution and recovery
+P6 receipt reconfirmation
+  -> P7 acceptance-contract freeze
+  -> provider-neutral model work contract and governed adapter
+  -> topology operator entry and live research Activities
+  -> authoritative receipts, budgets, cancellation, and recovery
   -> read-only projection and operator inspection
   -> adversarial verifier and clean-checkout receipt
   -> independent review, PR, main CI, annotated tag
@@ -91,7 +96,7 @@ disjoint. The coordinator serializes cross-package reconciliation.
 
 Do not send progress updates or request routine confirmation. Escalate only when:
 
-- the full P5 stopping condition is satisfied;
+- the active checkpoint stopping condition is satisfied;
 - an irreversible/destructive action outside disposable test infrastructure is
   required;
 - credentials, account authority, billing, legal/licensing input, or a security
@@ -103,18 +108,19 @@ Do not send progress updates or request routine confirmation. Escalate only when
 
 Otherwise choose the safest reversible option, document it, and continue.
 
-## P5 receipt
+## P6 receipt
 
-The P5 stopping condition is satisfied by
-[`evals/reports/v0.5.0-isolated-divergence.md`](evals/reports/v0.5.0-isolated-divergence.md):
-entry PR #36, code PR #37, code-bearing merge
-`0cd81f86f1c893f06ff06c88c683e6f84234dbbf`, default-branch CI run
-`29294543576`, and annotated tag `v0.5.0-isolated-divergence`.
+The P6 stopping condition is satisfied by
+[`evals/reports/v0.6.0-research-topology.md`](evals/reports/v0.6.0-research-topology.md):
+plan PR #39, code PR #40, code-bearing merge
+`6685f193c3c2669f5cd8da8b46c78b7ffeeabf40`, final receipt PR #41,
+final default-branch CI run `29303588863`, and annotated tag
+`v0.6.0-research-topology`.
 
 ## Stopping condition
 
-For P6, stop only when `P6_PLAN.md` gates and fixtures pass; the clean-checkout
-ladder is green; required independent review is resolved and re-reviewed;
-`pnpm verify:p6` is enforced in default-branch CI; the code PR is merged;
-post-merge `main` CI is green; the receipt is exact and merged; and the
-`v0.6.0-research-topology` tag points to the code-bearing merge.
+Before P7 implementation, stop the planning loop only when a distinct `P7_PLAN.md`
+entry PR has frozen scope, authority, schemas, slices, adversarial fixtures,
+verification, receipt, release label, and stopping predicates; that PR is merged;
+and every implementation worktree is recreated or resynced from the merged plan
+baseline. After that point, `P7_PLAN.md` becomes the stopping authority.

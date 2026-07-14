@@ -7,9 +7,10 @@
 > Direction: production adapters first, then broader research-cell orchestration.
 >
 > Completed checkpoints: [`P2_PLAN.md`](P2_PLAN.md), [`P3_PLAN.md`](P3_PLAN.md),
-> [`P4_PLAN.md`](P4_PLAN.md), [`P5_PLAN.md`](P5_PLAN.md)
+> [`P4_PLAN.md`](P4_PLAN.md), [`P5_PLAN.md`](P5_PLAN.md),
+> [`P6_PLAN.md`](P6_PLAN.md)
 >
-> Active checkpoint contract: [`P6_PLAN.md`](P6_PLAN.md)
+> Next checkpoint: P7 Live Research Loop — acceptance contract not yet frozen
 
 ## Outcome
 
@@ -140,6 +141,44 @@ Frozen plan: [`P6_PLAN.md`](P6_PLAN.md). Implementation may not claim P6 progres
 until that plan is merged to `main` and implementation worktrees are resynced to
 the merged P6-plan baseline.
 
+Completed release receipt:
+[`evals/reports/v0.6.0-research-topology.md`](evals/reports/v0.6.0-research-topology.md).
+
+### P7 — Live Research Loop
+
+Deliver:
+
+- A provider-neutral model-work port and immutable resolution from model-profile
+  version to a concrete local or cloud adapter configuration.
+- Governed model Activities with explicit work-item contracts, egress decisions,
+  data classification, mounted tools, secrets isolation, idempotency, usage, cost,
+  raw-artifact, failure, and cancellation receipts.
+- An operator entry point that starts, resumes, cancels, inspects, and reconstructs
+  a P6 topology research program through application ports rather than direct
+  adapter imports.
+- Typed conversion of provider outputs into observations, claim/evidence proposals,
+  hypotheses, reviews, dissent, and experiment artifacts; deterministic services
+  remain the only authority that validates and commits them.
+- Offline provider conformance fixtures for malformed output, prompt injection,
+  alias drift, outage, throttling, duplicate delivery, timeout, cancellation,
+  budget exhaustion, partial results, and restart recovery.
+- A separate manually authorized live-provider exhibition protocol that records
+  provider, concrete model, prompt and contract digests, date, cost, raw artifacts,
+  and limitations without becoming an offline release dependency.
+
+Exit gate:
+
+A user can launch one bounded research topology through the operator surface and
+obtain a restart-safe, budget-bounded, evidence-bound dossier with preserved
+dissent and complete provider/effect receipts. Deterministic offline gates prove
+the contract; any live-provider run is reported honestly as an exhibition unless
+the frozen P7 plan defines a replicated evaluation protocol.
+
+P7 scope must be frozen in a distinct `P7_PLAN.md` entry PR before implementation
+claims. Hosted API, managed deployment, full Observatory UI, and broad provider
+quality benchmarking remain out of scope unless that plan explicitly changes the
+boundary through review.
+
 ## Dependency order
 
 ```text
@@ -149,6 +188,7 @@ P1 adapter contracts
   -> P4 cell contracts + lineage
   -> P5 isolated divergence + blind review
   -> P6 broader research topology
+  -> P7 live research loop
 ```
 
 P2 and the non-workflow portions of P3 may proceed in parallel after P1 contract
@@ -170,10 +210,12 @@ cannot become release scope until P2 and P3 pass their exit gates.
 
 ## Next implementation checkpoint
 
-P5 isolated divergence and blind review is complete. P6 broader research topology
-is active under [`P6_PLAN.md`](P6_PLAN.md). The P6 plan freezes its exact entry
-gate, slices, adversarial fixtures, verifier, receipt, release label, and
-stopping condition before implementation claims begin.
+P6 broader research topology is complete. P7 Live Research Loop is next, but no
+P7 implementation contract is frozen. Begin with
+[`docs/handoffs/2026-07-13-p7-live-research-loop.md`](docs/handoffs/2026-07-13-p7-live-research-loop.md),
+then merge a distinct `P7_PLAN.md` that freezes the entry gate, authority boundary,
+slices, adversarial fixtures, verifier, receipt, release label, and stopping
+condition before implementation claims begin.
 
 The read-only visualization track is specified in
 [`docs/OBSERVATORY.md`](docs/OBSERVATORY.md). A high-fidelity shell and 3D
