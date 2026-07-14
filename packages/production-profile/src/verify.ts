@@ -13,6 +13,7 @@ import {
   PostgresActivityEffectStore,
   PostgresLifecycle,
   PostgresModelLineageRepository,
+  PostgresTopologyRepository,
   PostgresResearchCellRepository,
   PostgresWorkState,
   foundationMigrations,
@@ -21,6 +22,10 @@ import {
 import {
   P4_ADMISSION_POLICY_DIGEST,
   P4_ADMISSION_POLICY_VERSION,
+  type TopologyPlanRecord,
+  type TopologyCellRecord,
+  type TopologyCellAttemptRecord,
+  type TopologyBudgetReservationRecord,
 } from '@mammoth/persistence';
 import {
   canonicalDigest,
@@ -133,6 +138,18 @@ export interface P5LifecycleVerification {
   readonly settlementId: string;
   readonly cancellationId: string;
   readonly rejectedCases: readonly string[];
+}
+
+export interface P6LifecycleVerification {
+  readonly schemaVersion: 1;
+  readonly migrationVersion: 7;
+  readonly programId: string;
+  readonly topologyId: string;
+  readonly cellId: string;
+  readonly attemptId: string;
+  readonly reservationId: string;
+  readonly settlementId: string;
+  readonly reconstructedDigest: string;
 }
 
 /** P4 authority gate; deliberately independent from P2 and Temporal/P3. */
@@ -596,6 +613,60 @@ export async function verifyP5Lifecycle(
       settlementId: 'p5-profile-settlement',
       cancellationId: 'p5-profile-cancel-valid',
       rejectedCases,
+    };
+  } finally {
+    if (active) await active.lifecycle.shutdown().catch(() => undefined);
+    await service.stop().catch(() => undefined);
+  }
+}
+
+/** P6 authority gate; writes topology state through the adapter and reconstructs it after restart. */
+export async function verifyP6Lifecycle(
+  config: ProfileConfig,
+): Promise<P6LifecycleVerification> {
+  const service = new NativePostgresService(config);
+  let active:
+    | { lifecycle: PostgresLifecycle; connection: PostgresConnection }
+    | undefined;
+  try {
+    await service.start();
+    active = await connect(service);
+    const migration = await active.connection.query<{
+      version: number;
+      name: string;
+    }>(
+      'select version, name from mammoth_schema_migrations where version = 7 and applied_at is not null',
+    );
+    if (
+      migration.rowCount !== 1 ||
+      Number(migration.rows[0]?.version) !== 7 ||
+      migration.rows[0]?.name !== 'p6_research_topology'
+    ) {
+      throw new Error('P6 migration v7 was not durably applied');
+    }
+    const expected = await seedTopology(active.connection);
+    await active.lifecycle.shutdown();
+    active = undefined;
+    await service.kill();
+    if (await service.ready())
+      throw new Error('P6 forced-kill gate failed: Postgres remained ready');
+
+    await service.start();
+    active = await connect(service);
+    const repo = new PostgresTopologyRepository(active.connection, {
+      transaction: { statementTimeoutMs: 10_000, transactionTimeoutMs: 15_000 },
+    });
+    const reconstructed = await repo.reconstructProgram(expected.programId);
+    return {
+      schemaVersion: 1,
+      migrationVersion: 7,
+      programId: expected.programId,
+      topologyId: expected.plan.id,
+      cellId: expected.cell.id,
+      attemptId: expected.attempt.id,
+      reservationId: expected.reservation.id,
+      settlementId: 'p6-profile-settlement',
+      reconstructedDigest: reconstructed.digest,
     };
   } finally {
     if (active) await active.lifecycle.shutdown().catch(() => undefined);
@@ -1301,6 +1372,102 @@ async function seedCompletedEffect(
     idempotencyKey: 'p2-profile-effect-v1',
     providerReceipt: { acknowledged: true },
   });
+}
+
+async function seedTopology(connection: PostgresConnection): Promise<{
+  readonly programId: string;
+  readonly plan: TopologyPlanRecord;
+  readonly cell: TopologyCellRecord;
+  readonly attempt: TopologyCellAttemptRecord;
+  readonly reservation: TopologyBudgetReservationRecord;
+}> {
+  const digest =
+    'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const now = '2026-07-14T00:00:00.000Z';
+  const budget = { costUsd: 1, tokens: 100, durationMs: 1_000 };
+  const repo = new PostgresTopologyRepository(connection, {
+    transaction: { statementTimeoutMs: 10_000, transactionTimeoutMs: 15_000 },
+  });
+  const plan: TopologyPlanRecord = {
+    id: 'p6-profile-topology',
+    stableIdentity: 'p6-profile-topology-stable',
+    programId: 'p6-profile-program',
+    criterionId: 'p6-profile-criterion',
+    criterionVersion: 1,
+    criterionDigest: digest,
+    topologyPlanVersion: '1.0.0',
+    plannerPolicyVersion: '1.0.0',
+    templateCatalogVersion: '1.0.0',
+    inputDigest: digest,
+    budgetPolicyVersion: '1.0.0',
+    concurrencyLimit: 1,
+    budgetCeiling: budget,
+    planDigest: digest,
+    state: 'idle_no_ready_work',
+    revision: 0,
+    createdAt: now,
+    updatedAt: now,
+    contract: { fixture: 'p6-profile-plan' },
+  };
+  const cell: TopologyCellRecord = {
+    id: 'p6-profile-cell',
+    stableIdentity: 'p6-profile-cell-stable',
+    topologyId: plan.id,
+    programId: plan.programId,
+    nodeId: 'landscape',
+    templateId: 'landscape',
+    templateVersion: '1.0.0',
+    dependencyDigest: digest,
+    workItemContractDigest: digest,
+    criterionId: plan.criterionId,
+    criterionVersion: plan.criterionVersion,
+    criterionDigest: plan.criterionDigest,
+    role: 'retriever',
+    state: 'ready',
+    revision: 0,
+    createdAt: now,
+    updatedAt: now,
+    contract: { fixture: 'p6-profile-cell' },
+  };
+  const attempt: TopologyCellAttemptRecord = {
+    id: 'p6-profile-attempt',
+    stableIdentity: 'p6-profile-attempt-stable',
+    topologyId: plan.id,
+    cellId: cell.id,
+    programId: plan.programId,
+    attempt: 1,
+    childWorkflowId: 'p6-profile-child-workflow',
+    runPartition: 'main',
+    state: 'started',
+    startedAt: now,
+    receiptIds: [],
+  };
+  const reservation: TopologyBudgetReservationRecord = {
+    id: 'p6-profile-reservation',
+    stableIdentity: 'p6-profile-reservation-stable',
+    topologyId: plan.id,
+    cellId: cell.id,
+    attemptId: attempt.id,
+    programId: plan.programId,
+    ceiling: budget,
+    state: 'reserved',
+    revision: 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await repo.recordPlan(plan);
+  await repo.recordCell(cell);
+  await repo.recordAttempt(attempt);
+  await repo.reserveBudget(reservation);
+  await repo.settleBudget({
+    id: 'p6-profile-settlement',
+    stableIdentity: 'p6-profile-settlement-stable',
+    reservationId: reservation.id,
+    amount: { costUsd: 0.5, tokens: 50, durationMs: 500 },
+    settledAt: now,
+    receiptId: 'p6-profile-settlement-receipt',
+  });
+  return { programId: plan.programId, plan, cell, attempt, reservation };
 }
 
 async function connect(

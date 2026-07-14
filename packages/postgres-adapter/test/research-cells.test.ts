@@ -187,11 +187,11 @@ describe('research-cell migration', () => {
       "assignment_reviewer_agent <> new.authoritative_contract->>'reviewerAgentId'",
     );
     expect(foundationMigrations.map(({ version }) => version)).toEqual([
-      1, 2, 3, 4, 5, 6,
+      1, 2, 3, 4, 5, 6, 7,
     ]);
   });
 
-  it('appends the forward-only P5 migration after the P4 migration', () => {
+  it('appends the forward-only P6 migration after the P5 migration', () => {
     expect(foundationMigrations.slice(0, 4).map(({ name }) => name)).toEqual([
       'adapter_foundation',
       'transactional_epistemic_ledger',
@@ -200,8 +200,10 @@ describe('research-cell migration', () => {
     ]);
     expect(foundationMigrations[4]?.name).toBe('research_cell_persistence');
     expect(foundationMigrations[5]?.name).toBe('p5_isolated_divergence');
+    expect(foundationMigrations[6]?.name).toBe('p6_research_topology');
     expect(foundationMigrations[4]?.checksum).toMatch(/^[a-f0-9]{64}$/);
     expect(foundationMigrations[5]?.checksum).toMatch(/^[a-f0-9]{64}$/);
+    expect(foundationMigrations[6]?.checksum).toMatch(/^[a-f0-9]{64}$/);
     expect(foundationMigrations[5]?.sql).toContain(
       'create table mammoth_p5_isolation_commits',
     );
@@ -232,9 +234,28 @@ describe('research-cell migration', () => {
     expect(foundationMigrations[5]?.sql).toContain(
       'P5 cancellation amount exceeds reservation ceiling',
     );
+    expect(foundationMigrations[6]?.sql).toContain(
+      'create table mammoth_p6_topology_plans',
+    );
+    expect(foundationMigrations[6]?.sql).toContain(
+      'create table mammoth_p6_topology_budget_reservations',
+    );
+    expect(foundationMigrations[6]?.sql).toContain(
+      'create table mammoth_p6_topology_scheduler_snapshots',
+    );
+    expect(foundationMigrations[6]?.sql).toContain('idle_no_ready_work');
+    expect(foundationMigrations[6]?.sql).toContain(
+      'P6 topology budget settlement exceeds reservation ceiling',
+    );
+    expect(foundationMigrations[6]?.sql).toContain(
+      'P6 topology budget release cannot follow settlement',
+    );
+    expect(foundationMigrations[6]?.sql).toContain(
+      'P6 topology cancellation amount exceeds reservation ceiling',
+    );
   });
 
-  it('installs P5 research-cell schema on an empty database and is repeatable after restart', async () => {
+  it('installs P6 research-topology schema on an empty database and is repeatable after restart', async () => {
     const database = new FakeMigrationDatabase();
     const runner = new MigrationRunner(
       database,
@@ -245,14 +266,18 @@ describe('research-cell migration', () => {
     const applied = await runner.migrate();
     const repeated = await runner.migrate();
 
-    expect(applied.map((entry) => entry.version)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(repeated.map((entry) => entry.version)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(applied.map((entry) => entry.version)).toEqual([
+      1, 2, 3, 4, 5, 6, 7,
+    ]);
+    expect(repeated.map((entry) => entry.version)).toEqual([
+      1, 2, 3, 4, 5, 6, 7,
+    ]);
     expect(database.executedMigrations).toEqual(
       foundationMigrations.map((migration) => migration.sql),
     );
   });
 
-  it('upgrades from the current P3 schema by executing P4 then P5 migrations', async () => {
+  it('upgrades from the current P3 schema by executing P4, P5, then P6 migrations', async () => {
     const database = new FakeMigrationDatabase();
     const p3Runner = new MigrationRunner(
       database,
@@ -269,32 +294,37 @@ describe('research-cell migration', () => {
     );
     const applied = await p4Runner.migrate();
 
-    expect(applied.map((entry) => entry.version)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(applied.map((entry) => entry.version)).toEqual([
+      1, 2, 3, 4, 5, 6, 7,
+    ]);
     expect(database.executedMigrations).toEqual([
       foundationMigrations[4]?.sql,
       foundationMigrations[5]?.sql,
+      foundationMigrations[6]?.sql,
     ]);
   });
 
-  it('upgrades from the P4 schema by executing only the P5 migration', async () => {
+  it('upgrades from the P5 schema by executing only the P6 migration', async () => {
     const database = new FakeMigrationDatabase();
-    const p4Runner = new MigrationRunner(
+    const p5Runner = new MigrationRunner(
       database,
-      foundationMigrations.slice(0, 5),
+      foundationMigrations.slice(0, 6),
       transaction,
     );
-    await p4Runner.migrate();
+    await p5Runner.migrate();
     database.executedMigrations.length = 0;
 
-    const p5Runner = new MigrationRunner(
+    const p6Runner = new MigrationRunner(
       database,
       foundationMigrations,
       transaction,
     );
-    const applied = await p5Runner.migrate();
+    const applied = await p6Runner.migrate();
 
-    expect(applied.map((entry) => entry.version)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(database.executedMigrations).toEqual([foundationMigrations[5]?.sql]);
+    expect(applied.map((entry) => entry.version)).toEqual([
+      1, 2, 3, 4, 5, 6, 7,
+    ]);
+    expect(database.executedMigrations).toEqual([foundationMigrations[6]?.sql]);
   });
 
   it('preserves interrupted P4 migration residue and fails closed on restart', async () => {

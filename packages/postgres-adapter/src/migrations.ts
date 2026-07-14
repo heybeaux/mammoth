@@ -1230,4 +1230,405 @@ create trigger mammoth_p5_cancellation_receipt_guard
   for each row execute function mammoth_p5_guard_cancellation_receipt();
 `.trim(),
   }),
+  defineMigration({
+    version: 7,
+    name: 'p6_research_topology',
+    sql: `
+create table mammoth_p6_topology_plans (
+  id text primary key,
+  stable_identity text not null unique,
+  program_id text not null,
+  criterion_id text not null,
+  criterion_version integer not null check (criterion_version > 0),
+  criterion_digest text not null check (criterion_digest ~ '^sha256:[0-9a-f]{64}$'),
+  topology_plan_version text not null check (topology_plan_version = '1.0.0'),
+  planner_policy_version text not null check (planner_policy_version = '1.0.0'),
+  template_catalog_version text not null check (template_catalog_version = '1.0.0'),
+  input_digest text not null check (input_digest ~ '^sha256:[0-9a-f]{64}$'),
+  budget_policy_version text not null check (budget_policy_version = '1.0.0'),
+  concurrency_limit integer not null check (concurrency_limit > 0),
+  budget_ceiling jsonb not null,
+  plan_digest text not null check (plan_digest ~ '^sha256:[0-9a-f]{64}$'),
+  state text not null check (state in (
+    'idle_no_ready_work',
+    'blocked_dependency',
+    'budget_starved',
+    'concurrency_saturated',
+    'failed_policy',
+    'cancelled',
+    'complete'
+  )),
+  revision bigint not null check (revision >= 0),
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  authoritative_contract jsonb not null
+);
+
+create table mammoth_p6_topology_cells (
+  id text primary key,
+  stable_identity text not null unique,
+  topology_id text not null references mammoth_p6_topology_plans(id),
+  program_id text not null,
+  node_id text not null,
+  template_id text not null,
+  template_version text not null check (template_version = '1.0.0'),
+  dependency_digest text not null check (dependency_digest ~ '^sha256:[0-9a-f]{64}$'),
+  work_item_contract_digest text not null check (work_item_contract_digest ~ '^sha256:[0-9a-f]{64}$'),
+  criterion_id text not null,
+  criterion_version integer not null check (criterion_version > 0),
+  criterion_digest text not null check (criterion_digest ~ '^sha256:[0-9a-f]{64}$'),
+  role text not null,
+  state text not null check (state in ('planned','ready','running','succeeded','failed','cancelled','blocked')),
+  revision bigint not null check (revision >= 0),
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  authoritative_contract jsonb not null,
+  unique (topology_id, node_id)
+);
+
+create table mammoth_p6_topology_dependencies (
+  id text primary key,
+  topology_id text not null references mammoth_p6_topology_plans(id),
+  program_id text not null,
+  from_cell_id text not null references mammoth_p6_topology_cells(id),
+  to_cell_id text not null references mammoth_p6_topology_cells(id),
+  artifact_kind text not null check (artifact_kind in (
+    'claim_set',
+    'evidence_snapshot',
+    'hypothesis_set',
+    'position_set',
+    'prior_art_record',
+    'falsification_result',
+    'experiment_receipt',
+    'synthesis_input'
+  )),
+  dependency_digest text not null check (dependency_digest ~ '^sha256:[0-9a-f]{64}$'),
+  created_at timestamptz not null,
+  check (from_cell_id <> to_cell_id),
+  unique (topology_id, from_cell_id, to_cell_id, artifact_kind)
+);
+
+create table mammoth_p6_topology_attempts (
+  id text primary key,
+  stable_identity text not null unique,
+  topology_id text not null references mammoth_p6_topology_plans(id),
+  cell_id text not null references mammoth_p6_topology_cells(id),
+  program_id text not null,
+  attempt integer not null check (attempt > 0),
+  child_workflow_id text not null,
+  run_partition text not null,
+  state text not null check (state in ('started','succeeded','failed','cancelled')),
+  started_at timestamptz not null,
+  completed_at timestamptz,
+  partial_result_digest text check (partial_result_digest is null or partial_result_digest ~ '^sha256:[0-9a-f]{64}$'),
+  receipt_ids jsonb not null,
+  unique (cell_id, attempt),
+  unique (child_workflow_id)
+);
+
+create table mammoth_p6_topology_budget_reservations (
+  id text primary key,
+  stable_identity text not null unique,
+  topology_id text not null references mammoth_p6_topology_plans(id),
+  cell_id text not null references mammoth_p6_topology_cells(id),
+  attempt_id text not null references mammoth_p6_topology_attempts(id),
+  program_id text not null,
+  ceiling jsonb not null,
+  state text not null check (state in ('reserved','settled','released','cancelled')),
+  revision bigint not null check (revision >= 0),
+  created_at timestamptz not null,
+  updated_at timestamptz not null
+);
+
+create table mammoth_p6_topology_budget_settlements (
+  id text primary key,
+  stable_identity text not null unique,
+  reservation_id text not null references mammoth_p6_topology_budget_reservations(id),
+  amount jsonb not null,
+  settled_at timestamptz not null,
+  receipt_id text not null unique,
+  unique (reservation_id)
+);
+
+create table mammoth_p6_topology_budget_releases (
+  id text primary key,
+  stable_identity text not null unique,
+  reservation_id text not null references mammoth_p6_topology_budget_reservations(id),
+  released_at timestamptz not null,
+  receipt_id text not null unique,
+  unique (reservation_id)
+);
+
+create table mammoth_p6_topology_cancellation_receipts (
+  id text primary key,
+  stable_identity text not null unique,
+  topology_id text not null references mammoth_p6_topology_plans(id),
+  cell_id text references mammoth_p6_topology_cells(id),
+  attempt_id text references mammoth_p6_topology_attempts(id),
+  reservation_id text references mammoth_p6_topology_budget_reservations(id),
+  program_id text not null,
+  reason text not null,
+  consumed jsonb not null,
+  released jsonb not null,
+  partial_result_digest text check (partial_result_digest is null or partial_result_digest ~ '^sha256:[0-9a-f]{64}$'),
+  cancelled_at timestamptz not null
+);
+
+create table mammoth_p6_topology_scheduler_snapshots (
+  id text primary key,
+  topology_id text not null references mammoth_p6_topology_plans(id),
+  program_id text not null,
+  state text not null check (state in (
+    'idle_no_ready_work',
+    'blocked_dependency',
+    'budget_starved',
+    'concurrency_saturated',
+    'failed_policy',
+    'cancelled',
+    'complete'
+  )),
+  ready_cell_ids jsonb not null,
+  running_cell_ids jsonb not null,
+  blocked_cell_ids jsonb not null,
+  budget_starved_cell_ids jsonb not null,
+  concurrency_limit integer not null check (concurrency_limit > 0),
+  recorded_at timestamptz not null,
+  digest text not null check (digest ~ '^sha256:[0-9a-f]{64}$')
+);
+
+create table mammoth_p6_topology_receipts (
+  id text primary key,
+  stable_identity text not null unique,
+  topology_id text not null references mammoth_p6_topology_plans(id),
+  program_id text not null,
+  kind text not null check (kind in (
+    'plan_committed',
+    'cell_dispatched',
+    'cell_completed',
+    'cell_failed',
+    'budget_reserved',
+    'budget_settled',
+    'budget_released',
+    'cancelled',
+    'reconstructed'
+  )),
+  payload_digest text not null check (payload_digest ~ '^sha256:[0-9a-f]{64}$'),
+  recorded_at timestamptz not null
+);
+
+create index mammoth_p6_topology_plan_program_idx
+  on mammoth_p6_topology_plans (program_id, state);
+create index mammoth_p6_topology_cell_program_idx
+  on mammoth_p6_topology_cells (program_id, topology_id, state);
+create index mammoth_p6_topology_attempt_program_idx
+  on mammoth_p6_topology_attempts (program_id, topology_id, cell_id, attempt);
+create index mammoth_p6_topology_reservation_program_idx
+  on mammoth_p6_topology_budget_reservations (program_id, topology_id, state);
+
+create function mammoth_p6_amount_field(amount jsonb, key text) returns numeric
+language plpgsql
+immutable
+as $$
+begin
+  return (amount ->> key)::numeric;
+end;
+$$;
+
+create function mammoth_p6_require_budget_amount(amount jsonb, label text)
+returns void
+language plpgsql
+as $$
+begin
+  if amount is null
+    or jsonb_typeof(amount) <> 'object'
+    or not amount ? 'costUsd'
+    or not amount ? 'tokens'
+    or not amount ? 'durationMs'
+    or mammoth_p6_amount_field(amount, 'costUsd') < 0
+    or mammoth_p6_amount_field(amount, 'tokens') < 0
+    or mammoth_p6_amount_field(amount, 'durationMs') < 0
+  then
+    raise exception 'P6 invalid budget amount: %', label;
+  end if;
+end;
+$$;
+
+create function mammoth_p6_amount_within_ceiling(amount jsonb, ceiling jsonb)
+returns boolean
+language plpgsql
+immutable
+as $$
+begin
+  return mammoth_p6_amount_field(amount, 'costUsd') <= mammoth_p6_amount_field(ceiling, 'costUsd')
+    and mammoth_p6_amount_field(amount, 'tokens') <= mammoth_p6_amount_field(ceiling, 'tokens')
+    and mammoth_p6_amount_field(amount, 'durationMs') <= mammoth_p6_amount_field(ceiling, 'durationMs');
+end;
+$$;
+
+create function mammoth_p6_amount_pair_within_ceiling(left_amount jsonb, right_amount jsonb, ceiling jsonb)
+returns boolean
+language plpgsql
+immutable
+as $$
+begin
+  return mammoth_p6_amount_field(left_amount, 'costUsd') + mammoth_p6_amount_field(right_amount, 'costUsd') <= mammoth_p6_amount_field(ceiling, 'costUsd')
+    and mammoth_p6_amount_field(left_amount, 'tokens') + mammoth_p6_amount_field(right_amount, 'tokens') <= mammoth_p6_amount_field(ceiling, 'tokens')
+    and mammoth_p6_amount_field(left_amount, 'durationMs') + mammoth_p6_amount_field(right_amount, 'durationMs') <= mammoth_p6_amount_field(ceiling, 'durationMs');
+end;
+$$;
+
+create function mammoth_p6_guard_budget_reservation_insert()
+returns trigger
+language plpgsql
+as $$
+declare
+  attempt_record record;
+begin
+  perform mammoth_p6_require_budget_amount(new.ceiling, 'topology reservation ceiling');
+  select topology_id, cell_id, program_id into attempt_record
+    from mammoth_p6_topology_attempts
+   where id = new.attempt_id;
+  if attempt_record is null then
+    raise exception 'P6 topology reservation attempt is missing';
+  end if;
+  if attempt_record.topology_id <> new.topology_id
+    or attempt_record.cell_id <> new.cell_id
+    or attempt_record.program_id <> new.program_id
+  then
+    raise exception 'P6 topology reservation attempt mismatch';
+  end if;
+  if new.state <> 'reserved' or new.revision <> 0 then
+    raise exception 'P6 topology budget reservation must start reserved at revision zero';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p6_topology_budget_reservation_insert_guard
+  before insert on mammoth_p6_topology_budget_reservations
+  for each row execute function mammoth_p6_guard_budget_reservation_insert();
+
+create function mammoth_p6_guard_budget_reservation_update()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.id <> new.id
+    or old.stable_identity <> new.stable_identity
+    or old.topology_id <> new.topology_id
+    or old.cell_id <> new.cell_id
+    or old.attempt_id <> new.attempt_id
+    or old.program_id <> new.program_id
+    or old.ceiling <> new.ceiling
+    or old.created_at <> new.created_at
+  then
+    raise exception 'P6 topology budget reservation identity fields are immutable';
+  end if;
+  if old.state <> 'reserved' then
+    raise exception 'P6 terminal topology budget reservation cannot change';
+  end if;
+  if new.state not in ('settled','released','cancelled')
+    or new.revision <> old.revision + 1
+  then
+    raise exception 'P6 topology budget reservation transition is invalid';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p6_topology_budget_reservation_update_guard
+  before update on mammoth_p6_topology_budget_reservations
+  for each row execute function mammoth_p6_guard_budget_reservation_update();
+
+create function mammoth_p6_guard_budget_settlement()
+returns trigger
+language plpgsql
+as $$
+declare
+  reservation_record record;
+begin
+  perform mammoth_p6_require_budget_amount(new.amount, 'topology settlement');
+  select ceiling, state into reservation_record
+    from mammoth_p6_topology_budget_reservations
+   where id = new.reservation_id;
+  if reservation_record is null then
+    raise exception 'P6 topology budget settlement reservation is missing';
+  end if;
+  if reservation_record.state <> 'reserved' then
+    raise exception 'P6 topology budget settlement requires an unsettled reservation';
+  end if;
+  if not mammoth_p6_amount_within_ceiling(new.amount, reservation_record.ceiling) then
+    raise exception 'P6 topology budget settlement exceeds reservation ceiling';
+  end if;
+  if exists (
+    select 1 from mammoth_p6_topology_budget_releases where reservation_id = new.reservation_id
+  ) then
+    raise exception 'P6 topology budget settlement cannot follow release';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p6_topology_budget_settlement_guard
+  before insert on mammoth_p6_topology_budget_settlements
+  for each row execute function mammoth_p6_guard_budget_settlement();
+
+create function mammoth_p6_guard_budget_release()
+returns trigger
+language plpgsql
+as $$
+declare
+  reservation_record record;
+begin
+  select state into reservation_record
+    from mammoth_p6_topology_budget_reservations
+   where id = new.reservation_id;
+  if reservation_record is null then
+    raise exception 'P6 topology budget release reservation is missing';
+  end if;
+  if reservation_record.state <> 'reserved' then
+    raise exception 'P6 topology budget release requires an unsettled reservation';
+  end if;
+  if exists (
+    select 1 from mammoth_p6_topology_budget_settlements where reservation_id = new.reservation_id
+  ) then
+    raise exception 'P6 topology budget release cannot follow settlement';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p6_topology_budget_release_guard
+  before insert on mammoth_p6_topology_budget_releases
+  for each row execute function mammoth_p6_guard_budget_release();
+
+create function mammoth_p6_guard_cancellation_receipt()
+returns trigger
+language plpgsql
+as $$
+declare
+  reservation_record record;
+begin
+  perform mammoth_p6_require_budget_amount(new.consumed, 'topology cancellation consumed');
+  perform mammoth_p6_require_budget_amount(new.released, 'topology cancellation released');
+  if new.reservation_id is not null then
+    select ceiling into reservation_record
+      from mammoth_p6_topology_budget_reservations
+     where id = new.reservation_id;
+    if reservation_record is null then
+      raise exception 'P6 topology cancellation reservation is missing';
+    end if;
+    if not mammoth_p6_amount_pair_within_ceiling(new.consumed, new.released, reservation_record.ceiling) then
+      raise exception 'P6 topology cancellation amount exceeds reservation ceiling';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger mammoth_p6_topology_cancellation_receipt_guard
+  before insert on mammoth_p6_topology_cancellation_receipts
+  for each row execute function mammoth_p6_guard_cancellation_receipt();
+`.trim(),
+  }),
 ]);
