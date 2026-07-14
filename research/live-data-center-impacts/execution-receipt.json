@@ -1,1 +1,62 @@
-{"briefDigest":"sha256:efd072f2df80792eb62d914ee4fb540801ef006fe2179e87bc47fb5375f34ef1","charterDigest":"sha256:1f91bc3d45d9c890126f4e2526c1fd0557c9565f6dc711c7f05f4737db07b67a","contractFamily":"p8.v1","costs":{"budgetUsd":20,"bytes":4708396,"currencyUsd":0.018,"provider":"brave-search/v1 + governed http acquisition + deterministic local compiler","retrievalRequests":17,"searchRequests":6,"tokens":0},"coverageDigest":"sha256:991ae61a500b54ea2bd3d2a455e5f381c91fc0678704235e14bb0ac0de1967ac","cycles":[{"decision":"continue","id":"cycle-1","reason":"live follow-up required for coverage and dissent checks"},{"decision":"stop","id":"cycle-2","reason":"mandatory topics sufficient or explicitly accounted after live follow-up"}],"depth":"comprehensive","generatedAt":"2026-07-14T20:34:04.475Z","limitations":["search snippets excluded from evidence","live public-web coverage bounded by configured budget"],"liveSearchProvider":{"billingAuthorization":"authorized","credential":"present-redacted","provider":"Brave Search API"},"mode":"report","outputDirectory":"/private/tmp/mammoth-p8-integration/research/live-data-center-impacts","question":"What impacts do data centers have on the communities and environment around them?","reportManifestDigest":"sha256:427c5e9e10bb98e1ad6af41b00fedf2a13ca62900dbed8b1e9509f9275f95b57","requiredFiles":["report.md","report.html","executive-summary.md","sources.json","bibliography.md","report-manifest.json","coverage.json","unresolved.json","execution-receipt.json"],"runId":"p8-run:427c5e9e10bb98e1","schemaVersion":"1.0.0","status":"completed","stopReason":"sufficiency_reached","unresolvedDigest":"sha256:6f50799152a1374674bd8d823a725b47d16683efe18884f24b65fd9900cf44ff","verificationCommands":["pnpm verify:p8","pnpm mammoth research inspect /private/tmp/mammoth-p8-integration/research/live-data-center-impacts"]}
+{
+  "briefDigest": "sha256:efd072f2df80792eb62d914ee4fb540801ef006fe2179e87bc47fb5375f34ef1",
+  "charterDigest": "sha256:1f91bc3d45d9c890126f4e2526c1fd0557c9565f6dc711c7f05f4737db07b67a",
+  "contractFamily": "p8.v1",
+  "costs": {
+    "budgetUsd": 20,
+    "bytes": 4708396,
+    "currencyUsd": 0.018,
+    "provider": "brave-search/v1 + governed http acquisition + deterministic local compiler",
+    "retrievalRequests": 17,
+    "searchRequests": 6,
+    "tokens": 0
+  },
+  "coverageDigest": "sha256:991ae61a500b54ea2bd3d2a455e5f381c91fc0678704235e14bb0ac0de1967ac",
+  "cycles": [
+    {
+      "decision": "continue",
+      "id": "cycle-1",
+      "reason": "live follow-up required for coverage and dissent checks"
+    },
+    {
+      "decision": "stop",
+      "id": "cycle-2",
+      "reason": "mandatory topics sufficient or explicitly accounted after live follow-up"
+    }
+  ],
+  "depth": "comprehensive",
+  "generatedAt": "2026-07-14T20:34:04.475Z",
+  "limitations": [
+    "search snippets excluded from evidence",
+    "live public-web coverage bounded by configured budget"
+  ],
+  "liveSearchProvider": {
+    "billingAuthorization": "authorized",
+    "credential": "present-redacted",
+    "provider": "Brave Search API"
+  },
+  "mode": "report",
+  "outputDirectory": "/private/tmp/mammoth-p8-integration/research/live-data-center-impacts",
+  "question": "What impacts do data centers have on the communities and environment around them?",
+  "reportManifestDigest": "sha256:427c5e9e10bb98e1ad6af41b00fedf2a13ca62900dbed8b1e9509f9275f95b57",
+  "requiredFiles": [
+    "report.md",
+    "report.html",
+    "executive-summary.md",
+    "sources.json",
+    "bibliography.md",
+    "report-manifest.json",
+    "coverage.json",
+    "unresolved.json",
+    "execution-receipt.json"
+  ],
+  "runId": "p8-run:427c5e9e10bb98e1",
+  "schemaVersion": "1.0.0",
+  "status": "completed",
+  "stopReason": "sufficiency_reached",
+  "unresolvedDigest": "sha256:6f50799152a1374674bd8d823a725b47d16683efe18884f24b65fd9900cf44ff",
+  "verificationCommands": [
+    "pnpm verify:p8",
+    "pnpm mammoth research inspect /private/tmp/mammoth-p8-integration/research/live-data-center-impacts"
+  ]
+}

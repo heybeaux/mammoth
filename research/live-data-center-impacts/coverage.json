@@ -1,1 +1,206 @@
-{"cycles":[{"decision":"continue","id":"cycle-1","reason":"housing-services gap below frozen sufficiency threshold"},{"decision":"stop","id":"cycle-2","reason":"mandatory topics sufficient or explicitly accounted after follow-up"}],"mandatoryTopics":[{"admittedSupportingClaims":4,"claimIds":["claim-electricity-grid-live-belfercenter-org-2943500c8e","claim-electricity-grid-live-stateimpactcenter-org-134751669c","claim-electricity-grid-live-energy-gov-08148fbea6","claim-electricity-grid-live-eesi-org-43f4436b46"],"independentSourceFamilies":["belfercenter-org","stateimpactcenter-org","energy-gov","eesi-org"],"status":"sufficient","title":"Electricity demand, grid capacity, reliability, rates, and generation mix","topicId":"electricity-grid"},{"admittedSupportingClaims":3,"claimIds":["claim-ghg-emissions-live-nih-gov-050055ecca","claim-ghg-emissions-live-msci-com-e9b400d8d6","claim-ghg-emissions-live-weforum-org-efbbb5c6a1"],"independentSourceFamilies":["nih-gov","msci-com","weforum-org"],"status":"sufficient","title":"Operational and embodied greenhouse-gas emissions","topicId":"ghg-emissions"},{"admittedSupportingClaims":4,"claimIds":["claim-water-live-eesi-org-bec8ea01d4","claim-water-live-uga-edu-69cc36a64d","claim-water-live-akcp-com-0b184c7d39","claim-water-live-fwpcoa-org-f5c5166a38"],"independentSourceFamilies":["eesi-org","uga-edu","akcp-com","fwpcoa-org"],"status":"sufficient","title":"Water withdrawal/consumption, cooling, drought stress, and thermal effects","topicId":"water"},{"admittedSupportingClaims":2,"claimIds":["claim-land-materials-live-belfercenter-org-2943500c8e","claim-land-materials-live-stateimpactcenter-org-134751669c"],"independentSourceFamilies":["belfercenter-org","stateimpactcenter-org"],"status":"sufficient","title":"Land use, habitat, construction disturbance, materials, and e-waste","topicId":"land-materials"},{"admittedSupportingClaims":4,"claimIds":["claim-local-pollution-live-eesi-org-0d574d148f","claim-local-pollution-live-usnews-com-13a2d7bacd","claim-local-pollution-live-environmentalhealthproject-org-636b97f437","claim-local-pollution-live-theconversation-com-8a81b0f41b"],"independentSourceFamilies":["eesi-org","usnews-com","environmentalhealthproject-org","theconversation-com"],"status":"sufficient","title":"Local air pollution, backup generation, noise, traffic, and visual impacts","topicId":"local-pollution"},{"admittedSupportingClaims":5,"claimIds":["claim-economic-benefits-live-eesi-org-0d574d148f","claim-economic-benefits-live-usnews-com-13a2d7bacd","claim-economic-benefits-live-environmentalhealthproject-org-636b97f437","claim-economic-benefits-live-theconversation-com-8a81b0f41b","claim-economic-benefits-live-datacentercoalition-org-46a7b53f32"],"independentSourceFamilies":["eesi-org","usnews-com","environmentalhealthproject-org","theconversation-com","datacentercoalition-org"],"status":"sufficient","title":"Employment, taxes, infrastructure investment, and economic benefits","topicId":"economic-benefits"},{"admittedSupportingClaims":5,"claimIds":["claim-housing-services-live-belfercenter-org-2943500c8e","claim-housing-services-live-stateimpactcenter-org-134751669c","claim-housing-services-live-energy-gov-08148fbea6","claim-housing-services-live-eesi-org-43f4436b46","claim-housing-services-live-datacentercoalition-org-46a7b53f32"],"independentSourceFamilies":["belfercenter-org","stateimpactcenter-org","energy-gov","eesi-org","datacentercoalition-org"],"status":"sufficient","title":"Housing, public services, utility allocation, and opportunity costs","topicId":"housing-services"},{"admittedSupportingClaims":2,"claimIds":["claim-environmental-justice-live-belfercenter-org-2943500c8e","claim-environmental-justice-live-stateimpactcenter-org-134751669c"],"independentSourceFamilies":["belfercenter-org","stateimpactcenter-org"],"status":"sufficient","title":"Environmental justice, Indigenous/local participation, siting, and governance","topicId":"environmental-justice"},{"admittedSupportingClaims":7,"claimIds":["claim-variation-live-eesi-org-bec8ea01d4","claim-variation-live-uga-edu-69cc36a64d","claim-variation-live-akcp-com-0b184c7d39","claim-variation-live-fwpcoa-org-f5c5166a38","claim-variation-live-nih-gov-050055ecca","claim-variation-live-msci-com-e9b400d8d6","claim-variation-live-weforum-org-efbbb5c6a1"],"independentSourceFamilies":["eesi-org","uga-edu","akcp-com","fwpcoa-org","nih-gov","msci-com","weforum-org"],"status":"sufficient","title":"Variation by facility type, climate, grid, cooling design, scale, and lifecycle","topicId":"variation"},{"admittedSupportingClaims":11,"claimIds":["claim-mitigation-policy-live-belfercenter-org-2943500c8e","claim-mitigation-policy-live-stateimpactcenter-org-134751669c","claim-mitigation-policy-live-energy-gov-08148fbea6","claim-mitigation-policy-live-eesi-org-43f4436b46","claim-mitigation-policy-live-eesi-org-bec8ea01d4","claim-mitigation-policy-live-uga-edu-69cc36a64d","claim-mitigation-policy-live-akcp-com-0b184c7d39","claim-mitigation-policy-live-fwpcoa-org-f5c5166a38","claim-mitigation-policy-live-nih-gov-050055ecca","claim-mitigation-policy-live-msci-com-e9b400d8d6","claim-mitigation-policy-live-weforum-org-efbbb5c6a1"],"independentSourceFamilies":["belfercenter-org","stateimpactcenter-org","energy-gov","eesi-org","uga-edu","akcp-com","fwpcoa-org","nih-gov","msci-com","weforum-org"],"status":"sufficient","title":"Mitigation, trade-offs, policy options, disputed findings, and evidence gaps","topicId":"mitigation-policy"}],"schemaVersion":"1.0.0"}
+{
+  "cycles": [
+    {
+      "decision": "continue",
+      "id": "cycle-1",
+      "reason": "housing-services gap below frozen sufficiency threshold"
+    },
+    {
+      "decision": "stop",
+      "id": "cycle-2",
+      "reason": "mandatory topics sufficient or explicitly accounted after follow-up"
+    }
+  ],
+  "mandatoryTopics": [
+    {
+      "admittedSupportingClaims": 4,
+      "claimIds": [
+        "claim-electricity-grid-live-belfercenter-org-2943500c8e",
+        "claim-electricity-grid-live-stateimpactcenter-org-134751669c",
+        "claim-electricity-grid-live-energy-gov-08148fbea6",
+        "claim-electricity-grid-live-eesi-org-43f4436b46"
+      ],
+      "independentSourceFamilies": [
+        "belfercenter-org",
+        "stateimpactcenter-org",
+        "energy-gov",
+        "eesi-org"
+      ],
+      "status": "sufficient",
+      "title": "Electricity demand, grid capacity, reliability, rates, and generation mix",
+      "topicId": "electricity-grid"
+    },
+    {
+      "admittedSupportingClaims": 3,
+      "claimIds": [
+        "claim-ghg-emissions-live-nih-gov-050055ecca",
+        "claim-ghg-emissions-live-msci-com-e9b400d8d6",
+        "claim-ghg-emissions-live-weforum-org-efbbb5c6a1"
+      ],
+      "independentSourceFamilies": ["nih-gov", "msci-com", "weforum-org"],
+      "status": "sufficient",
+      "title": "Operational and embodied greenhouse-gas emissions",
+      "topicId": "ghg-emissions"
+    },
+    {
+      "admittedSupportingClaims": 4,
+      "claimIds": [
+        "claim-water-live-eesi-org-bec8ea01d4",
+        "claim-water-live-uga-edu-69cc36a64d",
+        "claim-water-live-akcp-com-0b184c7d39",
+        "claim-water-live-fwpcoa-org-f5c5166a38"
+      ],
+      "independentSourceFamilies": [
+        "eesi-org",
+        "uga-edu",
+        "akcp-com",
+        "fwpcoa-org"
+      ],
+      "status": "sufficient",
+      "title": "Water withdrawal/consumption, cooling, drought stress, and thermal effects",
+      "topicId": "water"
+    },
+    {
+      "admittedSupportingClaims": 2,
+      "claimIds": [
+        "claim-land-materials-live-belfercenter-org-2943500c8e",
+        "claim-land-materials-live-stateimpactcenter-org-134751669c"
+      ],
+      "independentSourceFamilies": [
+        "belfercenter-org",
+        "stateimpactcenter-org"
+      ],
+      "status": "sufficient",
+      "title": "Land use, habitat, construction disturbance, materials, and e-waste",
+      "topicId": "land-materials"
+    },
+    {
+      "admittedSupportingClaims": 4,
+      "claimIds": [
+        "claim-local-pollution-live-eesi-org-0d574d148f",
+        "claim-local-pollution-live-usnews-com-13a2d7bacd",
+        "claim-local-pollution-live-environmentalhealthproject-org-636b97f437",
+        "claim-local-pollution-live-theconversation-com-8a81b0f41b"
+      ],
+      "independentSourceFamilies": [
+        "eesi-org",
+        "usnews-com",
+        "environmentalhealthproject-org",
+        "theconversation-com"
+      ],
+      "status": "sufficient",
+      "title": "Local air pollution, backup generation, noise, traffic, and visual impacts",
+      "topicId": "local-pollution"
+    },
+    {
+      "admittedSupportingClaims": 5,
+      "claimIds": [
+        "claim-economic-benefits-live-eesi-org-0d574d148f",
+        "claim-economic-benefits-live-usnews-com-13a2d7bacd",
+        "claim-economic-benefits-live-environmentalhealthproject-org-636b97f437",
+        "claim-economic-benefits-live-theconversation-com-8a81b0f41b",
+        "claim-economic-benefits-live-datacentercoalition-org-46a7b53f32"
+      ],
+      "independentSourceFamilies": [
+        "eesi-org",
+        "usnews-com",
+        "environmentalhealthproject-org",
+        "theconversation-com",
+        "datacentercoalition-org"
+      ],
+      "status": "sufficient",
+      "title": "Employment, taxes, infrastructure investment, and economic benefits",
+      "topicId": "economic-benefits"
+    },
+    {
+      "admittedSupportingClaims": 5,
+      "claimIds": [
+        "claim-housing-services-live-belfercenter-org-2943500c8e",
+        "claim-housing-services-live-stateimpactcenter-org-134751669c",
+        "claim-housing-services-live-energy-gov-08148fbea6",
+        "claim-housing-services-live-eesi-org-43f4436b46",
+        "claim-housing-services-live-datacentercoalition-org-46a7b53f32"
+      ],
+      "independentSourceFamilies": [
+        "belfercenter-org",
+        "stateimpactcenter-org",
+        "energy-gov",
+        "eesi-org",
+        "datacentercoalition-org"
+      ],
+      "status": "sufficient",
+      "title": "Housing, public services, utility allocation, and opportunity costs",
+      "topicId": "housing-services"
+    },
+    {
+      "admittedSupportingClaims": 2,
+      "claimIds": [
+        "claim-environmental-justice-live-belfercenter-org-2943500c8e",
+        "claim-environmental-justice-live-stateimpactcenter-org-134751669c"
+      ],
+      "independentSourceFamilies": [
+        "belfercenter-org",
+        "stateimpactcenter-org"
+      ],
+      "status": "sufficient",
+      "title": "Environmental justice, Indigenous/local participation, siting, and governance",
+      "topicId": "environmental-justice"
+    },
+    {
+      "admittedSupportingClaims": 7,
+      "claimIds": [
+        "claim-variation-live-eesi-org-bec8ea01d4",
+        "claim-variation-live-uga-edu-69cc36a64d",
+        "claim-variation-live-akcp-com-0b184c7d39",
+        "claim-variation-live-fwpcoa-org-f5c5166a38",
+        "claim-variation-live-nih-gov-050055ecca",
+        "claim-variation-live-msci-com-e9b400d8d6",
+        "claim-variation-live-weforum-org-efbbb5c6a1"
+      ],
+      "independentSourceFamilies": [
+        "eesi-org",
+        "uga-edu",
+        "akcp-com",
+        "fwpcoa-org",
+        "nih-gov",
+        "msci-com",
+        "weforum-org"
+      ],
+      "status": "sufficient",
+      "title": "Variation by facility type, climate, grid, cooling design, scale, and lifecycle",
+      "topicId": "variation"
+    },
+    {
+      "admittedSupportingClaims": 11,
+      "claimIds": [
+        "claim-mitigation-policy-live-belfercenter-org-2943500c8e",
+        "claim-mitigation-policy-live-stateimpactcenter-org-134751669c",
+        "claim-mitigation-policy-live-energy-gov-08148fbea6",
+        "claim-mitigation-policy-live-eesi-org-43f4436b46",
+        "claim-mitigation-policy-live-eesi-org-bec8ea01d4",
+        "claim-mitigation-policy-live-uga-edu-69cc36a64d",
+        "claim-mitigation-policy-live-akcp-com-0b184c7d39",
+        "claim-mitigation-policy-live-fwpcoa-org-f5c5166a38",
+        "claim-mitigation-policy-live-nih-gov-050055ecca",
+        "claim-mitigation-policy-live-msci-com-e9b400d8d6",
+        "claim-mitigation-policy-live-weforum-org-efbbb5c6a1"
+      ],
+      "independentSourceFamilies": [
+        "belfercenter-org",
+        "stateimpactcenter-org",
+        "energy-gov",
+        "eesi-org",
+        "uga-edu",
+        "akcp-com",
+        "fwpcoa-org",
+        "nih-gov",
+        "msci-com",
+        "weforum-org"
+      ],
+      "status": "sufficient",
+      "title": "Mitigation, trade-offs, policy options, disputed findings, and evidence gaps",
+      "topicId": "mitigation-policy"
+    }
+  ],
+  "schemaVersion": "1.0.0"
+}
