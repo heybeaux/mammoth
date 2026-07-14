@@ -103,3 +103,6 @@ jobs:
 
       - name: Verify P7 live research loop
         run: pnpm verify:p7
+
+      - name: Verify P8 turnkey research
+        run: pnpm verify:p8
