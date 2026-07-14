@@ -2,22 +2,22 @@
 
 ## Mission and authority
 
-Build Mammoth from the completed `v0.4.0-research-cell-contracts` baseline through
-the active `v0.5.0-isolated-divergence` checkpoint in `P5_PLAN.md`.
+Build Mammoth from the completed `v0.5.0-isolated-divergence` baseline toward
+the next P6 broader research topology checkpoint in `POST_MVP_ROADMAP.md`.
 `ARCHITECTURE.md` is the normative architecture, `POST_MVP_ROADMAP.md` defines
-long-range sequencing, `P5_PLAN.md` defines the current acceptance contract,
+long-range sequencing, `P5_PLAN.md` records the completed P5 acceptance contract,
 `docs/OBSERVATORY.md` defines the read-only visualization direction, and
 `LOOP.md` defines team execution. Preserve architecture invariants if wording
 conflicts and record the conflict instead of weakening a gate.
 
-Workers may inspect, implement, test, commit, push, open or review pull requests,
-repair CI, and merge accepted work without human confirmation until the checkpoint.
-Do not send routine progress to Beaux. Contact him only when the P5 stopping
-condition is met or an escalation condition in `LOOP.md` is unavoidable.
+Workers may inspect, plan, implement, test, commit, push, open or review pull
+requests, repair CI, and merge accepted work without human confirmation when the
+active checkpoint contract allows it. Do not claim P6 completion until a P6 plan
+freezes its acceptance contract and the required receipt is merged.
 
 ## Before taking work
 
-Read this file, `P5_PLAN.md`, `POST_MVP_ROADMAP.md`, `LOOP.md`, the P4 release
+Read this file, `P5_PLAN.md`, `POST_MVP_ROADMAP.md`, `LOOP.md`, the P5 release
 receipt, the P4-P6 handover, the relevant package tests, and `ARCHITECTURE.md`
 sections 6, 11, 13-18, 23-24, 28, 31-33, 38, and 40-44. Read
 `docs/OBSERVATORY.md` for projection work. Every
@@ -178,6 +178,6 @@ tests and results / risks or unverified areas / blockers / next task
 ```
 
 An item is done only when its acceptance evidence exists, tests and docs are
-updated, required gates pass, the change is merged, and `P5_PLAN.md` or the P5
+updated, required gates pass, the change is merged, and the active plan or
 receipt reflects reality. Do not stop because one task or PR is done; claim the
-next unblocked P5 item and continue until the checkpoint is proven.
+next unblocked checkpoint item and continue until the checkpoint is proven.
