@@ -453,6 +453,16 @@ function jsonObject(value: unknown): unknown {
   return typeof value === 'string' ? JSON.parse(value) : value;
 }
 
+function toIsoTimestamp(value: unknown, field: string): string {
+  if (typeof value === 'string' || value instanceof Date)
+    return new Date(value).toISOString();
+  throw new PostgresAdapterError(
+    'invalid_migration_set',
+    `P6 topology row field ${field} is not a timestamp`,
+    { retryable: false },
+  );
+}
+
 function toTopologyPlan(row: Record<string, unknown>): TopologyPlanRecord {
   return TopologyPlanRecordSchema.parse({
     id: row.id,
@@ -528,10 +538,10 @@ function toTopologyAttempt(
     childWorkflowId: row.child_workflow_id,
     runPartition: row.run_partition,
     state: row.state,
-    startedAt: new Date(String(row.started_at)).toISOString(),
+    startedAt: toIsoTimestamp(row.started_at, 'started_at'),
     ...(row.completed_at === null
       ? {}
-      : { completedAt: new Date(String(row.completed_at)).toISOString() }),
+      : { completedAt: toIsoTimestamp(row.completed_at, 'completed_at') }),
     ...(row.partial_result_digest === null
       ? {}
       : { partialResultDigest: row.partial_result_digest }),

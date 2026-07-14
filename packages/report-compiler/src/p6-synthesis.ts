@@ -206,12 +206,6 @@ export function validateP6SynthesisManifest(
           message: `sentence ${sentence.sentenceId} references missing consensus descriptor`,
           sentenceId: sentence.sentenceId,
         });
-      } else if (descriptor.nonAuthoritative !== true) {
-        issues.push({
-          code: 'AUTHORITATIVE_CONSENSUS',
-          message: `sentence ${sentence.sentenceId} attempts to use consensus as authority`,
-          sentenceId: sentence.sentenceId,
-        });
       }
     }
     for (const receiptId of sentence.experimentReceiptIds) {

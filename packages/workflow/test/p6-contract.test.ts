@@ -118,7 +118,7 @@ describe('P6 topology workflow contracts', () => {
         ...carry,
         receiptIds: Array.from(
           { length: 33 },
-          (_, index) => `receipt-${index}`,
+          (_, index) => `receipt-${String(index)}`,
         ),
       }),
     ).toThrow('P6 continue-as-new carry has too many receipts');

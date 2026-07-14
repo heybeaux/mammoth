@@ -257,6 +257,7 @@ function validateP6TopologyProjection(source: P6TopologyProjectionInput): void {
 function cellWithoutRecordDigest(
   cell: P6TopologyProjectionInput['cells'][number],
 ): Omit<P6TopologyProjectionInput['cells'][number], 'recordDigest'> {
-  const { recordDigest: _recordDigest, ...withoutDigest } = cell;
+  const { recordDigest, ...withoutDigest } = cell;
+  void recordDigest;
   return withoutDigest;
 }

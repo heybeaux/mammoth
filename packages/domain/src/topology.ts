@@ -792,7 +792,7 @@ export const DEFAULT_P6_TOPOLOGY_PLANNER_POLICY: TopologyPlannerPolicy = {
 };
 
 function makeDefaultCatalog(): CellTemplateCatalog {
-  const digestA = `sha256:${'1'.repeat(64)}` as Digest;
+  const digestA = `sha256:${'1'.repeat(64)}`;
   const entries: CellTemplateCatalogEntry[] = [
     {
       id: 'p6-landscape',
@@ -820,7 +820,7 @@ function makeDefaultCatalog(): CellTemplateCatalog {
         minimumCount: 2,
         schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
       },
-      promptTemplateDigest: `sha256:${'2'.repeat(64)}` as Digest,
+      promptTemplateDigest: `sha256:${'2'.repeat(64)}`,
       allowedInputKinds: ['claim', 'evidence', 'hypothesis', 'artifact'],
       stageOrder: 1,
     },
@@ -835,7 +835,7 @@ function makeDefaultCatalog(): CellTemplateCatalog {
         minimumCount: 1,
         schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
       },
-      promptTemplateDigest: `sha256:${'3'.repeat(64)}` as Digest,
+      promptTemplateDigest: `sha256:${'3'.repeat(64)}`,
       allowedInputKinds: ['claim', 'evidence', 'hypothesis', 'artifact'],
       stageOrder: 2,
     },
@@ -849,7 +849,7 @@ function makeDefaultCatalog(): CellTemplateCatalog {
         kind: 'dissent',
         schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
       },
-      promptTemplateDigest: `sha256:${'4'.repeat(64)}` as Digest,
+      promptTemplateDigest: `sha256:${'4'.repeat(64)}`,
       allowedInputKinds: ['claim', 'evidence', 'hypothesis', 'artifact'],
       stageOrder: 3,
     },
@@ -864,7 +864,7 @@ function makeDefaultCatalog(): CellTemplateCatalog {
         minimumCount: 1,
         schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
       },
-      promptTemplateDigest: `sha256:${'5'.repeat(64)}` as Digest,
+      promptTemplateDigest: `sha256:${'5'.repeat(64)}`,
       allowedInputKinds: ['hypothesis', 'artifact', 'evidence'],
       stageOrder: 4,
     },
@@ -879,7 +879,7 @@ function makeDefaultCatalog(): CellTemplateCatalog {
         allowedClaimIds: [],
         schemaVersion: RESEARCH_CELL_CONTRACT_VERSION,
       },
-      promptTemplateDigest: `sha256:${'6'.repeat(64)}` as Digest,
+      promptTemplateDigest: `sha256:${'6'.repeat(64)}`,
       allowedInputKinds: ['claim', 'evidence', 'hypothesis', 'artifact'],
       stageOrder: 5,
     },
