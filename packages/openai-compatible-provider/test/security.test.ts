@@ -21,6 +21,7 @@ describe('provider destination policy', () => {
     '169.254.169.254',
     '172.16.0.1',
     '192.168.0.1',
+    '192.88.99.1',
     '198.18.0.1',
     '224.0.0.1',
     '::',
@@ -28,10 +29,22 @@ describe('provider destination policy', () => {
     'fc00::1',
     'fe80::1',
     'ff00::1',
+    '100::1',
+    '2001:2::1',
+    '2002:a00:1::1',
+    '3fff::1',
+    '5f00::1',
     '::ffff:169.254.169.254',
   ])('blocks non-public address %s in governed mode', (address) => {
     expect(isForbiddenProviderAddress(address)).toBe(true);
   });
+
+  it.each(['2001:4860:4860::8888', '2606:4700:4700::1111'])(
+    'permits ordinary global-unicast address %s in governed mode',
+    (address) => {
+      expect(isForbiddenProviderAddress(address)).toBe(false);
+    },
+  );
 
   it('permits only all-loopback DNS answers in local mode', async () => {
     await expect(

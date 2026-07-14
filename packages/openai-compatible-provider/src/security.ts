@@ -10,6 +10,8 @@ export interface DestinationPolicy {
 }
 
 const forbidden = new BlockList();
+const publicIpv6 = new BlockList();
+publicIpv6.addSubnet('2000::', 3, 'ipv6');
 for (const [network, prefix] of [
   ['0.0.0.0', 8],
   ['10.0.0.0', 8],
@@ -19,6 +21,7 @@ for (const [network, prefix] of [
   ['172.16.0.0', 12],
   ['192.0.0.0', 24],
   ['192.0.2.0', 24],
+  ['192.88.99.0', 24],
   ['192.168.0.0', 16],
   ['198.18.0.0', 15],
   ['198.51.100.0', 24],
@@ -31,10 +34,13 @@ for (const [network, prefix] of [
 for (const [network, prefix] of [
   ['::', 128],
   ['::1', 128],
+  ['2001::', 23],
   ['fc00::', 7],
   ['fe80::', 10],
   ['ff00::', 8],
   ['2001:db8::', 32],
+  ['2002::', 16],
+  ['3fff::', 20],
 ] as const) {
   forbidden.addSubnet(network, prefix, 'ipv6');
 }
@@ -58,7 +64,10 @@ export function isForbiddenProviderAddress(address: string): boolean {
   if (mapped) return isForbiddenProviderAddress(mapped);
   const family = isIP(address);
   if (family === 4) return forbidden.check(address, 'ipv4');
-  if (family === 6) return forbidden.check(address, 'ipv6');
+  if (family === 6)
+    return (
+      !publicIpv6.check(address, 'ipv6') || forbidden.check(address, 'ipv6')
+    );
   return true;
 }
 
