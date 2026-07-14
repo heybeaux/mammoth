@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0.0",
+  "description": "P6 valid multi-cell topology fixture; executable tests construct canonical digests from the same deterministic graph.",
+  "nodeIds": [
+    "landscape",
+    "divergence",
+    "prior-art",
+    "falsification",
+    "experiment",
+    "synthesis"
+  ],
+  "templateCatalogVersion": "1.0.0",
+  "plannerPolicyVersion": "1.0.0"
+}
