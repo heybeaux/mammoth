@@ -469,7 +469,6 @@ create table mammoth_rejected_audit_residue (
   reason_code text not null,
   policy_version text not null,
   policy_digest text not null check (policy_digest ~ '^sha256:[0-9a-f]{64}$'),
-  policy_evaluation_digest text not null check (policy_evaluation_digest ~ '^sha256:[0-9a-f]{64}$'),
   reason_codes jsonb not null check (
     jsonb_typeof(reason_codes) = 'array' and jsonb_array_length(reason_codes) > 0
   ),
