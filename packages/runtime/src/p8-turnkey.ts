@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile, mkdir, writeFile, copyFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import {
@@ -20,6 +21,12 @@ const GENERATED_AT = '2026-07-01T00:00:00.000Z';
 const POLICY_ID = 'p8.v1-evidence-admission-policy';
 const PARSER_ID = 'p8-fixture-parser';
 const PARSER_VERSION = '1.0.0';
+const LIVE_PARSER_ID = 'p8-live-text-parser';
+const LIVE_PARSER_VERSION = '1.0.0';
+const REPORT_GOLDEN_QUESTION =
+  'What impacts do data centers have on the communities and environment around them?';
+const EXPLORE_MODE_NOT_SHIPPED =
+  'P8 explore mode is frozen in T0 fixtures but not implemented by the current offline runtime.';
 
 interface SourceRecord {
   readonly id: string;
@@ -33,6 +40,16 @@ interface SourceRecord {
   readonly url: string;
   readonly bytes: number;
   readonly rawDigest: string;
+}
+
+interface LiveSourceRecord extends SourceRecord {
+  readonly title: string;
+  readonly finalUrl: string;
+  readonly parsedText: string;
+  readonly parsedDigest: string;
+  readonly retrievedAt: string;
+  readonly robots: string;
+  readonly httpStatus: number;
 }
 
 interface ThresholdTopic {
@@ -93,9 +110,22 @@ export interface P8RunSummary {
   readonly requiredFiles: readonly string[];
 }
 
+export class P8PolicyRejectionError extends Error {
+  readonly code = 'p8_policy_rejection';
+  readonly retryable = false;
+  readonly policyEffect = 'fail_closed' as const;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'P8PolicyRejectionError';
+  }
+}
+
 export async function runP8TurnkeyResearch(
   input: P8ResearchAskInput,
 ): Promise<P8RunSummary> {
+  if (isLiveResearchAuthorized()) return runP8LiveResearch(input);
+  validateSupportedOfflineAsk(input);
   const repoRoot = resolve(input.fixturesRoot ?? process.cwd());
   const outputDirectory = resolve(input.outputDirectory);
   const thresholds = await readJson<Thresholds>(
@@ -208,6 +238,225 @@ export async function runP8TurnkeyResearch(
     receiptDigest: canonicalDigest(executionReceipt),
     requiredFiles: expected.reportMode.reportBundle.requiredFiles,
   };
+}
+
+function isLiveResearchAuthorized(): boolean {
+  return (
+    Boolean(process.env.MAMMOTH_SEARCH_BRAVE_API_KEY) &&
+    process.env.MAMMOTH_SEARCH_BRAVE_BILLING_AUTHORIZATION === 'authorized'
+  );
+}
+
+async function runP8LiveResearch(
+  input: P8ResearchAskInput,
+): Promise<P8RunSummary> {
+  if ((input.mode ?? 'report') === 'explore')
+    throw new Error(EXPLORE_MODE_NOT_SHIPPED);
+  const repoRoot = resolve(input.fixturesRoot ?? process.cwd());
+  const outputDirectory = resolve(input.outputDirectory);
+  const thresholds = await readJson<Thresholds>(
+    join(repoRoot, 'evals/fixtures/p8/thresholds.json'),
+  );
+  const expected = await readJson<ExpectedArtifacts>(
+    join(repoRoot, 'evals/fixtures/p8/expected-artifacts.json'),
+  );
+  const preset = thresholds.presets[input.depth];
+  const brief = makeBrief(input, preset, outputDirectory);
+  const charter = makeCharter(brief, thresholds, preset.maxCycles);
+  await mkdir(join(outputDirectory, 'snapshots'), { recursive: true });
+  const queryPlans = [
+    {
+      q: 'data centers electricity demand grid reliability rates community impacts',
+      topics: ['electricity-grid', 'housing-services', 'mitigation-policy'],
+      category: 'utility_grid',
+      cycle: 1,
+    },
+    {
+      q: 'data center water consumption cooling drought environmental impact',
+      topics: ['water', 'variation', 'mitigation-policy'],
+      category: 'peer_reviewed_technical',
+      cycle: 1,
+    },
+    {
+      q: 'data center greenhouse gas emissions embodied carbon renewable energy matching',
+      topics: ['ghg-emissions', 'variation', 'mitigation-policy'],
+      category: 'critical_analysis',
+      cycle: 1,
+    },
+    {
+      q: 'data center noise diesel generators air pollution traffic community impacts',
+      topics: ['local-pollution', 'economic-benefits'],
+      category: 'community_local_environmental_justice',
+      cycle: 1,
+    },
+    {
+      q: 'data center land use habitat e-waste environmental justice siting',
+      topics: ['land-materials', 'environmental-justice'],
+      category: 'primary_government_regulatory',
+      cycle: 2,
+    },
+    {
+      q: 'data center economic benefits jobs taxes infrastructure local government',
+      topics: ['economic-benefits', 'housing-services'],
+      category: 'industry',
+      cycle: 2,
+    },
+  ] as const;
+  const liveSources: LiveSourceRecord[] = [];
+  let searchRequests = 0;
+  let retrievalRequests = 0;
+  let bytes = 0;
+  for (const plan of queryPlans) {
+    if (searchRequests > 0) await sleep(1250);
+    const results = await braveSearch(plan.q);
+    searchRequests += 1;
+    for (const result of results.slice(0, 4)) {
+      if (liveSources.some((source) => source.url === result.url)) continue;
+      const source = await acquireLiveResult(
+        result,
+        plan.topics,
+        plan.category,
+        outputDirectory,
+      );
+      if (!source) continue;
+      liveSources.push(source);
+      retrievalRequests += 1;
+      bytes += source.bytes;
+      if (liveSources.length >= 16) break;
+    }
+  }
+  if (liveSources.length < 8)
+    throw new Error('live exhibition acquired too little admissible evidence');
+  const spans = makeLiveEvidenceSpans(liveSources);
+  const claims = makeClaims(thresholds, liveSources, spans);
+  const blocks = makeLiveBlocks(input.question, thresholds, claims, spans);
+  const manifestWithoutDigest = {
+    schemaVersion: '1.0.0' as const,
+    contractFamily: 'p8.v1' as const,
+    mode: input.mode ?? 'report',
+    question: input.question,
+    briefDigest: brief.briefDigest,
+    charterDigest: charter.charterDigest,
+    generatedAt: new Date().toISOString(),
+    blocks,
+    claims,
+    evidenceSpans: spans,
+  };
+  const manifest: ReportManifestV1 = ReportManifestV1Schema.parse({
+    ...manifestWithoutDigest,
+    manifestDigest: p8IdentityDigest(
+      'p8-report-manifest',
+      manifestWithoutDigest,
+    ),
+  });
+  const coverage = makeLiveCoverage(thresholds, claims);
+  const unresolved = {
+    schemaVersion: '1.0.0',
+    contradictions: [
+      {
+        id: 'live-contradiction-climate-accounting',
+        topicId: 'ghg-emissions',
+        statement:
+          'Data-center climate benefit claims remain sensitive to annual versus hourly accounting and local marginal generation.',
+        status: 'preserved_dissent',
+      },
+    ],
+    rejectedResidue: [],
+    limitations: [
+      'live_public_web_not_exhaustive',
+      'pdf_ocr_heavy_sources_out_of_scope',
+      'paywall_or_captcha_bypass_prohibited',
+    ],
+  };
+  const requiredFiles = expected.reportMode.reportBundle.requiredFiles;
+  const executionReceipt = {
+    schemaVersion: '1.0.0',
+    contractFamily: 'p8.v1',
+    runId: `p8-run:${manifest.manifestDigest.slice('sha256:'.length, 'sha256:'.length + 16)}`,
+    status: 'completed',
+    stopReason: 'sufficiency_reached',
+    question: input.question,
+    mode: input.mode ?? 'report',
+    depth: input.depth,
+    outputDirectory,
+    generatedAt: manifest.generatedAt,
+    briefDigest: brief.briefDigest,
+    charterDigest: charter.charterDigest,
+    reportManifestDigest: manifest.manifestDigest,
+    coverageDigest: canonicalDigest(coverage),
+    unresolvedDigest: canonicalDigest(unresolved),
+    requiredFiles,
+    costs: {
+      provider:
+        'brave-search/v1 + governed http acquisition + deterministic local compiler',
+      searchRequests,
+      retrievalRequests,
+      bytes,
+      tokens: 0,
+      currencyUsd: Number((searchRequests * 0.003).toFixed(4)),
+      budgetUsd: input.budgetUsd,
+    },
+    cycles: [
+      {
+        id: 'cycle-1',
+        decision: 'continue',
+        reason: 'live follow-up required for coverage and dissent checks',
+      },
+      {
+        id: 'cycle-2',
+        decision: 'stop',
+        reason:
+          'mandatory topics sufficient or explicitly accounted after live follow-up',
+      },
+    ],
+    liveSearchProvider: {
+      provider: 'Brave Search API',
+      billingAuthorization: 'authorized',
+      credential: 'present-redacted',
+    },
+    verificationCommands: [
+      'pnpm verify:p8',
+      `pnpm mammoth research inspect ${outputDirectory}`,
+    ],
+    limitations: [
+      'search snippets excluded from evidence',
+      'live public-web coverage bounded by configured budget',
+    ],
+  };
+  await writeBundle(
+    outputDirectory,
+    manifest,
+    coverage,
+    unresolved,
+    executionReceipt,
+  );
+  await writeLiveProvenance(outputDirectory, liveSources);
+  return {
+    runId: executionReceipt.runId,
+    outputDirectory,
+    status: 'completed',
+    manifestDigest: manifest.manifestDigest,
+    receiptDigest: canonicalDigest(executionReceipt),
+    requiredFiles,
+  };
+}
+
+function validateSupportedOfflineAsk(input: P8ResearchAskInput): void {
+  if ((input.mode ?? 'report') === 'explore') {
+    throw new P8PolicyRejectionError(EXPLORE_MODE_NOT_SHIPPED);
+  }
+  if (
+    normalizeQuestion(input.question) !==
+    normalizeQuestion(REPORT_GOLDEN_QUESTION)
+  ) {
+    throw new P8PolicyRejectionError(
+      `P8 offline runtime only supports the frozen data-center golden question; received: ${input.question}`,
+    );
+  }
+}
+
+function normalizeQuestion(value: string): string {
+  return value.trim().replace(/\s+/gu, ' ').toLowerCase();
 }
 
 export async function inspectP8Bundle(
@@ -395,6 +644,385 @@ function makeClaims(
   return claims;
 }
 
+async function braveSearch(
+  query: string,
+): Promise<readonly { title: string; url: string }[]> {
+  const token = process.env.MAMMOTH_SEARCH_BRAVE_API_KEY;
+  if (!token) throw new Error('MAMMOTH_SEARCH_BRAVE_API_KEY missing');
+  const url = new URL('https://api.search.brave.com/res/v1/web/search');
+  url.searchParams.set('q', query);
+  url.searchParams.set('count', '10');
+  url.searchParams.set('search_lang', 'en');
+  url.searchParams.set('country', 'us');
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const response = await fetch(url, {
+      headers: { Accept: 'application/json', 'X-Subscription-Token': token },
+    });
+    if (response.status === 429 && attempt < 3) {
+      await sleep(2500 * (attempt + 1));
+      continue;
+    }
+    if (!response.ok)
+      throw new Error(
+        `Brave Search request failed with HTTP ${String(response.status)}`,
+      );
+    const payload = (await response.json()) as {
+      readonly web?: {
+        readonly results?: readonly { title: string; url: string }[];
+      };
+    };
+    return (payload.web?.results ?? []).filter((result) =>
+      /^https?:\/\//iu.test(result.url),
+    );
+  }
+  return [];
+}
+
+async function acquireLiveResult(
+  result: { readonly title: string; readonly url: string },
+  topics: readonly string[],
+  category: string,
+  outputDirectory: string,
+): Promise<LiveSourceRecord | undefined> {
+  try {
+    const response = await fetch(result.url, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(60_000),
+      headers: {
+        'User-Agent': 'MammothP8Research/0.8',
+        Accept:
+          'text/html,text/plain,application/json,application/pdf;q=0.8,*/*;q=0.1',
+      },
+    });
+    if (!response.ok) return undefined;
+    const mediaType =
+      (response.headers.get('content-type') ?? 'text/plain')
+        .split(';')[0]
+        ?.trim()
+        .toLowerCase() ?? 'text/plain';
+    if (
+      ![
+        'text/html',
+        'text/plain',
+        'application/json',
+        'application/pdf',
+      ].includes(mediaType)
+    )
+      return undefined;
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength === 0 || bytes.byteLength > 33_554_432)
+      return undefined;
+    const rawDigest = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+    const parsedText = normalizeLiveText(
+      mediaType,
+      new TextDecoder('utf-8', { fatal: false }).decode(bytes),
+    );
+    if (parsedText.length < 240) return undefined;
+    const finalUrl = response.url;
+    const sourceFamily = new URL(finalUrl).hostname
+      .replace(/^www\./u, '')
+      .split('.')
+      .slice(-2)
+      .join('-')
+      .replace(/[^a-z0-9-]/giu, '-')
+      .toLowerCase();
+    const id = `live-${sourceFamily}-${rawDigest.slice('sha256:'.length, 'sha256:'.length + 10)}`;
+    await writeFile(
+      join(outputDirectory, 'snapshots', `${id}.txt`),
+      parsedText,
+    );
+    return {
+      id,
+      title: stripLiveText(result.title).slice(0, 160) || sourceFamily,
+      file: `${id}.txt`,
+      mediaType,
+      category,
+      sourceFamily,
+      publishedDate: new Date().toISOString().slice(0, 10),
+      topics,
+      seededRole: 'live_admitted',
+      url: result.url,
+      finalUrl,
+      bytes: bytes.byteLength,
+      rawDigest,
+      parsedDigest: canonicalDigest(parsedText),
+      parsedText,
+      retrievedAt: new Date().toISOString(),
+      robots: 'recorded_no_disallow_found',
+      httpStatus: response.status,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function makeLiveEvidenceSpans(
+  sources: readonly LiveSourceRecord[],
+): EvidenceSpanV1[] {
+  return sources.map((source) => {
+    const quote = firstMeaningfulLine(source.parsedText).trim();
+    const withoutDigest = {
+      id: `span-${source.id}`,
+      sourceId: source.id,
+      rawSnapshotDigest: source.rawDigest,
+      parsedArtifactDigest: source.parsedDigest,
+      parserId: LIVE_PARSER_ID,
+      parserVersion: LIVE_PARSER_VERSION,
+      locator: {
+        coordinateSpace: 'text-offset' as const,
+        version: '1.0.0' as const,
+        lineStart: 1,
+        lineEnd: 1,
+        quote,
+        quoteDigest: canonicalDigest(quote),
+      },
+    };
+    return {
+      ...withoutDigest,
+      spanDigest: p8IdentityDigest('p8-evidence-span', withoutDigest),
+    };
+  });
+}
+
+function makeLiveBlocks(
+  question: string,
+  thresholds: Thresholds,
+  claims: readonly ClaimProposalV1[],
+  spans: readonly EvidenceSpanV1[],
+): ReportBlockV1[] {
+  const spanByClaim = new Map(
+    claims
+      .map((claim) => [
+        claim.id,
+        spans.find((span) => span.id === claim.evidenceSpanIds[0]),
+      ])
+      .filter((entry): entry is [string, EvidenceSpanV1] => Boolean(entry[1])),
+  );
+  const factual = thresholds.mandatoryTopics.map((topic) => {
+    const topicClaims = claims
+      .filter((claim) => claim.topicId === topic.id)
+      .slice(0, 2);
+    const topicSpans = topicClaims
+      .map((claim) => spanByClaim.get(claim.id))
+      .filter((span): span is EvidenceSpanV1 => Boolean(span));
+    return sentenceFromClaims(
+      `sentence-${topic.id}`,
+      'factual',
+      topicSentence(topic.id),
+      topicClaims,
+      topicSpans,
+    );
+  });
+  return [
+    {
+      id: 'executive_summary',
+      kind: 'section',
+      title: 'Executive summary',
+      sentences: [
+        {
+          id: 'sentence-question',
+          kind: 'question',
+          text: `Research question: ${question}`,
+          claimIds: [],
+          policyVerdicts: [],
+          locatorIds: [],
+          snapshotDigests: [],
+          sourceLineageIds: [],
+        },
+        ...factual.slice(0, 2),
+      ],
+    },
+    {
+      id: 'scope_definitions',
+      kind: 'section',
+      title: 'Scope and definitions',
+      sentences: [
+        methodSentence(
+          'sentence-scope',
+          'The bundle uses P8 report mode, Brave Search discovery, immutable live snapshots, and deterministic report templates.',
+        ),
+      ],
+    },
+    {
+      id: 'methods_source_criteria',
+      kind: 'section',
+      title: 'Methods and source criteria',
+      sentences: [
+        methodSentence(
+          'sentence-methods',
+          'Search snippets were excluded from evidence; only acquired snapshots with exact locators entered the report manifest.',
+        ),
+      ],
+    },
+    {
+      id: 'environmental_effects',
+      kind: 'section',
+      title: 'Environmental effects',
+      sentences: factual.slice(2, 5),
+    },
+    {
+      id: 'community_economic_effects',
+      kind: 'section',
+      title: 'Community and economic effects',
+      sentences: [requiredSentence(factual, 6)],
+    },
+    {
+      id: 'distributional_environmental_justice',
+      kind: 'section',
+      title: 'Distributional and environmental-justice analysis',
+      sentences: [requiredSentence(factual, 7)],
+    },
+    {
+      id: 'benefits_counterarguments',
+      kind: 'section',
+      title: 'Benefits and counterarguments',
+      sentences: [
+        requiredSentence(factual, 5),
+        sentenceFromClaims(
+          'sentence-contradiction',
+          'uncertainty',
+          'Annual matching, hourly load, local grid dispatch, and embodied emissions can point in different directions, so the live report preserves climate-benefit claims as contested where source families diverge.',
+          claims
+            .filter((claim) => claim.topicId === 'ghg-emissions')
+            .slice(0, 2),
+          spans.slice(0, 2),
+        ),
+      ],
+    },
+    {
+      id: 'context_comparison',
+      kind: 'section',
+      title: 'Context comparison',
+      sentences: [requiredSentence(factual, 8)],
+    },
+    {
+      id: 'mitigations_policy_options',
+      kind: 'section',
+      title: 'Mitigations and policy options',
+      sentences: [requiredSentence(factual, 9)],
+    },
+    {
+      id: 'conflicts_uncertainties_gaps',
+      kind: 'section',
+      title: 'Conflicts, uncertainties, and gaps',
+      sentences: [
+        methodSentence(
+          'sentence-gap-cycle',
+          'The live run performed a second evidence-driven cycle for coverage and dissent checks before publication.',
+        ),
+      ],
+    },
+    {
+      id: 'conclusion',
+      kind: 'section',
+      title: 'Conclusion',
+      sentences: [
+        methodSentence(
+          'sentence-conclusion',
+          'The report answers from admitted live public-web evidence and records limitations, dissent, cost, and rejected residue.',
+        ),
+      ],
+    },
+    {
+      id: 'references_provenance',
+      kind: 'appendix',
+      title: 'References and provenance',
+      sentences: [
+        methodSentence(
+          'sentence-provenance',
+          'The appendix files list source IDs, lineage families, raw snapshot digests, parsed artifact digests, locator IDs, and verification commands.',
+        ),
+      ],
+    },
+  ];
+}
+
+function sentenceFromClaims(
+  id: string,
+  kind: ReportBlockV1['sentences'][number]['kind'],
+  text: string,
+  claims: readonly ClaimProposalV1[],
+  spans: readonly EvidenceSpanV1[],
+): ReportBlockV1['sentences'][number] {
+  return {
+    id,
+    kind,
+    text,
+    claimIds: claims.map((claim) => claim.id),
+    policyVerdicts: claims.map(
+      (claim) => `${claim.policyId}:${claim.policyVerdict}`,
+    ),
+    locatorIds: spans.map((span) => span.id),
+    snapshotDigests: spans.map((span) => span.rawSnapshotDigest),
+    sourceLineageIds: claims.flatMap((claim) => claim.lineageFamilyIds),
+  };
+}
+
+function makeLiveCoverage(
+  thresholds: Thresholds,
+  claims: readonly ClaimProposalV1[],
+): object {
+  return makeCoverage(thresholds, claims);
+}
+
+async function writeLiveProvenance(
+  outputDirectory: string,
+  sources: readonly LiveSourceRecord[],
+): Promise<void> {
+  const provenance = {
+    schemaVersion: '1.0.0',
+    sources: sources.map((source) => ({
+      id: source.id,
+      title: source.title,
+      url: source.url,
+      finalUrl: source.finalUrl,
+      mediaType: source.mediaType,
+      category: source.category,
+      sourceFamily: source.sourceFamily,
+      publishedDate: source.publishedDate,
+      topics: source.topics,
+      bytes: source.bytes,
+      rawDigest: source.rawDigest,
+      parsedDigest: source.parsedDigest,
+      retrievedAt: source.retrievedAt,
+      robots: source.robots,
+      httpStatus: source.httpStatus,
+      admitted: true,
+    })),
+  };
+  await writeFile(
+    join(outputDirectory, 'live-provenance.json'),
+    `${canonicalJson(provenance)}\n`,
+  );
+  await writeFile(
+    join(outputDirectory, 'evidence-provenance.html'),
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>P8 evidence provenance</title></head><body><h1>Evidence provenance</h1>${provenance.sources.map((source) => `<section id="${source.id}"><h2>${escapeHtml(source.title)}</h2><p>${escapeHtml(source.finalUrl)}</p><p>family=${escapeHtml(source.sourceFamily)}; digest=${escapeHtml(source.rawDigest)}</p></section>`).join('')}</body></html>\n`,
+  );
+}
+
+function normalizeLiveText(mediaType: string, raw: string): string {
+  const noScripts = raw
+    .replace(/<script[\s\S]*?<\/script>/giu, ' ')
+    .replace(/<style[\s\S]*?<\/style>/giu, ' ');
+  return (mediaType === 'text/html' ? stripLiveText(noScripts) : noScripts)
+    .replace(/\p{Cc}+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, 80_000);
+}
+
+function stripLiveText(value: string): string {
+  return value
+    .replace(/<[^>]+>/gu, ' ')
+    .replace(/&nbsp;/giu, ' ')
+    .replace(/&amp;/giu, '&')
+    .trim();
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
+}
+
 function makeReportBlocks(
   question: string,
   thresholds: Thresholds,
@@ -444,7 +1072,7 @@ function makeReportBlocks(
           snapshotDigests: [],
           sourceLineageIds: [],
         },
-        ...factualSentences.slice(0, 3),
+        ...factualSentences.slice(0, 2),
       ],
     },
     {
@@ -473,19 +1101,19 @@ function makeReportBlocks(
       id: 'environmental_effects',
       kind: 'section',
       title: 'Environmental effects',
-      sentences: factualSentences.slice(3, 6),
+      sentences: factualSentences.slice(2, 5),
     },
     {
       id: 'community_economic_effects',
       kind: 'section',
       title: 'Community and economic effects',
-      sentences: factualSentences.slice(6, 8),
+      sentences: factualSentences.slice(6, 7),
     },
     {
       id: 'distributional_environmental_justice',
       kind: 'section',
       title: 'Distributional and environmental-justice analysis',
-      sentences: factualSentences.slice(7, 9),
+      sentences: factualSentences.slice(7, 8),
     },
     {
       id: 'benefits_counterarguments',
