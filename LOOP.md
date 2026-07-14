@@ -51,7 +51,9 @@ it and never assign overlapping workers to one worktree.
    author/popularity/verdict fields.
 7. **Verify** — run focused gates, every verifier through `pnpm verify:p6`, the
    active P7 verifier once frozen and implemented, and the full clean-checkout
-   ladder; capture exact evidence in the receipt.
+   ladder. The P7 verifier must be non-recursive, exercise production-shaped
+   public boundaries, preserve every earlier gate, and keep live-provider
+   evaluations separately authorized. Capture exact evidence in the receipt.
 8. **Integrate** — resolve without discarding work, push, open a PR, repair CI,
    resolve independent findings, merge, and verify `main`.
 9. **Reconcile** — update plan, roadmap, receipt, and tag only from executed proof.
