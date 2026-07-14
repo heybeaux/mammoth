@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   deriveP7ResearchRunId,
+  type P7ResearchInspection,
   type P7ResearchRunRequest,
   type P7ResearchStatus,
 } from '@mammoth/workflow';
@@ -78,6 +79,21 @@ describe('P7 local research CLI black-box provider loop', () => {
     expect(posts).toHaveLength(1);
     expect(posts[0]?.idempotencyKey).toMatch(/^sha256:[0-9a-f]{64}$/u);
     expect(JSON.stringify(posts[0]?.body)).toContain('Cell cell-a');
+    const inspected = await mammoth(
+      ['research', 'inspect', payload.runId],
+      env(root, provider.origin, ['cell-a']),
+    );
+    const inspectedPayload = JSON.parse(
+      inspected.stdout,
+    ) as P7ResearchInspection & { readonly command: string };
+    expect(inspectedPayload).toMatchObject({
+      command: 'research inspect',
+      state: 'completed',
+    });
+    expect(inspectedPayload.dossierManifestDigest).toMatch(
+      /^sha256:[0-9a-f]{64}$/u,
+    );
+    expect(inspectedPayload.projectionDigest).toMatch(/^sha256:[0-9a-f]{64}$/u);
   });
 
   it('reconstructs authority after killing the CLI process and resumes unresolved cells', async () => {
@@ -110,6 +126,22 @@ describe('P7 local research CLI black-box provider loop', () => {
       completedCellIds: ['cell-a'],
       unresolvedCellIds: ['cell-b'],
     });
+    const partialInspection = await mammoth(
+      ['research', 'inspect', runId],
+      env(root, provider.origin, ['cell-a', 'cell-b']),
+    );
+    const partialPayload = JSON.parse(
+      partialInspection.stdout,
+    ) as P7ResearchInspection & { readonly command: string };
+    expect(partialPayload).toMatchObject({
+      command: 'research inspect',
+      state: 'running',
+      unresolvedCellIds: ['cell-b'],
+    });
+    expect(partialPayload.dossierManifestDigest).toMatch(
+      /^sha256:[0-9a-f]{64}$/u,
+    );
+    expect(partialPayload.projectionDigest).toMatch(/^sha256:[0-9a-f]{64}$/u);
 
     const resumed = await mammoth(
       ['research', 'resume', runId],

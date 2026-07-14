@@ -44,6 +44,9 @@ importers:
       '@mammoth/governance':
         specifier: workspace:*
         version: link:../../packages/governance
+      '@mammoth/observatory-projection':
+        specifier: workspace:*
+        version: link:../../packages/observatory-projection
       '@mammoth/openai-compatible-provider':
         specifier: workspace:*
         version: link:../../packages/openai-compatible-provider
@@ -56,6 +59,9 @@ importers:
       '@mammoth/provider-port':
         specifier: workspace:*
         version: link:../../packages/provider-port
+      '@mammoth/report-compiler':
+        specifier: workspace:*
+        version: link:../../packages/report-compiler
       '@mammoth/retrieval':
         specifier: workspace:*
         version: link:../../packages/retrieval
@@ -164,6 +170,18 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
 
+  evals/p7-acceptance:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.15.34
+      tsx:
+        specifier: ^4.20.3
+        version: 4.20.3
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+
   packages/adapter-contracts:
     dependencies:
       '@mammoth/persistence':
@@ -241,9 +259,15 @@ importers:
       '@mammoth/domain':
         specifier: workspace:*
         version: link:../domain
+      '@mammoth/persistence':
+        specifier: workspace:*
+        version: link:../persistence
       '@mammoth/report-compiler':
         specifier: workspace:*
         version: link:../report-compiler
+      '@mammoth/workflow':
+        specifier: workspace:*
+        version: link:../workflow
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -423,6 +447,15 @@ importers:
       '@mammoth/domain':
         specifier: workspace:*
         version: link:../domain
+      '@mammoth/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+      '@mammoth/retrieval':
+        specifier: workspace:*
+        version: link:../retrieval
+      '@mammoth/workflow':
+        specifier: workspace:*
+        version: link:../workflow
       zod:
         specifier: ^3.25.0
         version: 3.25.76

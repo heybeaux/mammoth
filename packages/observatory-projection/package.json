@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@mammoth/domain": "workspace:*",
+    "@mammoth/persistence": "workspace:*",
     "@mammoth/report-compiler": "workspace:*",
+    "@mammoth/workflow": "workspace:*",
     "zod": "^3.25.0"
   },
   "devDependencies": {

@@ -12,7 +12,10 @@ import {
   type P7ResearchRunRequest,
   type P7ResearchStatus,
 } from '@mammoth/workflow';
-import type { P7ResearchAuthorityReader } from './index.js';
+import type {
+  P7ResearchAuthorityReader,
+  P7ResearchProductCompiler,
+} from './index.js';
 
 const RUN_DIGEST = /^sha256:[0-9a-f]{64}$/u;
 
@@ -26,6 +29,7 @@ export class ModelWorkP7ResearchAuthority implements P7ResearchAuthorityReader {
     private readonly cas: ContentAddressedStore,
     private readonly modelWork: P7ModelWorkRepository,
     private readonly topology: P7ExpectedCellReader,
+    private readonly products?: P7ResearchProductCompiler,
   ) {}
 
   async register(request: P7ResearchRunRequest): Promise<void> {
@@ -98,11 +102,14 @@ export class ModelWorkP7ResearchAuthority implements P7ResearchAuthorityReader {
 
   async inspect(runId: string): Promise<P7ResearchInspection> {
     const request = await this.request(runId);
+    const status = await this.status(runId);
+    const products = await this.products?.compile({ runId, request, status });
     return {
-      ...(await this.status(runId)),
+      ...status,
       charterDigest: request.charterDigest,
       topologyId: request.topology.topologyId,
       topologyDigest: request.topology.topologyDigest,
+      ...products,
     };
   }
 

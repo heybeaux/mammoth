@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { canonicalJson } from '@mammoth/domain';
 import {
   createModelEgressPolicy,
   evaluateModelEgress,
@@ -19,6 +20,8 @@ import {
   type P7ResearchOrchestrationPort,
 } from '@mammoth/p7-application-service';
 import { JournaledP7ModelWorkRepository } from '@mammoth/persistence';
+import { buildP7LiveResearchProjection } from '@mammoth/observatory-projection';
+import { compileP7Dossier } from '@mammoth/report-compiler';
 import {
   FileContentStore,
   type ContentAddressedStore,
@@ -221,10 +224,54 @@ export async function withLocalP7ResearchApplication<T>(
     const topology: P7ExpectedCellReader = {
       cellIds: () => Promise.resolve([...environment.cellIds]),
     };
+    const products = {
+      async compile(input: {
+        readonly runId: string;
+        readonly request: P7ResearchRunRequest;
+        readonly status: Awaited<
+          ReturnType<P7ResearchAuthorityReader['status']>
+        >;
+      }) {
+        const state = await repository.reconstructProgram(
+          input.request.topology.programId,
+        );
+        const dossier = await compileP7Dossier({
+          runId: input.runId,
+          request: input.request,
+          state,
+          cas,
+          expectedCellIds: [
+            ...input.status.completedCellIds,
+            ...input.status.failedCellIds,
+            ...input.status.cancelledCellIds,
+            ...input.status.unresolvedCellIds,
+          ],
+        });
+        const dossierObject = await cas.put(
+          new TextEncoder().encode(canonicalJson(dossier)),
+        );
+        const projection = buildP7LiveResearchProjection({
+          runId: input.runId,
+          request: input.request,
+          state,
+          dossier,
+          dossierManifestDigest: dossierObject.digest,
+          authoritativeRevision: input.status.authoritativeRevision,
+        });
+        const projectionObject = await cas.put(
+          new TextEncoder().encode(canonicalJson(projection)),
+        );
+        return {
+          dossierManifestDigest: dossierObject.digest,
+          projectionDigest: projectionObject.digest,
+        };
+      },
+    };
     const authority = new ModelWorkP7ResearchAuthority(
       cas,
       repository,
       topology,
+      products,
     );
     const egress: P7ModelEgressEvaluator = {
       policyDigest: environment.egressPolicy.digest,

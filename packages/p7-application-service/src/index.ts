@@ -27,6 +27,17 @@ export interface P7ResearchAuthorityReader {
   inspect(runId: string): Promise<P7ResearchInspection>;
 }
 
+export interface P7ResearchProductCompiler {
+  compile(input: {
+    readonly runId: string;
+    readonly request: P7ResearchRunRequest;
+    readonly status: P7ResearchStatus;
+  }): Promise<{
+    readonly dossierManifestDigest: string;
+    readonly projectionDigest: string;
+  }>;
+}
+
 export interface P7GovernedCellIdentity {
   readonly cellId: string;
   readonly modelWorkId: string;
