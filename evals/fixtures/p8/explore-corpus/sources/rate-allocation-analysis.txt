@@ -1,0 +1,15 @@
+Ratepayer Impact Analysis of Interruptible Data-Center Tariffs
+Office of the Utility Consumer Advocate (fixture state office)
+Published 2026-03-12. Report UCA-26-05.
+
+- Interruptible tariff discounts offered to flexible data-center loads in two
+  reviewed jurisdictions were funded through general rates, shifting 6 to 14
+  million dollars per year to other customer classes.
+- In one jurisdiction, the flexible load was curtailed only twice in 18
+  months, meaning ratepayers funded a discount for flexibility that was
+  rarely exercised.
+- The office finds no reviewed tariff that returns transmission-deferral
+  savings to host-community customers specifically; savings accrue
+  system-wide while local land, water, and service burdens remain local.
+- Recommendation: interruptible discounts should be funded from verified
+  deferral savings, audited annually, with clawback provisions.

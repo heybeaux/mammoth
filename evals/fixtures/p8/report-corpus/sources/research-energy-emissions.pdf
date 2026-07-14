@@ -1,0 +1,52 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 1323 >>
+stream
+BT /F1 10 Tf 50 780 Td 14 TL
+(Journal of Energy Systems \(fixture peer-reviewed\) 22\(4\): 301-329) Tj T*
+(Operational and Embodied Greenhouse-Gas Emissions of Hyperscale) Tj T*
+(Data Centers. Published 2025-12-08. DOI \(fixture\): 10.9999/jes.2025.22.4.301) Tj T*
+() Tj T*
+(Findings:) Tj T*
+(1. Embodied emissions from construction and IT hardware account for 20 to) Tj T*
+(   35 percent of lifecycle greenhouse-gas emissions for hyperscale) Tj T*
+(   facilities on moderately clean grids, and up to 55 percent on very) Tj T*
+(   low-carbon grids.) Tj T*
+(2. Median operational emissions intensity across 61 audited facilities was) Tj T*
+(   310 kg CO2e per MWh of IT load in 2024, with an interquartile range of) Tj T*
+(   120 to 470 kg CO2e per MWh driven by regional grid mix.) Tj T*
+(3. Server manufacturing dominates embodied emissions at 58 percent of the) Tj T*
+(   embodied total, exceeding concrete and steel combined.) Tj T*
+(4. Hourly matched carbon-free procurement reduced attributed operational) Tj T*
+(   emissions by 38 to 71 percent versus annual certificate matching in the) Tj T*
+(   five facilities that disclosed hourly settlement data.) Tj T*
+(5. The authors note substantial disclosure gaps: only 9 of 61 facilities) Tj T*
+(   published third-party-verified embodied-emissions inventories.) Tj T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001616 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1684
+%%EOF

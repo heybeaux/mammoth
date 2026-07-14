@@ -4,3 +4,7 @@ node_modules
 pnpm-lock.yaml
 ARCHITECTURE.md
 .receipts
+# P8 corpus source fixtures are digest-pinned; bytes must never be reformatted
+evals/fixtures/p8/report-corpus/sources
+evals/fixtures/p8/explore-corpus/sources
+evals/fixtures/p8/hostile/sources

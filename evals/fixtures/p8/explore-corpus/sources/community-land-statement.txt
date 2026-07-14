@@ -1,0 +1,15 @@
+Cedar Basin Rural Alliance (fixture community organization)
+Position Statement on Renewable-Adjacent Compute Siting
+Published 2026-03-25.
+
+- The flexibility argument is presented as an environmental benefit, but the
+  land, traffic, and noise burdens of a 300-acre campus are identical whether
+  the facility is flexible or not.
+- Host communities bear permanent land conversion for benefits (curtailment
+  reduction, system savings) that accrue regionally or to shareholders.
+- Our alliance is not opposed to compute development; we ask that flexibility
+  and curtailment claims be contractually binding, independently metered, and
+  publicly reported, with penalties funding local mitigation.
+- Two of the three campuses in the basin have not published any verified
+  curtailment performance data despite marketing claims made during
+  permitting.

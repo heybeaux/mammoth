@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p8.v1",
+  "frozenBy": "T0 acceptance baseline",
+  "note": "Frozen malformed/hostile retrieval fixtures for verify:p8. Committed files are digest-pinned bytes; generatedPayloads freeze exact generator parameters and payload digests so the implementation lane cannot author the attacks it must survive. Compressed encodings of generated payloads may vary by encoder, but decompressed payload digests and size thresholds are exact. adversarialCaseId binds each fixture to its expected outcome in ../adversarial/manifest.json; size limits reference ../thresholds.json retrievalLimits.",
+  "files": [
+    {
+      "id": "malformed-truncated-json",
+      "file": "sources/malformed-truncated.json",
+      "declaredMediaType": "application/json",
+      "adversarialCaseId": "malformed-json-parse",
+      "attack": "truncated JSON with embedded control bytes",
+      "bytes": 38,
+      "rawDigest": "sha256:3032f833959e6e5b72fb347323d27c4bb2b6c4efdcb3df2efcd7e700475295cb"
+    },
+    {
+      "id": "mime-confusion-pdf-as-html",
+      "file": "sources/mime-confusion-pdf-as-html.html",
+      "declaredMediaType": "text/html",
+      "adversarialCaseId": "mime-confusion",
+      "attack": "declared text/html; actual bytes are a PDF document",
+      "bytes": 90,
+      "rawDigest": "sha256:7d4aa27f151c27aaf7aec01bc5235476f934d1480625f93a7a3663dd6e25ac7b"
+    },
+    {
+      "id": "malicious-truncated-pdf",
+      "file": "sources/malicious-truncated.pdf",
+      "declaredMediaType": "application/pdf",
+      "adversarialCaseId": "malicious-pdf",
+      "attack": "invalid xref offsets, absurd stream length, truncated trailer",
+      "bytes": 192,
+      "rawDigest": "sha256:ca9cf407b495baf2efff8ce4f2744e8f430b8fcf820cb544aaee532bbe7fb6bc"
+    }
+  ],
+  "generatedPayloads": [
+    {
+      "id": "oversized-body-payload",
+      "adversarialCaseId": "oversized-body",
+      "generator": "repeat byte 0x41 ('A')",
+      "lengthBytes": 33554433,
+      "payloadDigest": "sha256:a344aae9e1281cc4676ecb9fb903f24bd528049a75a0f8cf294b12b9d3262a2d",
+      "note": "exactly one byte over retrievalLimits.maxResponseBytes"
+    },
+    {
+      "id": "decompression-bomb-payload",
+      "adversarialCaseId": "decompression-bomb",
+      "generator": "any RFC 1952 gzip encoding of repeat byte 0x00",
+      "decompressedLengthBytes": 67108865,
+      "decompressedPayloadDigest": "sha256:91990977345985aaf03af1358f4f989d7eaf985b58529efb72f613c588f6599a",
+      "note": "decompressed payload is exactly one byte over retrievalLimits.maxDecompressedBytes; the limit must trip before full decompression"
+    },
+    {
+      "id": "parser-resource-exhaustion-payload",
+      "adversarialCaseId": "parser-resource-exhaustion",
+      "generator": "repeat '<div>' 200000 times, append 'parser-resource-exhaustion', then repeat '</div>' 200000 times",
+      "lengthBytes": 2200026,
+      "payloadDigest": "sha256:1217a7b59d03394123835db8bb90e17e774906ca3dcda8beb42bc634968e33ed",
+      "note": "deeply nested HTML payload used to exercise parser CPU/memory/time/output fences without committing a multi-megabyte fixture file"
+    }
+  ],
+  "manifestDigest": "sha256:ad42bc1ea0ad57c6dd8eddfa68a6535ba260e17cdc79b43a5a031fbc0283bc44"
+}

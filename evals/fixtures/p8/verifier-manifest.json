@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p8.v1",
+  "frozenBy": "T0 acceptance baseline",
+  "releaseAuthority": "pnpm verify:p8 (non-recursive, offline, fixture-search only); live exhibitions are separate and never substitute for these checks",
+  "inputs": {
+    "reportCorpus": "evals/fixtures/p8/report-corpus/manifest.json",
+    "exploreCorpus": "evals/fixtures/p8/explore-corpus/manifest.json",
+    "thresholds": "evals/fixtures/p8/thresholds.json",
+    "expectedArtifacts": "evals/fixtures/p8/expected-artifacts.json",
+    "adversarial": "evals/fixtures/p8/adversarial/manifest.json",
+    "hostileFixtures": "evals/fixtures/p8/hostile/manifest.json",
+    "editorialRubric": "evals/fixtures/p8/editorial-rubric.json",
+    "receiptSchema": "evals/fixtures/p8/receipt-schema.json"
+  },
+  "checks": [
+    {
+      "id": "factual-provenance",
+      "rule": "100% of factual report sentences carry valid admitted claim IDs, named policy verdicts, exact locators, and immutable snapshot digests, verified against authority state"
+    },
+    {
+      "id": "no-fabricated-citations",
+      "rule": "zero fabricated sources or citations and zero critical unsupported claims"
+    },
+    {
+      "id": "mandatory-topic-accounting",
+      "rule": "100% of thresholds.json mandatoryTopics either meet sufficiency or are explicitly reported insufficient with typed reason codes"
+    },
+    {
+      "id": "perspective-diversity",
+      "rule": "configured perspective categories each reach minAdmittedIndependentSourceFamiliesPerCategory with lineage-based family independence"
+    },
+    {
+      "id": "contradiction-retention",
+      "rule": "every seeded contradiction and material dissent remains visible in authority state and rendered output"
+    },
+    {
+      "id": "no-snippet-evidence",
+      "rule": "no search snippet is admitted as evidence"
+    },
+    {
+      "id": "seeded-rejections",
+      "rule": "every seeded stale, duplicated, irrelevant, injection, malformed, and unsupported fixture is rejected for the exact expected named reason in expected-artifacts.json and adversarial/manifest.json"
+    },
+    {
+      "id": "evidence-driven-follow-up",
+      "rule": "at least one follow-up cycle derives from a detected evidence gap per expected-artifacts.json discoveryWaves; a sufficient first cycle does not force another"
+    },
+    {
+      "id": "deterministic-replay",
+      "rule": "idempotent replay of one stable run, and canonical authority/report-manifest equivalence under the frozen clock for independent fixture runs, excluding execution-specific receipt identities"
+    },
+    {
+      "id": "kill-restart",
+      "rule": "process-kill/restart at durable boundaries yields no duplicate effects, charges, admissions, or publication"
+    },
+    {
+      "id": "honest-partiality",
+      "rule": "budget, cancellation, and provider-failure runs produce honest deterministic partial bundles with stop reasons, never fabricated completion"
+    },
+    {
+      "id": "editorial-structural-gates",
+      "rule": "all deterministicGates in editorial-rubric.json pass, including render-manifest sentence-set equivalence for report.md and report.html"
+    },
+    {
+      "id": "bundle-shape",
+      "rule": "the output bundle contains every required file and execution-receipt.json validates against receipt-schema.json"
+    },
+    {
+      "id": "explore-bundle",
+      "rule": "the explore golden fixture produces every expectedBundleElements entry in expected-artifacts.json with no promotion through model agreement"
+    },
+    {
+      "id": "offline-only",
+      "rule": "verify:p8 performs no public-web or paid-provider calls; the fixture search adapter and frozen corpus are the only sources"
+    }
+  ],
+  "thresholdsAreFrozen": "Implementation lanes cannot relax thresholds.json, expected-artifacts.json, or this manifest; changes require a coordinator-serialized ADR before T8.",
+  "inputDigests": {
+    "reportCorpus": "sha256:e39887dd5eb3e999dbfacdbada1a9eea5b03c828b7d73bb604b1b56decd590c3",
+    "exploreCorpus": "sha256:592da105b7eba5b1277ced27beb29b716c8266417afe990b099a65b0ae647400",
+    "thresholds": "sha256:55c0fe4ea3de3f62f2dc7a96bf44c57dca1d11d4401f410bdb3d3f780c94bf08",
+    "expectedArtifacts": "sha256:83ad5aa3efb234942e4da87c8f7f6b27942e242776633eedef3a3d15e8f35722",
+    "adversarial": "sha256:5e00d4a3606a0b913bad54c94a5ffd9dcc0b0740ef78e1b1181ab9d98a356df4",
+    "hostileFixtures": "sha256:1817b2ddbba3a567bdfd7401feade0a4a0c9a5ee95fb3e5b1eb29387888f3e68",
+    "editorialRubric": "sha256:3505edcdb416593e4e718054f3952811d1bf773a02b26dd0069f342856ae24b2",
+    "receiptSchema": "sha256:7148ce4500e5737ef005c0572d0c9edbd53b8c1225d074247071e57176fd485f"
+  },
+  "manifestDigest": "sha256:9792b1412fdc253d806ba628b1c38c548f03eaf695252ea17f711677cce39b7a"
+}

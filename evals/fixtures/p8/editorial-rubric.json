@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p8.v1",
+  "purpose": "Structural editorial gates enforced deterministically by verify:p8, plus the subjective rubric applied by the independent editorial review receipt. Deterministic gates never depend on model judgment.",
+  "deterministicGates": [
+    {
+      "id": "required-sections-present",
+      "rule": "All twelve required report sections from thresholds.json readability.minRequiredSections exist in the manifest and both rendered exports, in order."
+    },
+    {
+      "id": "balance-accounting",
+      "rule": "The report contains at least one admitted factual sentence in each of the harms and benefits section groups, and the benefits/counterarguments section cites at least one industry-perspective family and one critical-analysis family."
+    },
+    {
+      "id": "counterargument-presence",
+      "rule": "Every seeded contradiction in the corpus appears as an explicit uncertainty or conflict sentence binding both contradicting assessment IDs; neither side is silently dropped."
+    },
+    {
+      "id": "dissent-and-limitations-visible",
+      "rule": "Rejected-claim residue counts, unresolved gaps, stale-source exclusions, and stop reason appear in the conflicts/uncertainties/gaps and limitations content with typed reason codes."
+    },
+    {
+      "id": "duplication-limit",
+      "rule": "Normalized duplicate factual sentences <= maxDuplicateFactualSentenceRatio of factual sentences."
+    },
+    {
+      "id": "readability-bounds",
+      "rule": "Executive summary <= 500 words; every section contains at least one sentence or an explicit typed insufficiency notice; no section is only headings."
+    },
+    {
+      "id": "render-manifest-equivalence",
+      "rule": "Normalized sentence sets of report.md and report.html exactly match the manifest AST; renderers add no facts."
+    }
+  ],
+  "independentEditorialReview": {
+    "reviewer": "non-author reviewer named in the release receipt",
+    "appliesTo": "the exact live-exhibition bundle for T8 and the offline golden bundle",
+    "criteria": [
+      {
+        "id": "answers-the-question",
+        "question": "Does the report directly answer the user's plain-language question in the executive summary without requiring internal-artifact knowledge?"
+      },
+      {
+        "id": "clarity",
+        "question": "Can a motivated non-expert follow the argument structure, definitions, and caveats?"
+      },
+      {
+        "id": "balance",
+        "question": "Are harms, benefits, and disputed findings presented with proportionate weight to the admitted evidence rather than rhetorical emphasis?"
+      },
+      {
+        "id": "relevance",
+        "question": "Is included material relevant to the charter subquestions; is padding absent?"
+      },
+      {
+        "id": "actionability",
+        "question": "Are mitigations/policy options concrete, cited, and separated from factual premises?"
+      },
+      {
+        "id": "honest-uncertainty",
+        "question": "Would a reader come away knowing what is unknown, contested, or stale?"
+      }
+    ],
+    "verdicts": ["pass", "pass_with_notes", "blocking"],
+    "rule": "A blocking editorial verdict returns the bundle to the compiler lane; editorial review may never add, remove, or rewrite factual sentences directly."
+  }
+}

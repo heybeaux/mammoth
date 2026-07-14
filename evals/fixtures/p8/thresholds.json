@@ -1,0 +1,142 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p8.v1",
+  "frozenBy": "T0 acceptance baseline",
+  "clock": {
+    "frozenNowUtc": "2026-07-01T00:00:00Z",
+    "note": "Deterministic verifier runs inject this clock; freshness math is relative to it."
+  },
+  "mandatoryTopics": [
+    {
+      "id": "electricity-grid",
+      "title": "Electricity demand, grid capacity, reliability, rates, and generation mix"
+    },
+    {
+      "id": "ghg-emissions",
+      "title": "Operational and embodied greenhouse-gas emissions"
+    },
+    {
+      "id": "water",
+      "title": "Water withdrawal/consumption, cooling, drought stress, and thermal effects"
+    },
+    {
+      "id": "land-materials",
+      "title": "Land use, habitat, construction disturbance, materials, and e-waste"
+    },
+    {
+      "id": "local-pollution",
+      "title": "Local air pollution, backup generation, noise, traffic, and visual impacts"
+    },
+    {
+      "id": "economic-benefits",
+      "title": "Employment, taxes, infrastructure investment, and economic benefits"
+    },
+    {
+      "id": "housing-services",
+      "title": "Housing, public services, utility allocation, and opportunity costs"
+    },
+    {
+      "id": "environmental-justice",
+      "title": "Environmental justice, Indigenous/local participation, siting, and governance"
+    },
+    {
+      "id": "variation",
+      "title": "Variation by facility type, climate, grid, cooling design, scale, and lifecycle"
+    },
+    {
+      "id": "mitigation-policy",
+      "title": "Mitigation, trade-offs, policy options, disputed findings, and evidence gaps"
+    }
+  ],
+  "sufficiency": {
+    "minAdmittedSupportingClaimsPerTopic": 2,
+    "minIndependentSourceFamiliesPerTopic": 2,
+    "insufficientTopicHandling": "Report the topic explicitly insufficient with typed reason codes; never pad with unsupported prose.",
+    "criticalUnsupportedConclusions": 0
+  },
+  "diversity": {
+    "requiredPerspectiveCategories": [
+      "primary_government_regulatory",
+      "utility_grid",
+      "peer_reviewed_technical",
+      "community_local_environmental_justice",
+      "industry",
+      "critical_analysis"
+    ],
+    "minAdmittedIndependentSourceFamiliesPerCategory": 1,
+    "sourceFamilyRule": "Independence is lineage-based (shared upstream, syndication, press-release ancestry, common organizational control collapse into one family). Source count never substitutes for family count."
+  },
+  "freshness": {
+    "volatileStatisticsMaxAgeDays": 1825,
+    "stableBackgroundMaxAgeDays": 7300,
+    "staleHandling": "Stale sources are rejected for volatile claims with named reason freshness_expired; they may support explicitly dated historical statements only."
+  },
+  "quotation": {
+    "maxPublishedVerbatimWordsPerSpan": 60,
+    "unknownOrConflictingLicenseMaxWordsPerSpan": 25
+  },
+  "cycles": {
+    "minEvidenceDrivenFollowUpCycles": 1,
+    "saturationRounds": 2,
+    "note": "A sufficient first cycle does not force another; the golden fixture seeds a coverage gap so the deterministic controller must produce at least one follow-up cycle."
+  },
+  "presets": {
+    "quick": {
+      "maxCycles": 2,
+      "budgetUsd": 5,
+      "maxTokens": 400000,
+      "maxWallTimeMinutes": 20,
+      "maxSearchRequests": 40,
+      "maxRetrievalRequests": 60,
+      "maxRetrievalBytes": 268435456
+    },
+    "standard": {
+      "maxCycles": 4,
+      "budgetUsd": 12,
+      "maxTokens": 1200000,
+      "maxWallTimeMinutes": 60,
+      "maxSearchRequests": 120,
+      "maxRetrievalRequests": 200,
+      "maxRetrievalBytes": 1073741824
+    },
+    "comprehensive": {
+      "maxCycles": 8,
+      "budgetUsd": 20,
+      "maxTokens": 3000000,
+      "maxWallTimeMinutes": 180,
+      "maxSearchRequests": 300,
+      "maxRetrievalRequests": 500,
+      "maxRetrievalBytes": 4294967296
+    }
+  },
+  "retrievalLimits": {
+    "maxResponseBytes": 33554432,
+    "maxDecompressedBytes": 67108864,
+    "maxRedirects": 5,
+    "requestTimeoutSeconds": 60,
+    "supportedMediaTypes": [
+      "text/html",
+      "text/plain",
+      "application/json",
+      "application/pdf"
+    ]
+  },
+  "readability": {
+    "maxDuplicateFactualSentenceRatio": 0.05,
+    "minRequiredSections": [
+      "executive_summary",
+      "scope_definitions",
+      "methods_source_criteria",
+      "environmental_effects",
+      "community_economic_effects",
+      "distributional_environmental_justice",
+      "benefits_counterarguments",
+      "context_comparison",
+      "mitigations_policy_options",
+      "conflicts_uncertainties_gaps",
+      "conclusion",
+      "references_provenance"
+    ]
+  },
+  "relaxationPolicy": "These values are frozen at T0. Implementation lanes cannot relax them; changes require a coordinator-serialized ADR before T8."
+}
