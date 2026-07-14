@@ -97,3 +97,6 @@ jobs:
 
       - name: Verify P5 isolated divergence
         run: pnpm verify:p5
+
+      - name: Verify P6 research topology
+        run: pnpm verify:p6
