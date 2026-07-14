@@ -64,8 +64,8 @@ Independent reviewer: independent non-author adversarial review against
   findings all resolved by strengthening frozen fixtures (committed hostile
   bytes + digest-pinned generator parameters; irrelevant-source seeded
   rejection; unified rejection-reason vocabulary; stopReason/artifact schema
-  completion; hostileFixtures wired into verifier inputs) — plus CodeRabbit
-  automated review (SUCCESS)
+  completion; hostileFixtures wired into verifier inputs); CodeRabbit automated
+  review is pending final review-fix reconciliation before merge
 Last registry proof: worker session ended after push (branch and PR are the
   durable handoff; no live registry entry claimed)
 Last artifact proof: commits 5d425d3, a7e2565, a1544c6 (coordinator review-fix)

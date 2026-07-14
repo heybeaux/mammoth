@@ -16,6 +16,34 @@ and migration allocation. Without this freeze, lanes B-E would each invent
 incompatible identities and the acceptance verifier could not bind expected
 artifacts to stable IDs.
 
+## Options considered
+
+1. **Reuse P7 identities without new P8 domains.** This would preserve the
+   smallest contract surface, but it would overload P7 model-work and effect
+   digests with discovery, retrieval, cycle, and publication semantics that P7
+   never proved. It would also make parser upgrades and report-manifest replay
+   ambiguous.
+2. **Let each lane define local identity labels.** This would let lanes move
+   faster initially, but dependent lanes would need reconciliation after the
+   fact, and the T0 verifier could not freeze expected artifacts before
+   implementation.
+3. **Adopt domain-separated `p8.v1` envelopes with forward-only migration
+   allocation.** This keeps P7 digests immutable, gives every external effect and
+   authority record an explicit semantic domain, and lets T0 freeze measurable
+   acceptance artifacts before consumers.
+
+## Evidence
+
+- Merged P7 commit `2e35802` proves governed model-work identities, provider
+  effect receipts, budget settlement, CAS/journal reconstruction, and dossier
+  projection, but not P8 discovery, retrieval snapshots, evidence spans, cycles,
+  or publication identities.
+- `P8_PLAN.md` requires versioned `p8.v1` envelopes, migration allocation 9-12,
+  and stable identity derivations before T1-T8 consumers start.
+- `evals/fixtures/p8/verifier-manifest.json` binds expected T0 artifacts to
+  these digest domains, making later `verify:p8` acceptance mechanically
+  measurable from frozen fixtures rather than lane-local conventions.
+
 ## Decision
 
 ### 1. Contract major

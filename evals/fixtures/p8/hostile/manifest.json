@@ -48,7 +48,15 @@
       "decompressedLengthBytes": 67108865,
       "decompressedPayloadDigest": "sha256:91990977345985aaf03af1358f4f989d7eaf985b58529efb72f613c588f6599a",
       "note": "decompressed payload is exactly one byte over retrievalLimits.maxDecompressedBytes; the limit must trip before full decompression"
+    },
+    {
+      "id": "parser-resource-exhaustion-payload",
+      "adversarialCaseId": "parser-resource-exhaustion",
+      "generator": "repeat '<div>' 200000 times, append 'parser-resource-exhaustion', then repeat '</div>' 200000 times",
+      "lengthBytes": 2200026,
+      "payloadDigest": "sha256:1217a7b59d03394123835db8bb90e17e774906ca3dcda8beb42bc634968e33ed",
+      "note": "deeply nested HTML payload used to exercise parser CPU/memory/time/output fences without committing a multi-megabyte fixture file"
     }
   ],
-  "manifestDigest": "sha256:32b67725e4224b3a07c8fe84f27e3274d459765174e031a6ecb968d0648431f4"
+  "manifestDigest": "sha256:ad42bc1ea0ad57c6dd8eddfa68a6535ba260e17cdc79b43a5a031fbc0283bc44"
 }

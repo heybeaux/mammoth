@@ -138,8 +138,8 @@
       ],
       "seededRole": "contradiction_side_a",
       "url": "https://sources.p8.invalid/report/industry-sustainability-report.html",
-      "bytes": 1094,
-      "rawDigest": "sha256:c1be9838e4b3b5359769b68b7287ff0dbf34b2638fc01cd6a9302f939210b0f9"
+      "bytes": 1116,
+      "rawDigest": "sha256:9ecf629486cadc6079a3a87b5397e6b2c9613dc9bf4bdde233684a731b2c2820"
     },
     {
       "id": "critical-market-analysis",
@@ -204,8 +204,8 @@
       "topics": ["economic-benefits"],
       "seededRole": "prompt_injection",
       "url": "https://sources.p8.invalid/report/injection-attack-page.html",
-      "bytes": 959,
-      "rawDigest": "sha256:b571b54df9b3369553c24486c3d95b56988021325e907a3f0db4c09be44a5546"
+      "bytes": 981,
+      "rawDigest": "sha256:4eaaeba216aa56d8bb72745732dd8158af551eb768627ccc30308b62f0cae732"
     },
     {
       "id": "econ-impact-study",
@@ -260,8 +260,8 @@
       ],
       "seededRole": "normal",
       "url": "https://sources.p8.invalid/report/policy-mitigation-review.html",
-      "bytes": 1427,
-      "rawDigest": "sha256:a60df515daafcd086c1f15e5398773cc322bae46e7a78eb3ae4e5a755eae609a"
+      "bytes": 1449,
+      "rawDigest": "sha256:fcb9de379acca8742ae54eee12d3e30315c4fae8abb7214830f17c7dcebb98b1"
     },
     {
       "id": "facility-variation-study",
@@ -286,9 +286,9 @@
       "topics": [],
       "seededRole": "irrelevant",
       "url": "https://sources.p8.invalid/report/lifestyle-espresso-feature.html",
-      "bytes": 822,
-      "rawDigest": "sha256:14ed2e88291084fd1ac16a434dc50494edd6136b578e3afd689e6c23712bf867"
+      "bytes": 844,
+      "rawDigest": "sha256:545354147eb6b65b4804f53c87279561b7c6c06d241df80ba0a1ce8bdb35ce68"
     }
   ],
-  "manifestDigest": "sha256:f817fb5b6fe4194c76610b81985ec3711da01d0d35c97e62e11cd8d11cdc4ec9"
+  "manifestDigest": "sha256:1af32cb2eff920ab3746b0dc86dc262a3cca55f77b1d3e0c423edf33d8f15a86"
 }

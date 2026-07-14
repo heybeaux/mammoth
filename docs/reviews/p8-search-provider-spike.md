@@ -24,20 +24,21 @@ subscription token is invalid.","meta":{"component":"authentication"}}}`.
 
 ## Findings
 
-| Criterion      | Brave Search API                                                                                                                                                       | SearXNG (self-hosted metasearch)                                                                                                                         |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Result quality | Independent index; structured JSON: title, URL, snippet, page age, language; adequate for discovery hints                                                              | Aggregates upstream engines; quality varies by engine set and rate-limit health; JSON format available only when self-hosted with `format: json` enabled |
-| Licensing      | Explicit commercial API terms permit programmatic query and metadata storage                                                                                           | Upstream engine terms generally prohibit scraping; public instances actively block API use (observed 403); usage responsibility falls on the operator    |
-| Cost           | Free tier (order of 1 req/s, ~2000 req/month), then metered per-request pricing; maps directly to budget reservations and cost receipts                                | Free, but requires operating a container and absorbs upstream rate-limiting/blocking risk                                                                |
-| Determinism    | Non-deterministic (live index)                                                                                                                                         | Non-deterministic and additionally unstable across engine availability                                                                                   |
-| Operability    | One HTTPS endpoint + one header credential; typed machine-readable error codes (observed `SUBSCRIPTION_TOKEN_INVALID`) enable precise fail-closed `doctor` diagnostics | Requires packaging/operating a SearXNG container; public instances unusable programmatically (observed); engine blocks cause silent quality decay        |
+| Criterion      | Brave Search API                                                                                                                                                                                     | SearXNG (self-hosted metasearch)                                                                                                                         |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Result quality | Independent index; structured JSON: title, URL, snippet, page age, language; adequate for discovery hints                                                                                            | Aggregates upstream engines; quality varies by engine set and rate-limit health; JSON format available only when self-hosted with `format: json` enabled |
+| Licensing      | Explicit commercial API terms permit programmatic query and metadata storage                                                                                                                         | Upstream engine terms generally prohibit scraping; public instances actively block API use (observed 403); usage responsibility falls on the operator    |
+| Cost           | Metered pricing with $5/month in automatically applied credits, currently $5 per 1,000 Search requests; no traditional hard-capped free tier. Maps directly to budget reservations and cost receipts | No direct API fee, but requires operating a container and absorbs upstream rate-limiting/blocking risk                                                   |
+| Determinism    | Non-deterministic (live index)                                                                                                                                                                       | Non-deterministic and additionally unstable across engine availability                                                                                   |
+| Operability    | One HTTPS endpoint + one header credential; typed machine-readable error codes (observed `SUBSCRIPTION_TOKEN_INVALID`) enable precise fail-closed `doctor` diagnostics                               | Requires packaging/operating a SearXNG container; public instances unusable programmatically (observed); engine blocks cause silent quality decay        |
 
 Additional observations:
 
 - Brave's typed error body means credential preflight can distinguish
   missing/invalid key from transport failure without heuristics.
 - The 422-without-auth behavior confirms no anonymous access path exists; live
-  exhibition requires a provisioned key and billing authorization (human gate
+  exhibition requires a provisioned key, metered-account setup, and billing
+  authorization even if monthly credits cover the observed usage (human gate
   before T8).
 - The public-instance 403 confirms SearXNG is only viable self-hosted, which
   moves engine-terms responsibility onto the operator and adds a container to

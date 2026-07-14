@@ -60,6 +60,7 @@
     {
       "id": "parser-resource-exhaustion",
       "gate": "parser-sandbox",
+      "hostileFixtureId": "parser-resource-exhaustion-payload",
       "attack": "input exceeding parser CPU/memory/time/output limits",
       "expected": "parser_failure_contained"
     },

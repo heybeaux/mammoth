@@ -30,8 +30,10 @@ Rationale against the criteria (details in the spike report):
   robots/licensing posture.
 - **Result quality** — independent index, structured JSON (title, URL, snippet,
   page age, language), sufficient for discovery-hint use.
-- **Cost** — per-request pricing with a free tier; maps 1:1 onto P8 request/
-  currency budget reservations and cost receipts.
+- **Cost** — metered request pricing with automatically applied monthly credits,
+  currently $5 per 1,000 Search requests and $5/month in credits rather than a
+  traditional hard-capped free tier; maps 1:1 onto P8 request/currency budget
+  reservations and cost receipts.
 - **Determinism** — no live provider is deterministic; CI uses only the offline
   fixture adapter, and live runs record full query/result receipts.
 - **Operability** — single HTTPS endpoint plus one API key; no extra container in
@@ -47,8 +49,9 @@ Rationale against the criteria (details in the spike report):
   explicitly labelled operator-responsibility in configuration and receipts, is
   not packaged as a default in `mammoth up`, and is not required for the P8
   release claim.
-- Missing/invalid credentials fail closed with an actionable `mammoth doctor`
-  diagnostic. There is no silent downgrade between adapters.
+- Missing/invalid credentials, absent metered-account setup, or missing billing
+  authorization fail closed with an actionable `mammoth doctor` diagnostic.
+  There is no silent downgrade between adapters.
 
 ### 3. Robots and licensing policy (acquisition layer)
 
@@ -68,9 +71,9 @@ Rationale against the criteria (details in the spike report):
 - Credential: `MAMMOTH_SEARCH_BRAVE_API_KEY`, supplied via environment/profile
   secret store; readable only inside the executing search Activity; never in
   prompts, logs, receipts, or model-visible data.
-- `mammoth doctor` preflight: validates key presence/shape, then issues one
-  bounded capability query with a stable effect ID and cost receipt; failure
-  yields a named fail-closed diagnostic.
+- `mammoth doctor` preflight: validates key presence/shape and billing
+  authorization, then issues one bounded capability query with a stable effect
+  ID and cost receipt; failure yields a named fail-closed diagnostic.
 - Every live search call carries a provider policy ID, program budget
   reservation, and effect receipt per ADR 0009 §3.
 

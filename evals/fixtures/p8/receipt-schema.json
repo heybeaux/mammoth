@@ -251,6 +251,7 @@
       "limitations": { "type": "array", "items": { "type": "string" } },
       "verificationCommands": {
         "type": "array",
+        "minItems": 1,
         "items": {
           "type": "object",
           "additionalProperties": false,
@@ -298,6 +299,7 @@
       "receiptPr": { "type": "integer" },
       "independentReviews": {
         "type": "array",
+        "minItems": 1,
         "items": {
           "type": "object",
           "additionalProperties": false,
@@ -313,6 +315,7 @@
       "migrations": { "type": "array", "items": { "type": "integer" } },
       "cleanCheckoutGates": {
         "type": "array",
+        "minItems": 1,
         "items": {
           "type": "object",
           "additionalProperties": false,
