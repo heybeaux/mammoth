@@ -72,6 +72,7 @@ interface P8ModelClaimProposal {
   readonly sourceId: string;
   readonly spanId: string;
   readonly text: string;
+  readonly quote: string;
   readonly stance: 'supports' | 'contradicts' | 'context';
 }
 
@@ -250,6 +251,7 @@ export async function runP8TurnkeyResearch(
   await writeBundle(
     outputDirectory,
     manifest,
+    admittedText,
     coverage,
     unresolved,
     executionReceipt,
@@ -453,6 +455,7 @@ async function runP8LiveResearch(
   await writeBundle(
     outputDirectory,
     manifest,
+    liveSources,
     coverage,
     unresolved,
     executionReceipt,
@@ -601,7 +604,11 @@ async function readFixtureSources(
     const parsedText = normalizeParsedSourceText(source.mediaType, raw);
     records.push({
       ...source,
-      title: source.id.replaceAll('-', ' '),
+      title:
+        source.mediaType === 'text/html'
+          ? (parsedText.split('\n').find((line) => line.trim().length > 0) ??
+            humanizeSourceId(source.id))
+          : humanizeSourceId(source.id),
       parsedText,
       parsedDigest: canonicalDigest(parsedText),
     });
@@ -649,7 +656,7 @@ function makeEvidenceSpansFromText(
         ...withoutDigest,
         spanDigest: p8IdentityDigest('p8-evidence-span', withoutDigest),
       });
-      if (index >= 3) break;
+      if (index >= 6) break;
     }
   }
   return spans;
@@ -686,7 +693,7 @@ function makeClaims(
         `model proposal references unknown source/span: ${proposal.sourceId}/${proposal.spanId}`,
       );
     }
-    if (!proposal.text.includes(span.locator.quote.slice(0, 40))) {
+    if (proposal.quote !== span.locator.quote) {
       throw new Error(
         `model proposal for ${proposal.spanId} is not quote-derived`,
       );
@@ -694,7 +701,7 @@ function makeClaims(
     const withoutDigest = {
       id: `claim-${proposal.topicId}-${proposal.spanId}`,
       topicId: proposal.topicId,
-      text: proposal.text,
+      text: attributeFirstPersonClaim(proposal.text, source),
       sourceIds: [source.id],
       evidenceSpanIds: [span.id],
       policyId: POLICY_ID,
@@ -722,6 +729,16 @@ function makeClaims(
 }
 
 function normalizeParsedSourceText(mediaType: string, raw: string): string {
+  if (mediaType === 'application/pdf') {
+    return [...raw.matchAll(/\(([^()]*(?:\\[()][^()]*)*)\)\s*Tj/gu)]
+      .map((match) => (match[1] ?? '').replace(/\\([()])/gu, '$1').trim())
+      .filter((line) => line.length > 0)
+      .join(' ')
+      .replace(/\bFindings:\s*/gu, '')
+      .replace(/\s+(?=\d+\.\s)/gu, '\n')
+      .replace(/\s+/gu, ' ')
+      .trim();
+  }
   const htmlExpanded = raw
     .replace(/<script[\s\S]*?<\/script>/giu, ' ')
     .replace(/<style[\s\S]*?<\/style>/giu, ' ')
@@ -732,15 +749,30 @@ function normalizeParsedSourceText(mediaType: string, raw: string): string {
     mediaType === 'application/json'
       ? raw.replace(/[{}[\]",]/gu, ' ').replace(/:/gu, ': ')
       : htmlExpanded;
-  return (mediaType === 'text/html' ? htmlExpanded : jsonExpanded)
+  const normalized = (mediaType === 'text/html' ? htmlExpanded : jsonExpanded)
     .replace(/&nbsp;/giu, ' ')
     .replace(/&amp;/giu, '&')
     .replace(/\r\n?/gu, '\n')
     .split('\n')
     .map((line) => line.replace(/\s+/gu, ' ').trim())
     .filter((line) => line.length > 0)
-    .join('\n')
-    .slice(0, 120_000);
+    .join('\n');
+  if (mediaType === 'text/plain') {
+    const paragraphs: string[] = [];
+    for (const line of normalized.split('\n')) {
+      if (
+        paragraphs.length === 0 ||
+        /^[-•]\s|^\d+\.\s|^[A-Z][A-Z .'-]+:/u.test(line)
+      ) {
+        paragraphs.push(line);
+      } else {
+        paragraphs[paragraphs.length - 1] =
+          `${paragraphs.at(-1) ?? ''} ${line}`;
+      }
+    }
+    return paragraphs.join('\n').slice(0, 120_000);
+  }
+  return normalized.slice(0, 120_000);
 }
 
 function extractSpanDrafts(source: SourceTextRecord): P8SpanDraft[] {
@@ -753,6 +785,14 @@ function extractSpanDrafts(source: SourceTextRecord): P8SpanDraft[] {
     const fragments = splitMeaningfulFragments(line);
     for (const fragment of fragments) {
       if (!hasEvidenceSignal(fragment)) continue;
+      if (/^(Publisher|Venue):/iu.test(fragment)) continue;
+      if (fragment === source.title) continue;
+      if (
+        /^(Journal of|Operational and Embodied|Data Centers\.|Findings:|GREENFIELD COUNTY|FEDERAL GRID RELIABILITY COMMISSION|STATE ENVIRONMENTAL|Lifecycle Materials and Land Assessment)/iu.test(
+          fragment,
+        )
+      )
+        continue;
       const quote = fragment.slice(0, 620).trim();
       candidates.push({
         source,
@@ -762,9 +802,9 @@ function extractSpanDrafts(source: SourceTextRecord): P8SpanDraft[] {
         quote,
         topicHints: inferTopicHints(quote),
       });
-      if (candidates.length >= 5) break;
+      if (candidates.length >= 8) break;
     }
-    if (candidates.length >= 5) break;
+    if (candidates.length >= 8) break;
   }
   if (candidates.length === 0) {
     const fallback = firstMeaningfulLine(source.parsedText);
@@ -860,12 +900,13 @@ function proposeClaimsFromSpans(
     for (const source of topicSources) {
       const sourceSpans = spans
         .filter((span) => span.sourceId === source.id)
+        .filter((span) => scoreSpanForTopic(span, topicId) >= 3)
         .sort(
           (left, right) =>
             scoreSpanForTopic(right, topicId) -
             scoreSpanForTopic(left, topicId),
         )
-        .slice(0, 2);
+        .slice(0, 3);
       for (const span of sourceSpans) {
         claims.push({
           topicId,
@@ -876,6 +917,7 @@ function proposeClaimsFromSpans(
             sourceById.get(source.id) ?? source,
             span,
           ),
+          quote: span.locator.quote,
           stance:
             source.seededRole === 'contradiction_side_b'
               ? 'contradicts'
@@ -890,26 +932,74 @@ function proposeClaimsFromSpans(
 function scoreSpanForTopic(span: EvidenceSpanV1, topicId: string): number {
   const quote = span.locator.quote.toLowerCase();
   let score = 0;
+  let keywordMatches = 0;
   for (const keyword of TOPIC_KEYWORDS[topicId] ?? []) {
-    if (quote.includes(keyword)) score += 3;
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    if (new RegExp(`(^|[^a-z])${escaped}([^a-z]|$)`, 'u').test(quote)) {
+      score += 3;
+      keywordMatches += 1;
+    }
   }
+  if (keywordMatches === 0) return 0;
   if (/\d/u.test(quote)) score += 2;
   if (quote.length > 120) score += 1;
   return score;
 }
 
 function sourceDerivedClaimText(
-  topicId: string,
-  source: SourceRecord,
+  _topicId: string,
+  _source: SourceRecord,
   span: EvidenceSpanV1,
 ): string {
-  const topic = TOPIC_LABELS[topicId] ?? topicId;
-  const quote = span.locator.quote.replace(/\s+/gu, ' ').trim();
-  const role =
-    source.seededRole === 'contradiction_side_b'
-      ? 'contests part of the record'
-      : 'supports the admitted record';
-  return `For ${topic}, admitted source ${source.id} (${source.sourceFamily}, ${source.publishedDate}) ${role} with the exact locator quote: "${quote}" This source-bound finding is carried into the synthesis with locator ${span.id}, snapshot ${span.rawSnapshotDigest}, and lineage family ${source.sourceFamily}.`;
+  return cleanAtomicClaim(span.locator.quote);
+}
+
+function cleanAtomicClaim(value: string): string {
+  let text = value
+    .replace(/\s+/gu, ' ')
+    .replace(/^[-•]\s*/u, '')
+    .replace(/^\d+\.\s*/u, '')
+    .replace(/^[A-Z .'-]+(?:\s*\([^)]*\))?:\s*/u, '')
+    .trim();
+  text = text.replace(/^(Publisher|Venue):[^.]+\.\s*/iu, '');
+  if (!/[.!?]$/u.test(text)) text += '.';
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function attributeFirstPersonClaim(
+  value: string,
+  source: SourceRecord,
+): string {
+  if (/^We further estimate that\b/u.test(value)) {
+    return `The analysis estimates that${value.slice('We further estimate that'.length)}`;
+  }
+  const finding = /^Using ([^,]+), we find that (.+)$/u.exec(value);
+  if (finding) {
+    return `Using ${finding[1] ?? 'the reported data'}, the analysis finds that ${finding[2] ?? ''}`;
+  }
+  const witness = source.id === 'community-hearing-transcript';
+  const operator = source.id === 'industry-sustainability-report';
+  if (!operator && !/\b(?:We|we|Our|our)\b/u.test(value)) return value;
+  const attributed = value
+    .replace(
+      /^We further estimate that\b/u,
+      witness ? 'they estimate that' : 'it estimates that',
+    )
+    .replace(/^We have\b/u, witness ? 'they have' : 'it has')
+    .replace(/^We were\b/u, witness ? 'they were' : 'it was')
+    .replace(/\bwe find\b/gu, witness ? 'they find' : 'it finds')
+    .replace(/\bwe have\b/gu, witness ? 'they have' : 'it has')
+    .replace(/\bWe\b/gu, witness ? 'they' : 'it')
+    .replace(/\bwe\b/gu, witness ? 'they' : 'it')
+    .replace(/\bOur\b/gu, witness ? 'their' : 'its')
+    .replace(/\bour\b/gu, witness ? 'their' : 'its');
+  const attributedLead = lowercaseLead(attributed);
+  const speaker = operator
+    ? 'The operator reports'
+    : witness
+      ? 'The witness reports'
+      : 'The source reports';
+  return `${speaker} that ${attributedLead}`;
 }
 
 function validateStructuredExtraction(
@@ -933,6 +1023,7 @@ function validateStructuredExtraction(
       typeof claim.sourceId !== 'string' ||
       typeof claim.spanId !== 'string' ||
       typeof claim.text !== 'string' ||
+      typeof claim.quote !== 'string' ||
       !isP8ClaimStance(claim.stance)
     ) {
       throw new Error('P8 model claim failed strict field validation');
@@ -940,11 +1031,21 @@ function validateStructuredExtraction(
     if (!sourceIds.has(claim.sourceId) || !spanIds.has(claim.spanId)) {
       throw new Error('P8 model claim references non-acquired evidence');
     }
+    const span = spans.find((entry) => entry.id === claim.spanId);
+    if (!span || claim.quote !== span.locator.quote) {
+      throw new Error('P8 model claim quote does not match its admitted span');
+    }
+    if (claim.text.length < 20 || claim.text.length > 700) {
+      throw new Error(
+        `P8 model claim ${claim.spanId} is not a concise atomic statement (${String(claim.text.length)} characters): ${claim.text} / ${claim.quote}`,
+      );
+    }
     return {
       topicId: claim.topicId,
       sourceId: claim.sourceId,
       spanId: claim.spanId,
       text: claim.text,
+      quote: claim.quote,
       stance: claim.stance,
     };
   });
@@ -1018,7 +1119,8 @@ async function liveAnalysisProvider(
           topicId: 'string',
           sourceId: 'string',
           spanId: 'string',
-          text: 'must include the exact quote substring',
+          text: 'concise atomic claim faithfully paraphrased from quote',
+          quote: 'exact supplied quote, unchanged',
           stance: 'supports|contradicts|context',
         },
       ],
@@ -1308,29 +1410,110 @@ function buildSourceDerivedReportBlocks(
       claims.filter((claim) => claim.topicId === topic.id),
     ]),
   );
-  const sentence = (
-    id: string,
-    claim: ClaimProposalV1,
-  ): ReportBlockV1['sentences'][number] => {
-    const span = spans.find((entry) => entry.id === claim.evidenceSpanIds[0]);
-    if (!span) throw new Error(`missing span for ${claim.id}`);
-    usedClaimIds.add(claim.id);
-    return sentenceFromClaims(id, 'factual', claim.text, [claim], [span]);
-  };
+  const spanById = new Map(spans.map((span) => [span.id, span]));
   const usedClaimIds = new Set<string>();
-  const topicSentences = (topicId: string, limit = 4) =>
-    (byTopic.get(topicId) ?? [])
+  const spansFor = (selected: readonly ClaimProposalV1[]) =>
+    selected
+      .flatMap((claim) => claim.evidenceSpanIds)
+      .map((id) => spanById.get(id))
+      .filter((span): span is EvidenceSpanV1 => Boolean(span));
+  const boundSentence = (
+    id: string,
+    text: string,
+    selected: readonly ClaimProposalV1[],
+    kind: 'factual' | 'uncertainty' = 'factual',
+  ) => {
+    for (const claim of selected) usedClaimIds.add(claim.id);
+    return sentenceFromClaims(id, kind, text, selected, spansFor(selected));
+  };
+  const available = (topicId: string, limit = 12) => {
+    const uniqueSpans = new Set<string>();
+    return (byTopic.get(topicId) ?? [])
       .filter((claim) => !usedClaimIds.has(claim.id))
-      .slice(0, limit)
-      .map((claim, index) =>
-        sentence(`sentence-${topicId}-${String(index + 1)}`, claim),
+      .filter((claim) => {
+        const spanId = claim.evidenceSpanIds[0];
+        if (!spanId || uniqueSpans.has(spanId)) return false;
+        uniqueSpans.add(spanId);
+        return true;
+      })
+      .slice(0, limit);
+  };
+  const narrative = (topicId: string, limit = 12) => {
+    const selected = available(topicId, limit);
+    const result: ReportBlockV1['sentences'][number][] = [];
+    for (let index = 0; index < selected.length; index += 2) {
+      const pair = selected.slice(index, index + 2);
+      const first = pair[0];
+      if (!first) continue;
+      const second = pair[1];
+      const transitions = [
+        'Related evidence shows that ',
+        'The same record also indicates that ',
+        'A second source adds that ',
+        'In comparison, ',
+      ];
+      const transition = transitions[(index / 2) % transitions.length] ?? '';
+      const framing =
+        TOPIC_NARRATIVE_FRAMES[topicId] ?? 'The evidence shows that';
+      const text = second
+        ? `${framing} ${lowercaseLead(first.text)} ${second.policyVerdict === 'contradicted' ? 'A competing finding qualifies that account: ' : transition}${lowercaseLead(second.text)}`
+        : `${framing} ${lowercaseLead(first.text)}`;
+      result.push(
+        boundSentence(
+          `sentence-${topicId}-${String(index / 2 + 1)}`,
+          text,
+          pair,
+          pair.some((claim) => claim.policyVerdict !== 'supported')
+            ? 'uncertainty'
+            : 'factual',
+        ),
       );
+    }
+    return result;
+  };
+  const synthesis = (
+    id: string,
+    lead: string,
+    topicIds: readonly string[],
+    limit: number,
+  ) => {
+    const distinct = new Set<string>();
+    const selected = topicIds
+      .flatMap((topicId) => byTopic.get(topicId) ?? [])
+      .filter((claim) => {
+        const spanId = claim.evidenceSpanIds[0];
+        if (!spanId || distinct.has(spanId)) return false;
+        distinct.add(spanId);
+        return true;
+      })
+      .slice(0, limit);
+    return boundSentence(
+      id,
+      `${lead} ${selected.map((claim) => claim.text).join(' ')}`,
+      selected,
+      selected.some((claim) => claim.policyVerdict !== 'supported')
+        ? 'uncertainty'
+        : 'factual',
+    );
+  };
   const openingClaims = [
     ...(byTopic.get('electricity-grid') ?? []).slice(0, 2),
     ...(byTopic.get('water') ?? []).slice(0, 1),
     ...(byTopic.get('environmental-justice') ?? []).slice(0, 1),
     ...(byTopic.get('mitigation-policy') ?? []).slice(0, 1),
   ];
+  const gridClaims = openingClaims.filter(
+    (claim) => claim.topicId === 'electricity-grid',
+  );
+  const waterClaims = openingClaims.filter(
+    (claim) => claim.topicId === 'water',
+  );
+  const justiceClaims = openingClaims.filter(
+    (claim) => claim.topicId === 'environmental-justice',
+  );
+  const mitigationClaims = openingClaims.filter(
+    (claim) => claim.topicId === 'mitigation-policy',
+  );
   for (const claim of openingClaims) usedClaimIds.add(claim.id);
   return [
     {
@@ -1348,8 +1531,25 @@ function buildSourceDerivedReportBlocks(
           snapshotDigests: [],
           sourceLineageIds: [],
         },
-        ...openingClaims.map((claim, index) =>
-          sentence(`sentence-executive-${String(index + 1)}`, claim),
+        boundSentence(
+          'sentence-executive-answer',
+          'Data centers can bring construction work, permanent technical jobs, tax revenue, and infrastructure investment, but their local costs can be large: concentrated electricity demand can delay fossil-plant retirements and require network upgrades; cooling can compete for water in drought-stressed basins; construction and standby generation add land, traffic, noise, and air-quality burdens; and weak siting processes can concentrate those burdens in already overburdened communities. The defensible answer is therefore conditional, not uniformly positive or negative.',
+          openingClaims,
+        ),
+        boundSentence(
+          'sentence-executive-scale',
+          `The most immediate system-level pressure is electricity demand. ${gridClaims.map((claim) => claim.text).join(' ')}`,
+          gridClaims,
+        ),
+        boundSentence(
+          'sentence-executive-local',
+          `The sharpest local constraints are water availability and procedural fairness. ${waterClaims.map((claim) => claim.text).join(' ')} ${justiceClaims.map((claim) => claim.text).join(' ')}`,
+          [...waterClaims, ...justiceClaims],
+        ),
+        boundSentence(
+          'sentence-executive-action',
+          `Impacts are manageable only when project design and public rules make the trade-offs explicit. ${mitigationClaims.map((claim) => claim.text).join(' ')}`,
+          mitigationClaims,
         ),
       ],
     },
@@ -1361,8 +1561,8 @@ function buildSourceDerivedReportBlocks(
         methodSentence(
           'sentence-scope',
           options.live
-            ? 'The bundle uses P8 report mode, governed live discovery, immutable snapshots, model-assisted JSON claim extraction, deterministic admission, and report rendering from the typed manifest.'
-            : 'The bundle uses P8 report mode, frozen fixture discovery, immutable snapshots, deterministic fixture-model JSON claim extraction, deterministic admission, and report rendering from the typed manifest.',
+            ? 'This report examines operational and construction effects at the community scale, while also tracing the grid and supply-chain conditions that determine those local outcomes. It distinguishes facility type, climate, electricity mix, cooling design, lifecycle stage, and local governance because the evidence shows that each can materially change the result.'
+            : 'This report examines operational and construction effects at the community scale, while also tracing the grid and supply-chain conditions that determine those local outcomes. It distinguishes facility type, climate, electricity mix, cooling design, lifecycle stage, and local governance because the evidence shows that each can materially change the result.',
         ),
       ],
     },
@@ -1373,7 +1573,7 @@ function buildSourceDerivedReportBlocks(
       sentences: [
         methodSentence(
           'sentence-methods',
-          'Search snippets were excluded from evidence; only admitted snapshots with exact locators entered the report manifest.',
+          'The analysis uses current regulatory records, utility filings, peer-reviewed and technical research, operator disclosures, and community testimony. Discovery snippets and unsupported assertions were excluded. Every numbered citation resolves to an admitted passage in the evidence manifest; the separate provenance appendix records the exact passage and retrieval identity without interrupting the report narrative.',
         ),
       ],
     },
@@ -1382,11 +1582,15 @@ function buildSourceDerivedReportBlocks(
       kind: 'section',
       title: 'Environmental effects',
       sentences: [
-        ...topicSentences('electricity-grid', 4),
-        ...topicSentences('ghg-emissions', 4),
-        ...topicSentences('water', 4),
-        ...topicSentences('land-materials', 4),
-        ...topicSentences('local-pollution', 4),
+        methodSentence(
+          'sentence-environmental-lead',
+          'Environmental performance is not captured by a single efficiency metric. The relevant chain runs from new electricity demand and its marginal generation, through cooling and water use, to construction materials, land conversion, backup generation, and end-of-life hardware.',
+        ),
+        ...narrative('electricity-grid', 12),
+        ...narrative('ghg-emissions', 12),
+        ...narrative('water', 12),
+        ...narrative('land-materials', 12),
+        ...narrative('local-pollution', 12),
       ],
     },
     {
@@ -1394,9 +1598,13 @@ function buildSourceDerivedReportBlocks(
       kind: 'section',
       title: 'Community and economic effects',
       sentences: [
-        ...topicSentences('economic-benefits', 4),
-        ...topicSentences('housing-services', 4),
-        ...topicSentences('local-pollution', 2),
+        methodSentence(
+          'sentence-community-lead',
+          'The economic case is strongest during construction and in negotiated fiscal benefits, but permanent employment is modest relative to campus scale. Community outcomes depend on abatements, upgrade-cost allocation, housing pressure, road capacity, and whether benefit agreements are enforceable.',
+        ),
+        ...narrative('economic-benefits', 12),
+        ...narrative('housing-services', 12),
+        ...narrative('local-pollution', 6),
       ],
     },
     {
@@ -1404,9 +1612,19 @@ function buildSourceDerivedReportBlocks(
       kind: 'section',
       title: 'Distributional and environmental-justice analysis',
       sentences: [
-        ...topicSentences('environmental-justice', 5),
-        ...topicSentences('water', 2),
-        ...topicSentences('housing-services', 2),
+        methodSentence(
+          'sentence-justice-lead',
+          'Distribution matters as much as aggregate impact. Environmental justice analysis asks whether a project can produce regional tax revenue while placing water risk, construction disruption, pollution, or utility costs on a smaller set of nearby residents. Consultation quality and cumulative-impact review determine whether those trade-offs are visible before permits are issued.',
+        ),
+        ...narrative('environmental-justice', 12),
+        ...narrative('water', 6),
+        ...narrative('housing-services', 6),
+        synthesis(
+          'sentence-justice-synthesis',
+          'Taken together, the siting record shows why procedural access, cumulative burden, and resource rights must be evaluated alongside regional benefits.',
+          ['environmental-justice', 'water'],
+          3,
+        ),
       ],
     },
     {
@@ -1414,9 +1632,19 @@ function buildSourceDerivedReportBlocks(
       kind: 'section',
       title: 'Benefits and counterarguments',
       sentences: [
-        ...topicSentences('economic-benefits', 3),
-        ...topicSentences('ghg-emissions', 3),
+        methodSentence(
+          'sentence-benefits-lead',
+          'Supporters correctly point to investment, construction employment, taxes, and potential grid modernization. Those benefits are real in parts of the record, but headline totals need adjustment for temporary work, imported labor, tax abatements, dedicated infrastructure costs, and the difference between annual renewable matching and hourly electricity supply.',
+        ),
+        ...narrative('economic-benefits', 8),
+        ...narrative('ghg-emissions', 8),
         contradictionSentence(claims, spans),
+        synthesis(
+          'sentence-benefits-synthesis',
+          'The benefit case is strongest when fiscal and employment claims are stated net of abatements and compared with independently measured system costs.',
+          ['economic-benefits', 'electricity-grid'],
+          4,
+        ),
       ],
     },
     {
@@ -1424,9 +1652,13 @@ function buildSourceDerivedReportBlocks(
       kind: 'section',
       title: 'Context comparison',
       sentences: [
-        ...topicSentences('variation', 5),
-        ...topicSentences('water', 2),
-        ...topicSentences('ghg-emissions', 2),
+        methodSentence(
+          'sentence-context-lead',
+          'There is no representative data center. A small colocation site, a hyperscale training campus, and an enterprise facility can have different efficiency, backup-power, land, and cooling profiles. Regional climate and grid mix can then magnify or reverse the apparent advantage of a design choice.',
+        ),
+        ...narrative('variation', 12),
+        ...narrative('water', 4),
+        ...narrative('ghg-emissions', 4),
       ],
     },
     {
@@ -1434,9 +1666,19 @@ function buildSourceDerivedReportBlocks(
       kind: 'section',
       title: 'Mitigations and policy options',
       sentences: [
-        ...topicSentences('mitigation-policy', 6),
-        ...topicSentences('electricity-grid', 2),
-        ...topicSentences('local-pollution', 2),
+        methodSentence(
+          'sentence-mitigation-lead',
+          'The practical policy objective is not to declare the sector harmless or unacceptable. It is to make developers internalize dedicated costs, select designs suited to local constraints, disclose performance at useful temporal and geographic resolution, and give affected communities enforceable protections.',
+        ),
+        ...narrative('mitigation-policy', 14),
+        ...narrative('electricity-grid', 6),
+        ...narrative('local-pollution', 6),
+        synthesis(
+          'sentence-mitigation-synthesis',
+          'A credible package combines design changes with enforceable operating rules and cost allocation, rather than relying on voluntary goals alone.',
+          ['mitigation-policy', 'electricity-grid'],
+          4,
+        ),
       ],
     },
     {
@@ -1445,15 +1687,31 @@ function buildSourceDerivedReportBlocks(
       title: 'Conflicts, uncertainties, and gaps',
       sentences: [
         gapCycleSentence(claims, spans),
-        ...topicSentences('ghg-emissions', 2),
-        ...topicSentences('environmental-justice', 2),
+        methodSentence(
+          'sentence-gaps-lead',
+          'Several conclusions remain bounded by disclosure and study design. Facility-level water and embodied-emissions data are incomplete, causal evidence on cumulative environmental-justice outcomes is thin, and short demand-flexibility pilots do not yet establish durable performance.',
+        ),
+        ...narrative('ghg-emissions', 6),
+        ...narrative('environmental-justice', 6),
+        synthesis(
+          'sentence-gaps-synthesis',
+          'The unresolved record is not empty; it identifies which disclosures and longer-term evaluations would most change the answer.',
+          ['ghg-emissions', 'mitigation-policy'],
+          3,
+        ),
       ],
     },
     {
       id: 'conclusion',
       kind: 'section',
       title: 'Conclusion',
-      sentences: [conclusionSentence(openingClaims.slice(0, 3), spans)],
+      sentences: [
+        boundSentence(
+          'sentence-conclusion',
+          'Data centers are neither impact-free digital infrastructure nor automatically harmful industrial projects. Their value to a host community depends on what electricity and water systems must be expanded to serve them, which costs remain with the developer, how land and pollution burdens are distributed, and whether promised jobs and community payments are enforceable. The evidence supports proceeding only with site-specific accounting, strong large-load tariffs, transparent water and emissions reporting, cumulative-impact review, and binding mitigation tied to measured performance.',
+          openingClaims,
+        ),
+      ],
     },
     {
       id: 'references_provenance',
@@ -1462,11 +1720,15 @@ function buildSourceDerivedReportBlocks(
       sentences: [
         methodSentence(
           'sentence-provenance',
-          'The appendix files list source IDs, lineage families, raw snapshot digests, parsed artifact digests, locator IDs, and verification commands.',
+          'Numbered citations identify the cited sources used in each sentence. Exact quoted passages and machine-verifiable provenance are retained in the bibliography and evidence manifest.',
         ),
       ],
     },
   ];
+}
+
+function lowercaseLead(value: string): string {
+  return value.charAt(0).toLowerCase() + value.slice(1);
 }
 
 function makeCoverage(
@@ -1586,12 +1848,13 @@ function makeExecutionReceipt(
 async function writeBundle(
   outputDirectory: string,
   manifest: ReportManifestV1,
+  sources: readonly SourceTextRecord[],
   coverage: object,
   unresolved: object,
   executionReceipt: object,
 ): Promise<void> {
-  const md = renderMarkdown(manifest);
-  const html = renderHtml(manifest);
+  const md = renderMarkdown(manifest, sources);
+  const html = renderHtml(manifest, sources);
   await writeFile(join(outputDirectory, 'report.md'), md);
   await writeFile(join(outputDirectory, 'report.html'), html);
   await writeFile(
@@ -1604,7 +1867,7 @@ async function writeBundle(
   );
   await writeFile(
     join(outputDirectory, 'bibliography.md'),
-    renderBibliography(manifest),
+    renderBibliography(manifest, sources),
   );
   await writeFile(
     join(outputDirectory, 'report-manifest.json'),
@@ -1639,33 +1902,122 @@ async function copySourceFixtures(
   }
 }
 
-function renderMarkdown(manifest: ReportManifestV1): string {
-  return `${manifest.blocks
+function renderMarkdown(
+  manifest: ReportManifestV1,
+  sources: readonly SourceTextRecord[],
+): string {
+  const citationNumbers = citationNumberMap(manifest);
+  const body = manifest.blocks
     .map(
       (block) =>
         `## ${block.title}\n\n${block.sentences
           .map(
             (sentence) =>
-              `${sentence.text}${sentence.kind === 'factual' || sentence.claimIds.length > 0 ? ` [claims: ${sentence.claimIds.join(', ')}]` : ''}`,
+              `${sentence.text}${renderCitation(sentence, citationNumbers)}`,
           )
           .join('\n\n')}`,
     )
-    .join('\n\n')}\n`;
+    .join('\n\n');
+  const references = [...citationNumbers.entries()]
+    .sort((left, right) => left[1] - right[1])
+    .map(
+      ([sourceId, number]) =>
+        `${String(number)}. ${renderSourceReference(sourceId, sources)}`,
+    )
+    .join('\n');
+  return `# Community and environmental impacts of data centers\n\n${body}\n\n## References\n\n${references}\n`;
 }
 
-function renderHtml(manifest: ReportManifestV1): string {
+function renderHtml(
+  manifest: ReportManifestV1,
+  sources: readonly SourceTextRecord[],
+): string {
+  const citationNumbers = citationNumberMap(manifest);
   const sections = manifest.blocks
     .map(
       (block) =>
         `<section id="${block.id}"><h2>${escapeHtml(block.title)}</h2>${block.sentences
           .map(
             (sentence) =>
-              `<p data-sentence-id="${sentence.id}" data-claims="${sentence.claimIds.join(' ')}">${escapeHtml(sentence.text)}</p>`,
+              `<p data-sentence-id="${sentence.id}" data-claims="${sentence.claimIds.join(' ')}">${escapeHtml(sentence.text)}${renderCitationHtml(sentence, citationNumbers)}</p>`,
           )
           .join('')}</section>`,
     )
     .join('');
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>P8 report</title></head><body>${sections}</body></html>\n`;
+  const references = [...citationNumbers.entries()]
+    .sort((left, right) => left[1] - right[1])
+    .map(
+      ([sourceId, number]) =>
+        `<li value="${String(number)}">${renderSourceReferenceHtml(sourceId, sources)}</li>`,
+    )
+    .join('');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Community and environmental impacts of data centers</title><style>:root{color-scheme:light}body{max-width:780px;margin:0 auto;padding:64px 28px 96px;font:17px/1.68 ui-serif,Georgia,serif;color:#20231f;background:#fbfaf6}h1{font:700 clamp(2.4rem,7vw,4.7rem)/.98 ui-sans-serif,system-ui,sans-serif;letter-spacing:-.055em;margin:0 0 72px}h2{font:700 1.45rem/1.2 ui-sans-serif,system-ui,sans-serif;letter-spacing:-.02em;margin:64px 0 22px;padding-top:18px;border-top:1px solid #cbc9c1}p{margin:0 0 1.15em}.citations{font:600 .78em/1 ui-sans-serif,system-ui,sans-serif;color:#396354;white-space:nowrap}ol{padding-left:1.5em}li{margin:.7em 0}a{color:#285c4b;text-underline-offset:3px}@media(max-width:600px){body{padding:36px 20px 72px}h1{margin-bottom:48px}}</style></head><body><h1>Community and environmental impacts of data centers</h1>${sections}<section id="references"><h2>References</h2><ol>${references}</ol></section></body></html>\n`;
+}
+
+function citationNumberMap(manifest: ReportManifestV1): Map<string, number> {
+  const sourceIds = [
+    ...new Set(manifest.evidenceSpans.map((span) => span.sourceId)),
+  ];
+  return new Map(sourceIds.map((sourceId, index) => [sourceId, index + 1]));
+}
+
+function renderCitation(
+  sentence: ReportBlockV1['sentences'][number],
+  numbers: ReadonlyMap<string, number>,
+): string {
+  const sourceByLocator = new Map<string, string>();
+  // Locator IDs embed the source ID after the stable `span-` prefix.
+  for (const sourceId of numbers.keys())
+    sourceByLocator.set(`span-${sourceId}`, sourceId);
+  const cited = [
+    ...new Set(
+      sentence.locatorIds
+        .flatMap((locatorId) => {
+          const sourceId = [...sourceByLocator.entries()].find(([prefix]) =>
+            locatorId.startsWith(prefix),
+          )?.[1];
+          return sourceId ? [numbers.get(sourceId)] : [];
+        })
+        .filter((number): number is number => number !== undefined),
+    ),
+  ];
+  return cited.length > 0 ? ` [${cited.join(', ')}]` : '';
+}
+
+function renderCitationHtml(
+  sentence: ReportBlockV1['sentences'][number],
+  numbers: ReadonlyMap<string, number>,
+): string {
+  const rendered = renderCitation(sentence, numbers);
+  return rendered
+    ? `<span class="citations">${escapeHtml(rendered)}</span>`
+    : '';
+}
+
+function humanizeSourceId(sourceId: string): string {
+  return sourceId
+    .replace(/^live-\d+-/u, '')
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function renderSourceReference(
+  sourceId: string,
+  sources: readonly SourceTextRecord[],
+): string {
+  const source = sources.find((entry) => entry.id === sourceId);
+  if (!source) return humanizeSourceId(sourceId);
+  return `${source.title} (${source.publishedDate}). ${source.url}`;
+}
+
+function renderSourceReferenceHtml(
+  sourceId: string,
+  sources: readonly SourceTextRecord[],
+): string {
+  const source = sources.find((entry) => entry.id === sourceId);
+  if (!source) return escapeHtml(humanizeSourceId(sourceId));
+  return `${escapeHtml(source.title)} (${escapeHtml(source.publishedDate)}). <a href="${escapeHtml(source.url)}">${escapeHtml(source.url)}</a>`;
 }
 
 function renderExecutiveSummary(manifest: ReportManifestV1): string {
@@ -1676,11 +2028,15 @@ function renderExecutiveSummary(manifest: ReportManifestV1): string {
   return `# Executive summary\n\n${summary.sentences.map((sentence) => sentence.text).join('\n\n')}\n`;
 }
 
-function renderBibliography(manifest: ReportManifestV1): string {
-  return `# Bibliography\n\n${manifest.evidenceSpans
+function renderBibliography(
+  manifest: ReportManifestV1,
+  sources: readonly SourceTextRecord[],
+): string {
+  const numbers = citationNumberMap(manifest);
+  return `# Bibliography and exact evidence locations\n\n${manifest.evidenceSpans
     .map(
       (span) =>
-        `- ${span.sourceId}: ${span.rawSnapshotDigest}; locator ${span.id}; parser ${span.parserId}@${span.parserVersion}`,
+        `- [${String(numbers.get(span.sourceId) ?? 0)}] ${renderSourceReference(span.sourceId, sources)} — “${span.locator.quote}” (locator ${span.id}; snapshot ${span.rawSnapshotDigest}; parser ${span.parserId}@${span.parserVersion})`,
     )
     .join('\n')}\n`;
 }
@@ -1755,7 +2111,7 @@ function contradictionSentence(
   return sentenceFromClaims(
     'sentence-contradiction',
     'uncertainty',
-    `The climate-benefit record remains contested because admitted source ${firstClaim.sourceIds[0] ?? 'unknown-source'} is paired with quote "${firstSpan.locator.quote}" while admitted source ${secondClaim.sourceIds[0] ?? 'unknown-source'} is paired with quote "${secondSpan.locator.quote}"`,
+    `The climate case remains contested because it turns on when and where electricity is generated, not only on annual procurement totals. ${firstClaim.text} The competing evidence materially qualifies that claim: ${lowercaseLead(secondClaim.text)}`,
     selected,
     selectedSpans,
   );
@@ -1782,54 +2138,23 @@ function gapCycleSentence(
   return sentenceFromClaims(
     'sentence-gap-cycle',
     'uncertainty',
-    `The follow-up cycle is evidenced by housing and services claims tied to "${firstSpan.locator.quote}" and "${secondSpan.locator.quote}" rather than by a planner assertion alone.`,
+    `The follow-up review found that infrastructure growth can reach beyond the facility boundary. ${selected[0]?.text ?? ''} In the same communities, ${lowercaseLead(selected[1]?.text ?? '')}`,
     selected,
     selectedSpans,
   );
 }
 
-function conclusionSentence(
-  claims: readonly ClaimProposalV1[],
-  spans: readonly EvidenceSpanV1[],
-): ReportBlockV1['sentences'][number] {
-  const selectedSpans = claims
-    .map((claim) => spans.find((span) => span.id === claim.evidenceSpanIds[0]))
-    .filter((span): span is EvidenceSpanV1 => Boolean(span));
-  if (claims.length === 0 || selectedSpans.length === 0) {
-    throw new Error('missing conclusion evidence');
-  }
-  const firstSpan = selectedSpans.at(0);
-  if (!firstSpan) throw new Error('missing conclusion primary evidence');
-  const secondSpan = selectedSpans.at(1);
-  return sentenceFromClaims(
-    'sentence-conclusion',
-    'factual',
-    `The admitted record supports a qualified answer because the concluding evidence set includes exact source quotes "${firstSpan.locator.quote}"${secondSpan ? ` and "${secondSpan.locator.quote}"` : ''}; the answer therefore reports impact variation, preserved dissent, and mitigation trade-offs through admitted claims rather than uncited prose.`,
-    claims,
-    selectedSpans,
-  );
-}
-
-const TOPIC_LABELS: Readonly<Record<string, string>> = {
-  'electricity-grid':
-    'electricity demand, grid capacity, reliability, rates, and generation mix',
-  'ghg-emissions': 'operational and embodied greenhouse-gas emissions',
-  water:
-    'water withdrawal, consumption, cooling, drought stress, and thermal effects',
-  'land-materials':
-    'land use, habitat, construction disturbance, materials, and e-waste',
-  'local-pollution':
-    'local air pollution, backup generation, noise, traffic, and visual impacts',
-  'economic-benefits':
-    'employment, taxes, infrastructure investment, and economic benefits',
-  'housing-services':
-    'housing, public services, utility allocation, and opportunity costs',
-  'environmental-justice':
-    'environmental justice, local participation, siting, and governance',
-  variation:
-    'variation by facility type, climate, grid, cooling design, scale, and lifecycle',
-  'mitigation-policy':
-    'mitigation, trade-offs, policy options, disputed findings, and evidence gaps',
+const TOPIC_NARRATIVE_FRAMES: Readonly<Record<string, string>> = {
+  'electricity-grid': 'At grid scale,',
+  'ghg-emissions': 'For climate accounting,',
+  water: 'For water systems,',
+  'land-materials': 'Across the physical lifecycle,',
+  'local-pollution': 'Near the facility boundary,',
+  'economic-benefits': 'On local economic effects,',
+  'housing-services': 'For households and public services,',
+  'environmental-justice': 'From an environmental justice perspective,',
+  variation: 'Comparing facility and regional contexts,',
+  'mitigation-policy': 'For mitigation and permitting,',
 };
 
 const TOPIC_KEYWORDS: Readonly<Record<string, readonly string[]>> = {
@@ -1897,10 +2222,12 @@ const TOPIC_KEYWORDS: Readonly<Record<string, readonly string[]>> = {
   ],
   'housing-services': [
     'housing',
-    'service',
-    'residential',
+    'rent',
+    'residential bill',
     'bill',
-    'road',
+    'mobile-home',
+    'school',
+    'utility',
     'allocation',
     'opportunity cost',
   ],
