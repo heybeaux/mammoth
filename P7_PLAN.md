@@ -101,6 +101,16 @@ complete.
 - The reference adapter uses the OpenAI-compatible chat-completions HTTP shape and
   is configured for a loopback Ollama endpoint by default. Non-loopback endpoints
   are cloud egress and require explicit policy approval.
+- The reference adapter accepts only `http:` and `https:` URLs. Local mode permits
+  loopback addresses only and refuses redirects. Governed non-loopback mode
+  resolves every hostname before each request, rejects private, loopback,
+  link-local, multicast, unspecified, reserved, and cloud-metadata IP ranges,
+  pins the approved destination origin, and repeats DNS/IP/origin validation for
+  every redirect. DNS rebinding or mixed allowed/denied answers fail closed.
+- `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and lowercase equivalents are ignored
+  by default. A proxy may be used only when its exact origin is separately pinned
+  by policy and passes the same scheme, DNS/IP, redirect, and classification
+  checks. Provider redirects may never widen the approved origin set.
 - Offline CI uses a deterministic provider implementing the exact same port and
   public application boundary. Provider-dependent calls never enter offline CI.
 
@@ -117,13 +127,22 @@ complete.
   requests, prompts, logs, CAS metadata, receipts, projections, fixtures, and Git.
 - Prompts are classified and secret-scanned before dispatch. A detected secret or
   disallowed classification fails before a provider call.
-- The default retention policy stores canonical prompt and raw provider-response
-  bytes as encrypted-at-rest-ready CAS artifacts in the local profile, referenced
-  only by digest and classification metadata. Logs, receipts, Postgres rows, and
-  projections contain digests and redacted summaries, never raw content.
+- P7 makes no encryption-at-rest claim. Its threat model is a single-user local
+  profile on a host whose disk encryption and account security are operator
+  responsibilities. The default retention policy stores canonical prompt and raw
+  provider-response bytes as plaintext CAS objects referenced only by digest and
+  `local_only` classification metadata. CAS directories and atomic temporary files
+  must use owner-only permissions (`0700` directories, `0600` files), temporary
+  plaintext must stay under the CAS root, and failed writes must remove it.
+  Logs, receipts, Postgres rows, and projections contain digests and redacted
+  summaries, never raw content. Managed encryption, key generation/storage/rotation,
+  and multi-user isolation are explicitly deferred beyond P7.
 - A `discard_raw_after_validation` policy may omit raw bytes only after recording
   their digest, byte length, validation verdict, and deletion receipt. Rejected or
   ambiguous output is retained under the active policy for audit and reconciliation.
+- Acceptance fixtures verify owner-only CAS/temp permissions, no plaintext outside
+  the CAS root, failed-write cleanup, and the absence of any encryption claim in
+  the receipt and operator projection.
 
 ### Stable identities, idempotency, and retries
 
@@ -131,12 +150,19 @@ complete.
   ID/version/digest, work-item contract digest, prompt-template digest, canonical
   input digest, model-profile-version ID/digest, policy version/digest, tool
   contract digest, and output-schema digest.
-- A provider-attempt identity additionally binds attempt ordinal and concrete
-  provider/model/checkpoint. A retry caused only by Activity redelivery retains
-  the same model-work and provider effect identities.
-- The provider idempotency key derives from model-work identity, operation kind,
-  provider, concrete model, and request digest. Receipt lookup and reconciliation
-  happen before every retry.
+- A provider-attempt identity additionally binds attempt ordinal, provider,
+  concrete model, and checkpoint. The provider-effect identity binds that complete
+  provider-attempt identity, model-work identity, operation kind, and canonical
+  request digest. Its idempotency key is the canonical digest of every one of
+  those components.
+- A retry caused only by Activity redelivery reuses the same attempt ordinal,
+  provider-attempt identity, provider-effect identity, and idempotency key.
+  Receipt lookup and reconciliation happen before every retry.
+- Policy may create a new attempt ordinal and therefore a new provider-attempt and
+  effect identity only after the prior attempt has a terminal non-ambiguous failure
+  or an ambiguous result has been conclusively reconciled. The new attempt records
+  the predecessor identity and reason. Distinct attributed attempts cannot collapse
+  to one effect key or one charge; redeliveries cannot create a new charge.
 - Completed effects return the existing receipt. An in-flight duplicate never
   starts a second call. An ambiguous provider outcome remains ambiguous until the
   adapter reconciles by provider operation/idempotency identity or policy permits
@@ -204,9 +230,12 @@ boundaries require an ADR before implementation integration.
 
 ## Path ownership and delivery lanes
 
-The coordinator owns cross-package contracts, integration, PRs, CI repair,
-receipt, tag, and the final checkpoint claim. Workers must stop with a conflict
-note before editing outside their owned paths.
+The coordinator is accountable for cross-package contract reconciliation,
+integration order, PR/CI decisions, the tag, and the final checkpoint claim. Lane
+owners remain the sole editors of their assigned artifacts; the coordinator
+accepts each lane at its named handoff, integrates its commit, and sends blocking
+findings back to that owner. Workers must stop with a conflict note before editing
+outside their owned paths.
 
 ### Lane A — provider-neutral contracts and conformance
 
@@ -300,7 +329,10 @@ and workflow implementation except reviewed blocking fixes handed back to owners
 Verification: projection tests, verifier self-tests, full clean-checkout ladder,
 live-provider exhibition protocol, and receipt integrity.
 
-Handoff recipient: coordinator/integrator.
+Handoff recipient: coordinator/integrator at the P7 acceptance-candidate checkpoint.
+Lane D, not the coordinator, edits root verifier scripts, CI, the release receipt,
+and checkpoint-status documents. The coordinator reviews and integrates the Lane D
+commit after its focused checks and independent attack record are complete.
 
 ### Independent reviewer
 
@@ -470,6 +502,14 @@ minimum it runs:
 7. live local-Temporal provider-work recovery and replay gates;
 8. dossier provenance and unsupported-claim rejection gates; and
 9. read-only projection integrity and leakage gates.
+
+The root `package.json` maps `verify:p7` exactly to
+`tsx scripts/verify-p7.ts`. That script imports the acceptance package's exported
+`verifyP7`, calls `verifyP7(resolve(process.cwd()))`, writes one deterministic JSON
+result followed by a newline, and sets a non-zero exit code whenever `result.ok`
+is false. Unexpected exceptions emit a stable JSON failure object and also exit
+non-zero. This follows the existing `verify:p5`/`verify:p6` wrapper pattern and
+does not alter any earlier command.
 
 The root script must not call `verify:p7` recursively and must not fold or weaken
 any P2-P6 command. CI includes a named `Verify P7 live research loop` step.
