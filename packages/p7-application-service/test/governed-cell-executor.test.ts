@@ -22,6 +22,7 @@ import {
 import {
   GovernedProviderCellExecutor,
   ModelWorkP7ResearchAuthority,
+  P7_TYPED_OUTPUT_JSON_SCHEMA,
   createP7GovernedCellPlanner,
   extractTypedOutput,
   planP7GovernedCells,
@@ -284,6 +285,37 @@ describe('P7 governed provider-backed cell executor', () => {
     if (!prompt || !work) throw new Error('expected prompt artifact and work');
     expect(prompt.digest).toBe(work.request.effect.canonicalRequestDigest);
     expect(prompt.digest).toBe(work.request.canonicalPromptDigest);
+    const promptBytes = await fixture.cas.get(prompt.digest);
+    const body = JSON.parse(new TextDecoder().decode(promptBytes)) as {
+      readonly max_tokens: number;
+      readonly messages: readonly {
+        readonly content: string;
+        readonly role: string;
+      }[];
+      readonly response_format: unknown;
+    };
+    expect(body.max_tokens).toBe(fixture.request.budget.outputTokens);
+    expect(body.messages).toHaveLength(2);
+    expect(body.messages[0]).toMatchObject({ role: 'system' });
+    expect(body.messages[0]?.content).toContain(
+      canonicalJson(P7_TYPED_OUTPUT_JSON_SCHEMA),
+    );
+    expect(body.messages[0]?.content).toContain('never use null');
+    expect(body.messages[0]?.content).toContain(
+      'Do not invent claims or evidence from identifiers or digests.',
+    );
+    expect(body.messages[1]).toMatchObject({ role: 'user' });
+    expect(body.messages[1]?.content).toContain(
+      'No factual source material is included',
+    );
+    expect(body.response_format).toEqual({
+      type: 'json_schema',
+      json_schema: {
+        name: 'mammoth_p7_typed_output',
+        strict: true,
+        schema: P7_TYPED_OUTPUT_JSON_SCHEMA,
+      },
+    });
   });
 
   it('is idempotent across activity redelivery without duplicate charges', async () => {
@@ -656,5 +688,37 @@ describe('P7 governed provider-backed cell executor', () => {
     expect(
       extractTypedOutput(new TextEncoder().encode('not json')),
     ).toBeUndefined();
+  });
+
+  it.each([
+    {
+      name: 'Ollama null fields',
+      output: {
+        observations: null,
+        claimProposals: null,
+        evidenceReferences: null,
+        assumptions: null,
+        dissent: null,
+        proposedFalsifiers: null,
+      },
+    },
+    {
+      name: 'Ollama scalar and string proposal fields',
+      output: {
+        observations: 'one observation',
+        claimProposals: ['one claim'],
+        evidenceReferences: ['one reference'],
+        assumptions: ['one assumption'],
+        dissent: ['one dissent'],
+        proposedFalsifiers: ['one falsifier'],
+      },
+    },
+  ])('rejects $name captured by the live-provider exhibition', ({ output }) => {
+    const envelope = new TextEncoder().encode(
+      JSON.stringify({
+        choices: [{ message: { content: JSON.stringify(output) } }],
+      }),
+    );
+    expect(extractTypedOutput(envelope)).toBeUndefined();
   });
 });

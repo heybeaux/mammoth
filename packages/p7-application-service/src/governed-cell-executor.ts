@@ -54,6 +54,79 @@ import type { P7ExpectedCellReader } from './model-work-authority.js';
 
 const PLACEHOLDER_DIGEST = `sha256:${'0'.repeat(64)}`;
 
+const P7_EVIDENCE_REFERENCE_JSON_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['locator', 'snapshotDigest'],
+  properties: {
+    locator: { type: 'string', minLength: 1 },
+    snapshotDigest: {
+      type: 'string',
+      pattern: '^sha256:[0-9a-f]{64}$',
+    },
+  },
+} as const;
+
+export const P7_TYPED_OUTPUT_JSON_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'observations',
+    'claimProposals',
+    'evidenceReferences',
+    'assumptions',
+    'dissent',
+    'proposedFalsifiers',
+  ],
+  properties: {
+    observations: {
+      type: 'array',
+      items: { type: 'string', minLength: 1 },
+    },
+    claimProposals: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['proposalId', 'statement', 'evidenceReferences'],
+        properties: {
+          proposalId: { type: 'string', minLength: 1 },
+          statement: { type: 'string', minLength: 1 },
+          evidenceReferences: {
+            type: 'array',
+            items: P7_EVIDENCE_REFERENCE_JSON_SCHEMA,
+          },
+        },
+      },
+    },
+    evidenceReferences: {
+      type: 'array',
+      items: P7_EVIDENCE_REFERENCE_JSON_SCHEMA,
+    },
+    assumptions: {
+      type: 'array',
+      items: { type: 'string', minLength: 1 },
+    },
+    dissent: {
+      type: 'array',
+      items: { type: 'string', minLength: 1 },
+    },
+    proposedFalsifiers: {
+      type: 'array',
+      items: { type: 'string', minLength: 1 },
+    },
+  },
+} as const;
+
+const P7_MINIMAL_TYPED_OUTPUT: TypedModelOutput = {
+  observations: [],
+  claimProposals: [],
+  evidenceReferences: [],
+  assumptions: [],
+  dissent: [],
+  proposedFalsifiers: [],
+};
+
 export interface P7PlannedModelWork {
   readonly modelWork: ModelWorkRequest;
   readonly canonicalRequestBytes: Uint8Array;
@@ -1033,10 +1106,22 @@ function p7CanonicalChatBody(
   identity: ModelWorkIdentity,
   concreteModel: string,
 ): Record<string, unknown> {
-  const prompt = [
+  const systemPrompt = [
     'You are a Mammoth P7 research cell.',
-    'Return only a JSON object with the fields observations, claimProposals,',
-    'evidenceReferences, assumptions, dissent, and proposedFalsifiers.',
+    'Return exactly one JSON object and no markdown or commentary.',
+    'The object MUST validate against this JSON Schema:',
+    canonicalJson(P7_TYPED_OUTPUT_JSON_SCHEMA),
+    'Every field is required. Use an empty array when there are no values;',
+    'never use null and never replace an object with a string.',
+    'Identifiers and digests are context, not evidence or factual source material.',
+    'Do not invent claims or evidence from identifiers or digests.',
+    'When the user message contains no source material, return the valid minimal',
+    'response exactly instead of filling it with inferred content.',
+    'A valid minimal response is:',
+    canonicalJson(P7_MINIMAL_TYPED_OUTPUT),
+  ].join(' ');
+  const userPrompt = [
+    'No factual source material is included in this request.',
     `Charter digest: ${request.charterDigest}.`,
     `Criterion ${identity.criterionId} v${String(identity.criterionVersion)}`,
     `(${identity.criterionDigest}).`,
@@ -1045,9 +1130,20 @@ function p7CanonicalChatBody(
     `Canonical input digest: ${identity.canonicalInputDigest}.`,
   ].join(' ');
   return {
-    messages: [{ content: prompt, role: 'user' }],
+    messages: [
+      { content: systemPrompt, role: 'system' },
+      { content: userPrompt, role: 'user' },
+    ],
+    max_tokens: request.budget.outputTokens,
     model: concreteModel,
-    response_format: { type: 'json_object' },
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'mammoth_p7_typed_output',
+        strict: true,
+        schema: P7_TYPED_OUTPUT_JSON_SCHEMA,
+      },
+    },
     stream: false,
     temperature: 0,
   };

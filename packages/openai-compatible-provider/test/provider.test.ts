@@ -167,6 +167,46 @@ describe('OpenAI-compatible provider adapter', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('dispatches strict JSON Schema response formats', async () => {
+    const transport = new FixtureTransport();
+    transport.responses.push(
+      capabilityResponse(),
+      capabilityResponse(),
+      chatResponse(),
+    );
+    const adapter = provider(transport);
+    const manifest = await adapter.discoverCapabilities();
+    const request = buildModelWorkRequest(manifest, {
+      maxTokens: 256,
+      responseFormat: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'fixture_output',
+          strict: true,
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['observations'],
+            properties: {
+              observations: { type: 'array', items: { type: 'string' } },
+            },
+          },
+        },
+      },
+    });
+    await expect(
+      adapter.dispatch({ ...request, limits: request.modelWork.budget }),
+    ).resolves.toMatchObject({ ok: true });
+    const post = transport.requests.find((entry) => entry.method === 'POST');
+    expect(JSON.parse(post?.bodyText ?? '{}')).toMatchObject({
+      max_tokens: 256,
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: 'fixture_output', strict: true },
+      },
+    });
+  });
+
   it('shares one provider call across concurrent duplicate dispatches', async () => {
     const transport = new FixtureTransport();
     transport.responses.push(capabilityResponse());
