@@ -4,6 +4,7 @@ export * from './digest.js';
 export * from './evidence.js';
 export * from './graph.js';
 export * from './lineage.js';
+export * from './model-work.js';
 export * from './primitives.js';
 export * from './program.js';
 export * from './research-cell.js';

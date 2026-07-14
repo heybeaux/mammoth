@@ -325,6 +325,22 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
 
+  packages/provider-port:
+    dependencies:
+      '@mammoth/domain':
+        specifier: workspace:*
+        version: link:../domain
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
+
   packages/report-compiler:
     dependencies:
       '@mammoth/domain':
