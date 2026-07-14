@@ -6,23 +6,22 @@
 >
 > Direction: production adapters first, then broader research-cell orchestration.
 >
-> Completed checkpoints: [`P2_PLAN.md`](P2_PLAN.md), [`P3_PLAN.md`](P3_PLAN.md),
-> [`P4_PLAN.md`](P4_PLAN.md), [`P5_PLAN.md`](P5_PLAN.md),
-> [`P6_PLAN.md`](P6_PLAN.md)
+> Completed release checkpoints: [`P2_PLAN.md`](P2_PLAN.md),
+> [`P3_PLAN.md`](P3_PLAN.md), [`P4_PLAN.md`](P4_PLAN.md),
+> [`P5_PLAN.md`](P5_PLAN.md), [`P6_PLAN.md`](P6_PLAN.md)
 >
-> Next checkpoint: P7 Live Research Loop — acceptance contract not yet frozen
+> Merged substrate: [`P7_PLAN.md`](P7_PLAN.md)
+>
+> Active checkpoint: [`P8_PLAN.md`](P8_PLAN.md) — Turnkey Research Product
 
 ## Outcome
 
-The next checkpoint moves Mammoth from a proven single-host research runtime to a
-production-shaped system without weakening the evidence-first invariants proven by
-the MVP. It then introduces isolated, correlation-aware research cells whose
-outputs remain proposals until deterministic evidence policy admits them.
-
-The work is intentionally ordered. Research-cell fan-out increases concurrency,
-cost, and failure surface, so it must land only after production storage,
-orchestration, idempotency, and observability boundaries have executable
-conformance evidence.
+The active checkpoint turns the production-shaped P2-P7 substrate into a product:
+a user supplies a plain-language question or theory, Mammoth performs bounded
+iterative discovery and evidence admission, and it returns a comprehensive cited
+report or exploration bundle. The substrate remains subordinate to that user
+outcome and every evidence, authority, durability, isolation, lineage, budget,
+and receipt invariant carries forward.
 
 ## Release train
 
@@ -137,9 +136,7 @@ A complete multi-cell program survives restart, preserves dissent, stays within
 budget, and emits a dossier whose factual sentences retain the MVP provenance
 guarantee.
 
-Frozen plan: [`P6_PLAN.md`](P6_PLAN.md). Implementation may not claim P6 progress
-until that plan is merged to `main` and implementation worktrees are resynced to
-the merged P6-plan baseline.
+Frozen plan: [`P6_PLAN.md`](P6_PLAN.md).
 
 Completed release receipt:
 [`evals/reports/v0.6.0-research-topology.md`](evals/reports/v0.6.0-research-topology.md).
@@ -174,10 +171,34 @@ dissent and complete provider/effect receipts. Deterministic offline gates prove
 the contract; any live-provider run is reported honestly as an exhibition unless
 the frozen P7 plan defines a replicated evaluation protocol.
 
-P7 scope must be frozen in a distinct `P7_PLAN.md` entry PR before implementation
-claims. Hosted API, managed deployment, full Observatory UI, and broad provider
-quality benchmarking remain out of scope unless that plan explicitly changes the
-boundary through review.
+Frozen plan: [`P7_PLAN.md`](P7_PLAN.md). The merged P7 implementation proves the
+governed execution substrate described there. It does not prove question-driven
+source discovery or a comprehensive report product; those are P8 scope.
+
+### P8 — Turnkey Research Product
+
+Deliver:
+
+- Plain-language question/theory intake and a versioned research charter.
+- Governed provider-neutral discovery, immutable source snapshots, exact locators,
+  evidence admission, and source lineage.
+- Persisted semantic topology and bounded evidence-gap/falsification cycles.
+- Admitted-only comprehensive Markdown/HTML reports with traversable citations.
+- Turnkey ask/status/inspect/resume/cancel/export operator experience.
+- Frozen offline data-center evaluation, adversarial verification, separately
+  authorized live exhibition, release receipt, and tag.
+
+Exit gate:
+
+The natural-language data-center command produces the complete report bundle;
+every factual sentence passes provenance; mandatory coverage is accounted for;
+iterative gap research, restart/idempotency, budgets, cancellation, and hostile
+sources are proven; and independent review plus merged-main CI and receipt prove
+the exact candidate.
+
+Frozen entry contract: [`P8_PLAN.md`](P8_PLAN.md). Implementation may not begin
+until that plan PR and the separate T0 acceptance-baseline PR merge and
+implementation worktrees resync from the later T0 merge.
 
 ## Dependency order
 
@@ -189,6 +210,7 @@ P1 adapter contracts
   -> P5 isolated divergence + blind review
   -> P6 broader research topology
   -> P7 live research loop
+  -> P8 turnkey research product
 ```
 
 P2 and the non-workflow portions of P3 may proceed in parallel after P1 contract
@@ -210,12 +232,10 @@ cannot become release scope until P2 and P3 pass their exit gates.
 
 ## Next implementation checkpoint
 
-P6 broader research topology is complete. P7 Live Research Loop is next, but no
-P7 implementation contract is frozen. Begin with
-[`docs/handoffs/2026-07-13-p7-live-research-loop.md`](docs/handoffs/2026-07-13-p7-live-research-loop.md),
-then merge a distinct `P7_PLAN.md` that freezes the entry gate, authority boundary,
-slices, adversarial fixtures, verifier, receipt, release label, and stopping
-condition before implementation claims begin.
+The merged P7 code is the governed execution baseline. P8 Turnkey Research is the
+active plan-first checkpoint. Merge [`P8_PLAN.md`](P8_PLAN.md), reconcile the P7
+baseline honestly, then merge the T0 acceptance baseline and recreate
+implementation worktrees from that later merge before delegating product code.
 
 The read-only visualization track is specified in
 [`docs/OBSERVATORY.md`](docs/OBSERVATORY.md). A high-fidelity shell and 3D

@@ -3,13 +3,11 @@
 Local-first, hybrid, long-horizon epistemic engine.
 
 The completed MVP contract is documented in [MVP_PLAN.md](MVP_PLAN.md). Post-MVP
-delivery through [P6 broader research topology](P6_PLAN.md) is complete and
-sequenced in [POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md). The next checkpoint is
-P7 Live Research Loop: connect the verified topology to governed provider-backed
-work and an operator entry point without weakening Mammoth's evidence boundary.
-P7 has not started; its acceptance contract must be frozen before implementation
-claims. Start with the
-[P7 handover](docs/handoffs/2026-07-13-p7-live-research-loop.md). The future
+delivery through P6 and the merged P7 governed execution substrate is sequenced in
+[POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md). The active checkpoint is
+[P8 Turnkey Research](P8_PLAN.md): plain-language question or theory in,
+iterative evidence-bound research and a comprehensive cited report bundle out.
+P7 is an execution substrate, not proof of that product outcome. The future
 read-only visualization contract is [Mammoth Observatory](docs/OBSERVATORY.md).
 Autonomous workers follow [AGENTS.md](AGENTS.md) and [LOOP.md](LOOP.md).
 
@@ -37,13 +35,14 @@ pnpm verify:p3
 pnpm verify:p4
 pnpm verify:p5
 pnpm verify:p6
+pnpm verify:p7
 pnpm eval:offline
 git diff --check
 ```
 
-Every verifier through `pnpm verify:p6` is independently runnable and enforced in
-default-branch CI. P7 must add its own visible verifier without changing the
-meaning of earlier gates.
+Every verifier through `pnpm verify:p7` is independently runnable and enforced in
+default-branch CI. P8 must add its own visible non-recursive verifier without
+changing the meaning of earlier gates.
 
 Run `pnpm format` to format tracked source and documentation, or
 `pnpm format:check` to check formatting without changing files.
@@ -75,6 +74,9 @@ Packages should extend `tsconfig.base.json` and expose the applicable `build`,
 - **P6 broader research topology:** deterministic multi-cell planning and
   scheduling, authoritative topology persistence, Temporal parent/child execution,
   evidence-aware synthesis, and read-only topology projection.
+- **P7 governed execution substrate:** provider-backed typed cell work, governed
+  egress and budgets, effect/cost receipts, reconstruction, dossier projection,
+  operator controls, and restart-safe resume.
 
 `pnpm verify:phase-1` runs the Phase 1 exit-gate suites. The compiler fails closed
 unless each factual sentence resolves through an eligible claim and named policy
@@ -118,10 +120,11 @@ diagnostics also go to stderr.
 - This checkpoint provides a local CLI, not the deferred desktop UI or hosted API.
 - The quickstart uses an immutable checked-in source. Live HTTP retrieval is
   available, but offline fixtures are the reproducible release evidence.
-- P6 executes deterministic boundary receipts and fixtures; no live model-provider
-  adapter currently performs the research-cell work.
-- The CLI operates the MVP program runtime but does not yet expose a P6 topology
-  research command.
+- P7 executes governed provider-backed cells, but its request does not yet accept
+  the human question/source content or discover evidence; it is not substantive
+  turnkey research.
+- The CLI exposes the P7 operator path, but the P8 plain-language `research ask`
+  command and comprehensive report bundle are not implemented yet.
 - Postgres/CAS and Temporal have production-shaped local profiles and recovery
   evidence, not a managed hosted deployment or production operations claim.
 - Provider-dependent quality, cost, and reliability evaluations remain outside
@@ -130,8 +133,8 @@ diagnostics also go to stderr.
   stack adapters, and `mammoth-pipelines` remain future work.
 - A completed run may honestly contain unresolved claims. Only supported claims
   with a named policy assessment and exact immutable locator render as report facts.
-- Source parsing supports bounded plain text, HTML, and JSON; PDF and browser
-  rendering are deferred.
+- Source parsing supports bounded plain text, HTML, and JSON; text-layer PDF is a
+  P8 requirement while browser rendering and OCR-heavy media remain deferred.
 - `inspect` verifies terminal receipts and declared artifact digests but is not a
   repair command. Tampered state fails closed.
 - The dossier remains `evidence_complete`; Mammoth never assigns human approval.
