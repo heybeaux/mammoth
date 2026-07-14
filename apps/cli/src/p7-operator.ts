@@ -28,17 +28,25 @@ export async function executeP7ResearchCli(
     ) {
       throw new Error(p7ResearchUsage());
     }
+    const parsedCommand = command as
+      | 'run'
+      | 'resume'
+      | 'cancel'
+      | 'status'
+      | 'inspect';
     const result =
-      command === 'run'
+      parsedCommand === 'run'
         ? await application.run(await readRequest(argument))
-        : command === 'resume'
+        : parsedCommand === 'resume'
           ? await application.resume(argument)
-          : command === 'cancel'
+          : parsedCommand === 'cancel'
             ? await application.cancel(argument)
-            : command === 'status'
+            : parsedCommand === 'status'
               ? await application.status(argument)
               : await application.inspect(argument);
-    io.stdout(JSON.stringify({ command: `research ${command}`, ...result }));
+    io.stdout(
+      JSON.stringify({ command: `research ${parsedCommand}`, ...result }),
+    );
     return 0;
   } catch (error: unknown) {
     io.stderr(

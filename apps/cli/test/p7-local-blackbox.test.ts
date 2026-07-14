@@ -57,10 +57,7 @@ describe('P7 local research CLI black-box provider loop', () => {
   it('drives governed OpenAI-compatible provider work through the CLI', async () => {
     const provider = await startProvider();
     const root = await stateRoot();
-    const requestPath = await writeRequest(
-      root,
-      request('blackbox', ['cell-a']),
-    );
+    const requestPath = await writeRequest(root, request('blackbox'));
 
     const result = await mammoth(
       ['research', 'run', requestPath],
@@ -86,7 +83,7 @@ describe('P7 local research CLI black-box provider loop', () => {
   it('reconstructs authority after killing the CLI process and resumes unresolved cells', async () => {
     const provider = await startProvider();
     const root = await stateRoot();
-    const runRequest = request('restart', ['cell-a', 'cell-b']);
+    const runRequest = request('restart');
     const requestPath = await writeRequest(root, runRequest);
     const runId = deriveP7ResearchRunId(runRequest);
     const running = spawnMammoth(
@@ -172,8 +169,8 @@ async function handleProviderRequest(
   }[],
 ): Promise<void> {
   const chunks: Buffer[] = [];
-  for await (const chunk of requestMessage) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  for await (const chunk of requestMessage as AsyncIterable<Buffer>) {
+    chunks.push(chunk);
   }
   const raw = Buffer.concat(chunks).toString('utf8');
   const body = raw.length === 0 ? undefined : (JSON.parse(raw) as unknown);
@@ -250,10 +247,7 @@ async function writeRequest(
   return path;
 }
 
-function request(
-  suffix: string,
-  _cellIds: readonly string[],
-): P7ResearchRunRequest {
+function request(suffix: string): P7ResearchRunRequest {
   return {
     applicationContractMajor: 1,
     workflowVersion: 1,
@@ -338,7 +332,9 @@ function spawnMammoth(
   return {
     settled: new Promise((resolveProcess, rejectProcess) => {
       child.on('error', rejectProcess);
-      child.on('close', (code) => resolveProcess({ code, stdout, stderr }));
+      child.on('close', (code) => {
+        resolveProcess({ code, stdout, stderr });
+      });
     }),
     kill: (signal) => {
       child.kill(signal);

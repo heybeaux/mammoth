@@ -68,7 +68,7 @@ export async function p7LiveResearchWorkflow(
     else control.cancellationReason = signal.reason;
   });
 
-  while (true) {
+  for (;;) {
     status = { ...status, state: 'running' };
     const result = await executeP7ResearchShell(
       {

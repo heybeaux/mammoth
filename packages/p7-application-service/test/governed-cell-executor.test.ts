@@ -596,11 +596,13 @@ describe('P7 governed provider-backed cell executor', () => {
     );
     expect(state.cancellationFences).toHaveLength(2);
     expect(state.releases).toHaveLength(2);
+    const firstCell = fixture.cells[0];
+    if (!firstCell) throw new Error('fixture did not plan a first cell');
     const outcome = await fixture.executor.execute({
       runId: fixture.runId,
       request: fixture.request,
       cells: fixture.cells,
-      cell: fixture.cells[0] as (typeof fixture.cells)[number],
+      cell: firstCell,
     });
     expect(outcome.status).toBe('cancelled');
   });

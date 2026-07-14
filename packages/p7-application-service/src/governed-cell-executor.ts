@@ -941,7 +941,7 @@ export class GovernedProviderCellExecutor implements P7GovernedCellExecutor {
     message: string,
   ): Promise<P7GovernedCellOutcome> {
     const now = this.#timestamp();
-    if (context.attempt && !isAttemptTerminal(context.attempt.state)) {
+    if (!isAttemptTerminal(context.attempt.state)) {
       context.attempt = await this.#repository.transitionProviderAttempt({
         id: context.attempt.id,
         expectedRevision: context.attempt.revision,
