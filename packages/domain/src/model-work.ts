@@ -4,7 +4,6 @@ import {
   DigestSchema,
   EntityIdSchema,
   NonEmptyStringSchema,
-  SchemaVersionSchema,
   type Digest,
 } from './primitives.js';
 
@@ -187,7 +186,7 @@ export const ModelWorkRequestSchema = z
     capabilityManifestDigest: DigestSchema,
     canonicalPromptDigest: DigestSchema,
     budget: ModelWorkBudgetSchema,
-    outputSchemaVersion: SchemaVersionSchema,
+    outputSchemaVersion: z.literal(MODEL_WORK_RESULT_SCHEMA_VERSION),
   })
   .strict()
   .superRefine((request, ctx) => {
