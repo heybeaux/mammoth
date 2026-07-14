@@ -2,23 +2,24 @@
 
 ## Mission and authority
 
-Build Mammoth from the completed `v0.5.0-isolated-divergence` baseline toward
-the next P6 broader research topology checkpoint in `POST_MVP_ROADMAP.md`.
+Build Mammoth from the completed `v0.6.0-research-topology` baseline toward the
+next P7 Live Research Loop checkpoint in `POST_MVP_ROADMAP.md`.
 `ARCHITECTURE.md` is the normative architecture, `POST_MVP_ROADMAP.md` defines
-long-range sequencing, `P5_PLAN.md` records the completed P5 acceptance contract,
+long-range sequencing, `P6_PLAN.md` records the completed P6 acceptance contract,
 `docs/OBSERVATORY.md` defines the read-only visualization direction, and
 `LOOP.md` defines team execution. Preserve architecture invariants if wording
 conflicts and record the conflict instead of weakening a gate.
 
 Workers may inspect, plan, implement, test, commit, push, open or review pull
 requests, repair CI, and merge accepted work without human confirmation when the
-active checkpoint contract allows it. Do not claim P6 completion until a P6 plan
-freezes its acceptance contract and the required receipt is merged.
+active checkpoint contract allows it. P7 has no frozen acceptance contract yet:
+planning and discovery may proceed, but implementation may not claim P7 progress
+until a distinct P7 plan PR merges and all implementation worktrees resync to it.
 
 ## Before taking work
 
-Read this file, `P5_PLAN.md`, `POST_MVP_ROADMAP.md`, `LOOP.md`, the P5 release
-receipt, the P4-P6 handover, the relevant package tests, and `ARCHITECTURE.md`
+Read this file, `P6_PLAN.md`, `POST_MVP_ROADMAP.md`, `LOOP.md`, the P6 release
+receipt, the P7 Live Research Loop handover, the relevant package tests, and `ARCHITECTURE.md`
 sections 6, 11, 13-18, 23-24, 28, 31-33, 38, and 40-44. Read
 `docs/OBSERVATORY.md` for projection work. Every
 assignment must name:
@@ -41,12 +42,13 @@ slot available for coordination and integration.
 Delegate only concrete, bounded work that can proceed independently. Prefer
 path-disjoint ownership such as:
 
-- commit-before-reveal isolation and sanitized review contracts;
-- deterministic assignment, correlation, dissent, and residue policy;
-- authoritative Postgres persistence, budget settlement, and migration verification;
-- Temporal divergence/review execution and boundary recovery;
+- provider-neutral model work and immutable model-profile resolution;
+- governed local/cloud provider adapters, egress policy, secrets, and cost receipts;
+- topology operator entry point and typed research-cell Activity integration;
+- authoritative Postgres/CAS persistence, budget settlement, and migration verification;
+- Temporal live-loop execution, cancellation, replay, and boundary recovery;
 - fail-closed Observatory projection and operator inspection;
-- adversarial isolation, cancellation, replay, and receipt audit;
+- adversarial malformed-output, outage, duplicate-effect, and receipt audit;
 - documentation and receipt audit.
 
 Every delegated task must include objective, owned paths, non-owned paths,
@@ -156,12 +158,12 @@ pnpm eval:offline
 ```
 
 Also run every verifier introduced by the active loop, including
-`verify:phase-2`, `verify:mvp`, `verify:adapters`, `verify:p2`, `verify:p3`, and
-`verify:p4`, plus the new `verify:p5`. Never claim a check passed unless it ran;
-record the command and result. P5 requires commit-before-reveal isolation,
-sanitized reviewer context, self-review/correlation rejection, dissent and residue
-retention, duplicate-delivery idempotency, bounded budget settlement, cancellation
-receipts, replay, process/service recovery, and fail-closed projection tests.
+`verify:phase-2`, `verify:mvp`, `verify:adapters`, `verify:p2`, `verify:p3`,
+`verify:p4`, `verify:p5`, and `verify:p6`. Never claim a check passed unless it
+ran; record the command and result. P7 must introduce a non-recursive verifier
+that exercises production-shaped public boundaries while preserving every earlier
+gate unchanged. Live-provider evaluations remain separate, manually authorized
+exhibitions unless a frozen protocol explicitly promotes them.
 
 ## Commits, reviews, and handoffs
 

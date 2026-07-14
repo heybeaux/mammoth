@@ -2,13 +2,15 @@
 
 Local-first, hybrid, long-horizon epistemic engine.
 
-The completed MVP contract is documented in [MVP_PLAN.md](MVP_PLAN.md). Active
-post-MVP delivery is sequenced in
-[POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md): production adapters first, then
-broader research-cell orchestration. The active autonomous checkpoint is
-[P3 Temporal control plane](P3_PLAN.md), building on completed
-[P2 production data](P2_PLAN.md). The future read-only visualization contract is
-[Mammoth Observatory](docs/OBSERVATORY.md).
+The completed MVP contract is documented in [MVP_PLAN.md](MVP_PLAN.md). Post-MVP
+delivery through [P6 broader research topology](P6_PLAN.md) is complete and
+sequenced in [POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md). The next checkpoint is
+P7 Live Research Loop: connect the verified topology to governed provider-backed
+work and an operator entry point without weakening Mammoth's evidence boundary.
+P7 has not started; its acceptance contract must be frozen before implementation
+claims. Start with the
+[P7 handover](docs/handoffs/2026-07-13-p7-live-research-loop.md). The future
+read-only visualization contract is [Mammoth Observatory](docs/OBSERVATORY.md).
 Autonomous workers follow [AGENTS.md](AGENTS.md) and [LOOP.md](LOOP.md).
 
 ## Development
@@ -31,12 +33,17 @@ pnpm verify:m2
 pnpm verify:m3
 pnpm verify:mvp
 pnpm verify:p2
+pnpm verify:p3
+pnpm verify:p4
+pnpm verify:p5
+pnpm verify:p6
 pnpm eval:offline
 git diff --check
 ```
 
-The active P3 checkpoint must add `pnpm verify:p3` before
-`v0.3.0-temporal-control-plane` can be recorded.
+Every verifier through `pnpm verify:p6` is independently runnable and enforced in
+default-branch CI. P7 must add its own visible verifier without changing the
+meaning of earlier gates.
 
 Run `pnpm format` to format tracked source and documentation, or
 `pnpm format:check` to check formatting without changing files.
@@ -59,6 +66,15 @@ Packages should extend `tsconfig.base.json` and expose the applicable `build`,
 - **Initial MVP runtime:** a durable evidence-first research workflow, pinned
   fixture and entailment oracle, inspectable report/manifest/traces, audit and
   cancellation receipts, budget and revalidation gates, and a local operator CLI.
+- **P2-P3 production-shaped control plane:** Postgres/CAS authority, forward-only
+  migrations, production-profile lifecycle and backup gates, Temporal workflows,
+  replay, cancellation, recovery, and bounded history.
+- **P4-P5 isolated research cells:** immutable model lineage, correlation-aware
+  admission, commit-before-reveal divergence, blind review, preserved dissent,
+  bounded budgets, and honest partial cancellation.
+- **P6 broader research topology:** deterministic multi-cell planning and
+  scheduling, authoritative topology persistence, Temporal parent/child execution,
+  evidence-aware synthesis, and read-only topology projection.
 
 `pnpm verify:phase-1` runs the Phase 1 exit-gate suites. The compiler fails closed
 unless each factual sentence resolves through an eligible claim and named policy
@@ -66,8 +82,8 @@ assessment to fresh immutable evidence with an exact locator.
 
 `pnpm verify:phase-2` runs the process-death and duplicate-delivery gates. Local
 MVP stores use atomic rename plus file and directory fsync; runtime ports remain
-compatible with the completed Postgres/CAS production-data adapters and the active
-Temporal control-plane work.
+compatible with the completed Postgres/CAS and Temporal production-shaped
+adapters.
 
 The MVP topology limits and production adapter boundary are recorded in
 [`docs/adr/0001-local-durable-runtime.md`](docs/adr/0001-local-durable-runtime.md).
@@ -97,16 +113,21 @@ conflicts, and `5` for execution or integrity failures. `--json` always writes i
 stable envelope to stdout when the built CLI or `pnpm --silent mammoth` is used;
 diagnostics also go to stderr.
 
-## MVP limitations
+## Current product boundary
 
 - This checkpoint provides a local CLI, not the deferred desktop UI or hosted API.
 - The quickstart uses an immutable checked-in source. Live HTTP retrieval is
   available, but offline fixtures are the reproducible release evidence.
-- Parliament model cells, cloud providers, novelty search, experiment runners,
-  external stack adapters, and `mammoth-pipelines` are deferred beyond MVP.
-- Local JSON and content-addressed files are the MVP durability implementation.
-  Postgres/CAS production-data adapters exist for P2; Temporal remains active P3
-  work behind runtime ports.
+- P6 executes deterministic boundary receipts and fixtures; no live model-provider
+  adapter currently performs the research-cell work.
+- The CLI operates the MVP program runtime but does not yet expose a P6 topology
+  research command.
+- Postgres/CAS and Temporal have production-shaped local profiles and recovery
+  evidence, not a managed hosted deployment or production operations claim.
+- Provider-dependent quality, cost, and reliability evaluations remain outside
+  offline CI and must never be inferred from deterministic fixtures.
+- Parliament provider execution, the hosted API, full Observatory UI, external
+  stack adapters, and `mammoth-pipelines` remain future work.
 - A completed run may honestly contain unresolved claims. Only supported claims
   with a named policy assessment and exact immutable locator render as report facts.
 - Source parsing supports bounded plain text, HTML, and JSON; PDF and browser
