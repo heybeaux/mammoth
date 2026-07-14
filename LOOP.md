@@ -1,13 +1,12 @@
-# Autonomous P5 Delivery Loop
+# Autonomous Delivery Loop
 
 ## Mission
 
-Operate continuously until `v0.5.0-isolated-divergence` is merged, verified,
-tagged, and recorded under `P5_PLAN.md`. Preserve the P2 Postgres/CAS authority
-boundary, P3 Temporal control plane, and P4 research-cell/model-lineage contracts
-while delivering commit-before-reveal divergence, sanitized blind review,
-correlation-aware assignment, dissent retention, honest budgets/cancellation, and
-restart-safe execution.
+P5 `v0.5.0-isolated-divergence` is merged, verified, tagged, and recorded under
+`P5_PLAN.md`. Operate from that baseline toward P6 broader research topology only
+after the P6 acceptance contract is frozen. Preserve the P2 Postgres/CAS
+authority boundary, P3 Temporal control plane, P4 research-cell/model-lineage
+contracts, and P5 isolated-divergence/blind-review contracts.
 
 Routine reversible choices, ADR-backed decisions, delegation, PRs, reviews, CI
 repair, and sequencing do not require human contact.
@@ -103,13 +102,18 @@ Do not send progress updates or request routine confirmation. Escalate only when
 
 Otherwise choose the safest reversible option, document it, and continue.
 
+## P5 receipt
+
+The P5 stopping condition is satisfied by
+[`evals/reports/v0.5.0-isolated-divergence.md`](evals/reports/v0.5.0-isolated-divergence.md):
+entry PR #36, code PR #37, code-bearing merge
+`0cd81f86f1c893f06ff06c88c683e6f84234dbbf`, default-branch CI run
+`29294543576`, and annotated tag `v0.5.0-isolated-divergence`.
+
 ## Stopping condition
 
-Stop only when every `P5_PLAN.md` gate and fixture passes; the clean-checkout
-ladder is green; a non-author semantic/adversarial review is resolved and
-re-reviewed; `pnpm verify:p5` is enforced in default-branch CI; the PR is merged;
-post-merge `main` CI is green; the receipt is exact; and the annotated
-`v0.5.0-isolated-divergence` tag points to the code-bearing merge.
-
-Then send Beaux one concise report with the PR, merge SHA, tag, receipt, CI run,
-clean-checkout commands, review findings/fixes, limitations, and P6 deferral.
+For the next checkpoint, stop only when its frozen plan's gates and fixtures pass;
+the clean-checkout ladder is green; required independent review is resolved and
+re-reviewed; the checkpoint verifier is enforced in default-branch CI; the PR is
+merged; post-merge `main` CI is green; the receipt is exact and merged; and the
+release tag points to the code-bearing merge.

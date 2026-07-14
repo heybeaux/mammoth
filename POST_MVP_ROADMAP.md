@@ -7,10 +7,9 @@
 > Direction: production adapters first, then broader research-cell orchestration.
 >
 > Completed checkpoints: [`P2_PLAN.md`](P2_PLAN.md), [`P3_PLAN.md`](P3_PLAN.md),
-> [`P4_PLAN.md`](P4_PLAN.md)
+> [`P4_PLAN.md`](P4_PLAN.md), [`P5_PLAN.md`](P5_PLAN.md)
 >
-> Active checkpoint: [`P5_PLAN.md`](P5_PLAN.md) — isolated divergence and blind
-> review
+> Next checkpoint: P6 — broader research topology
 
 ## Outcome
 
@@ -116,6 +115,9 @@ Exit gate:
 The verifier can prove pre-commit isolation, reviewer independence, complete
 dissent retention, bounded spend, and honest partial results after cancellation.
 
+Completed plan: [`P5_PLAN.md`](P5_PLAN.md). Release receipt:
+[`evals/reports/v0.5.0-isolated-divergence.md`](evals/reports/v0.5.0-isolated-divergence.md).
+
 ### P6 — Broader research topology
 
 Deliver:
@@ -162,14 +164,13 @@ cannot become release scope until P2 and P3 pass their exit gates.
   cross-adapter imports.
 - Cloud egress requires policy, classification, provider, budget, and cost records.
 
-## Active implementation checkpoint
+## Next implementation checkpoint
 
-The active checkpoint is P5 isolated divergence and blind review. Its exact entry
-gate, slices, adversarial fixtures, verifier, receipt, release label, and stopping
-condition are frozen in [`P5_PLAN.md`](P5_PLAN.md).
+P5 isolated divergence and blind review is complete. The next checkpoint is P6
+broader research topology. A P6 plan must freeze its exact entry gate, slices,
+adversarial fixtures, verifier, receipt, release label, and stopping condition
+before implementation claims begin.
 
 The read-only visualization track is specified in
 [`docs/OBSERVATORY.md`](docs/OBSERVATORY.md). A high-fidelity shell and 3D
-prototype remain downstream of the stable projection contract; P5 may extend only
-the read-only projection and operator-inspection surface needed to prove isolation,
-attribution, dissent, spend, cancellation, and recovery.
+prototype remain downstream of the stable projection contract.

@@ -1,13 +1,13 @@
 # Mammoth P5 Isolated-Divergence Checkpoint
 
-> Status: active — contract freeze and implementation entry
+> Status: complete — release receipt merged
 >
 > Baseline: `v0.4.0-research-cell-contracts`
 >
 > Target: `v0.5.0-isolated-divergence`
 >
-> Human contact: checkpoint completion or an escalation explicitly allowed by
-> `LOOP.md`
+> Release receipt:
+> [`evals/reports/v0.5.0-isolated-divergence.md`](evals/reports/v0.5.0-isolated-divergence.md)
 
 ## Naming boundary
 
@@ -45,7 +45,7 @@ Those remain P6 or managed-deployment work.
       preserve the P2-P4 authority boundaries.
 - [x] The P5 contract versions, slices, adversarial fixtures, verifier shape,
       release label, and stopping condition are frozen here before implementation.
-- [ ] A clean integration worktree and path-disjoint worker worktrees are created
+- [x] A clean integration worktree and path-disjoint worker worktrees are created
       from the P5 entry commit; each has one live owner.
 
 ## Frozen entry decisions
@@ -227,6 +227,18 @@ code-bearing merge, PR, annotated tag, frozen versions, stable identities,
 migrations/checksums, fixture manifest, executed commands/durations, CI run,
 projection digest, independent review findings/fixes, limitations, and P6
 deferrals. Claims in the receipt must match inspectable executed evidence.
+
+## Final receipt
+
+P5 entry PR [#36](https://github.com/heybeaux/mammoth/pull/36) merged as
+`5c31dfb4c749d3c87391318fddeb6f2c664f1af9`. P5 code PR
+[#37](https://github.com/heybeaux/mammoth/pull/37) merged as
+`0cd81f86f1c893f06ff06c88c683e6f84234dbbf`. Default-branch CI run
+[29294543576](https://github.com/heybeaux/mammoth/actions/runs/29294543576)
+passed against that merge and included the visible `verify:p5` gate. Annotated
+tag `v0.5.0-isolated-divergence` resolves to the code-bearing merge. The exact
+release receipt is
+[`evals/reports/v0.5.0-isolated-divergence.md`](evals/reports/v0.5.0-isolated-divergence.md).
 
 ## Stopping condition
 
