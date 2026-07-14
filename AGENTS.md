@@ -2,184 +2,188 @@
 
 ## Mission and authority
 
-Build Mammoth from the completed `v0.6.0-research-topology` baseline toward the
-next P7 Live Research Loop checkpoint in `POST_MVP_ROADMAP.md`.
-`ARCHITECTURE.md` is the normative architecture, `POST_MVP_ROADMAP.md` defines
-long-range sequencing, `P6_PLAN.md` records the completed P6 acceptance contract,
-`docs/OBSERVATORY.md` defines the read-only visualization direction, and
-`LOOP.md` defines team execution. Preserve architecture invariants if wording
-conflicts and record the conflict instead of weakening a gate.
+Build Mammoth from merged P7 substrate commit `2e35802` into the P8 Turnkey
+Research Product defined by `P8_PLAN.md`. P7 proved governed provider execution,
+durable receipts, reconstruction, dossier structure, and operator controls. It did
+**not** prove question-driven discovery, evidence extraction, iterative research,
+or a comprehensive user-ready report.
 
-Workers may inspect, plan, implement, test, commit, push, open or review pull
-requests, repair CI, and merge accepted work without human confirmation when the
-active checkpoint contract allows it. P7 has no frozen acceptance contract yet:
-planning and discovery may proceed, but implementation may not claim P7 progress
-until a distinct P7 plan PR merges and all implementation worktrees resync to it.
+`ARCHITECTURE.md` remains normative. `P8_PLAN.md` is the active acceptance and
+stopping authority, and `LOOP.md` is the execution protocol. Before the P8 entry
+plan and separate T0 acceptance-baseline PR merge, work is limited to inventory,
+contract discovery, ADRs, fixtures, spike reports, and planning. Implementation
+worktrees must be created or resynced from the T0 merge commit.
 
-## Before taking work
+No worker may claim Mammoth is a turnkey research product until the black-box
+data-center command and every P8 release predicate pass on merged `main`.
 
-Read this file, `P6_PLAN.md`, `POST_MVP_ROADMAP.md`, `LOOP.md`, the P6 release
-receipt, the P7 Live Research Loop handover, the relevant package tests, and `ARCHITECTURE.md`
-sections 6, 11, 13-18, 23-24, 28, 31-33, 38, and 40-44. Read
-`docs/OBSERVATORY.md` for projection work. Every
-assignment must name:
+## Required reading and assignment record
 
-- objective and acceptance evidence;
-- owned paths;
-- contracts that may change;
-- dependencies and non-owned paths;
-- verification commands;
-- handoff recipient.
+Read, in order:
 
-Do not silently broaden an assignment. The coordinator owns cross-package scope.
+1. `AGENTS.md`;
+2. `P8_PLAN.md`;
+3. `ARCHITECTURE.md` sections 6, 11-16, 21, 23-25, and 27-32;
+4. `P7_PLAN.md` and the actual merged P7 implementation/evidence;
+5. `LOOP.md`;
+6. `docs/reviews/p8-coordinator-ledger.md`;
+7. relevant packages, tests, ADRs, and fixtures.
 
-## Coordinator and sub-agent direction
+Every assignment must record:
 
-The coordinator owns the active checklist, contract changes, integration order,
-PR decisions, CI repair, checkpoint receipt, and final claim. Keep one execution
-slot available for coordination and integration.
+- task ID, objective, and acceptance evidence;
+- runtime, session key, run ID, and resolved model;
+- worktree, branch, and base SHA;
+- owned and prohibited paths;
+- contracts allowed to change;
+- dependencies and integration predecessor;
+- exact verification commands;
+- handoff recipient and independent reviewer.
 
-Delegate only concrete, bounded work that can proceed independently. Prefer
-path-disjoint ownership such as:
+Do not silently broaden an assignment. Stop with a conflict note before editing
+outside owned paths. The coordinator alone reconciles cross-package contracts.
 
-- provider-neutral model work and immutable model-profile resolution;
-- governed local/cloud provider adapters, egress policy, secrets, and cost receipts;
-- topology operator entry point and typed research-cell Activity integration;
-- authoritative Postgres/CAS persistence, budget settlement, and migration verification;
-- Temporal live-loop execution, cancellation, replay, and boundary recovery;
-- fail-closed Observatory projection and operator inspection;
-- adversarial malformed-output, outage, duplicate-effect, and receipt audit;
-- documentation and receipt audit.
+## Coordinator and delegation
 
-Every delegated task must include objective, owned paths, non-owned paths,
-contracts allowed to change, exact verification, and handoff recipient. A worker
-must stop and return a conflict note before editing outside its ownership.
+The coordinator owns the integration branch, active ledger, cross-package
+contracts, root manifests and lockfile unless explicitly assigned, CI decisions,
+release receipt, tag, and final product claim. Mammoth has four execution slots:
+the coordinator retains one and runs at most three implementation lanes at once.
 
-Agent activity is a fact requiring live tool evidence. Use these exact states:
+Path-disjoint P8 lanes are:
 
-- **spawn requested** — a delegation tool call was made;
-- **active** — the live agent-status tool reports the worker running;
-- **completed** — the worker returned a handoff;
-- **integrated** — the coordinator reviewed and incorporated the work;
-- **merged/verified** — the default branch and CI prove it.
+- **A — intake/contracts:** research brief, charter, criterion, coverage, plan,
+  cycle, and publication contracts;
+- **B — discovery/retrieval/security:** search port/adapters, governed egress,
+  acquisition, snapshots, parsing, exact locators, and hostile-content controls;
+- **C — authority/admission:** migrations, Postgres/CAS authority, claim/span
+  admission, entailment, lineage, freshness, contradiction, and budgets;
+- **D — orchestration/operator:** semantic topology, iterative cycle controller,
+  Temporal Activities, application service, and CLI;
+- **E — report/projection:** admitted-only manifest, Markdown/HTML compiler,
+  bibliography, inspection, and read-only projection;
+- **F — verification/release:** offline fixtures, adversarial verifier, CI, live
+  exhibition, independent review, receipt, and tag.
 
-Branches, commits, worktrees, or prose assignments are not proof that an agent is
-active. If delegation fails, report it in the loop record, continue useful local
-work, and diagnose without fabricating a team.
+Record actual dependencies per assignment: B needs A search/snapshot contracts; C
+needs A identities and B manifests; D needs A, B, and C ports; E needs A and C
+ledger views and composes with D; F may draft after T0 but cannot certify before
+public composition. Work may overlap only after inputs merge and paths remain
+disjoint. Contract changes serialize; dependents resync. An author never
+self-certifies a release gate.
 
-## Non-negotiable invariants
+## Worker liveness and durable ownership
 
-- No factual sentence without a claim ID.
-- No accepted claim without a named evidence-policy verdict.
-- Model agreement never promotes truth.
-- Models propose mutations; deterministic code validates and commits them.
-- Evidence is immutable and content-addressed; locators and freshness are explicit.
-- Contradictions, unresolved states, failures, and red results remain inspectable.
-- Multi-step handoffs are typed and meaningful actions produce verifiable receipts.
-- Memory is not truth.
-- External effects use stable idempotency keys and attributable work items.
-- Cloud egress requires policy, classification, provider, budget, and cost records.
+Use these exact states:
 
-A green test that violates an invariant is a failing implementation.
+- **spawn requested** — delegation was accepted but execution is unproved;
+- **active** — the matching runtime registry reports the same worker running;
+- **producing** — active plus a fresh attributable artifact, diff, test, or report;
+- **completed** — a handoff was returned;
+- **integrated** — the coordinator reviewed and incorporated it;
+- **retired** — its lease was explicitly closed after audit;
+- **merged/verified** — default branch and CI prove the result.
 
-The claim-ID invariant governs Mammoth research outputs, dossiers, reports, and
-evidence-bearing product artifacts. Planning documents may discuss scope and
-process without inventing synthetic claim IDs.
+OpenClaw and Codex-native registries are separate. A Telegram turn ending does not
+end an OpenClaw worker. Branches, worktrees, commits, and prose are not liveness
+proof. Before replacement, prove the previous worker terminal or absent in its own
+registry, inspect its session/process/worktree/diff and fresh timestamps, preserve
+useful output, mark its lease retired, then use a fresh worktree. Never assign two
+workers to one worktree or overlapping paths.
+
+## Product and epistemic invariants
+
+- A user supplies plain-language input; user-authored internal JSON, digests,
+  topology IDs, or environment cell lists are not part of the golden path.
+- Models propose typed work; deterministic code validates, executes, and commits.
+- Models have no arbitrary browser, shell, or direct authority tools.
+- Search results and snippets are discovery hints, never evidence.
+- No factual report sentence without a claim ID.
+- No admitted claim without a named evidence-policy verdict.
+- Every factual sentence traverses claim -> assessment -> exact locator ->
+  immutable source snapshot.
+- Model agreement never promotes truth. Source quantity never proves independence.
+- Evidence, source bytes, prompts, configurations, and effect receipts are
+  immutable and content-addressed.
+- Contradictions, dissent, unresolved gaps, stale evidence, failures, and partial
+  completion remain visible.
+- Report rendering may not introduce facts absent from the admitted manifest.
+- External effects use stable idempotency keys, budgets, cancellation fences, and
+  attributable cost/effect receipts.
+- Postgres/CAS is authoritative; Temporal carries identifiers and reconstructs.
+- Memory and model output are proposals, not truth.
+
+A green test that violates an invariant is a failing implementation. A successful
+provider call, completed cells, or structurally valid dossier is not proof of
+research quality.
 
 ## Package boundaries
 
-- `packages/domain`: pure schemas and state machines; no database, HTTP, model SDK,
-  orchestration implementation, or UI dependency.
-- `packages/evidence`: canonical evidence, policy, audit, and handoff primitives.
-- `packages/retrieval`: hostile-input retrieval, snapshots, parsing, and security;
-  retrieval cannot promote a claim.
-- `packages/persistence`: repositories, ledger, CAS, and migrations behind ports.
-- `packages/report-compiler`: manifest validation and rendering; rendering cannot
-  introduce facts.
-- `packages/workflow`: deterministic durable program state and runtime ports.
-- `packages/work-queue`: leases, retries, idempotency, and effect receipts.
-- `packages/governance`: budgets, human gates, revalidation, and fail-closed policy.
-- `packages/adapter-contracts`: versioned adapter descriptors and behavioral
-  conformance suites; concrete adapters may not weaken these gates.
-- Production Postgres/CAS packages implement inward-facing ports and do not become
-  dependencies of the domain.
-- Temporal adapter and worker packages implement orchestration ports and may not
-  become authoritative product stores.
-- Observatory projections are read-only and non-authoritative. UI code never
-  imports database or Temporal internals.
-- Runtime, adapters, workers, and apps depend inward through ports. Adapters do not
-  import each other and UI projections are never authoritative.
+- `packages/domain`: pure versioned schemas/state machines; no I/O or SDKs.
+- `packages/workflow`: deterministic P8 workflow contracts and runtime ports.
+- `packages/search-port`: provider-neutral typed discovery contracts.
+- `packages/retrieval`: hostile-input acquisition, immutable snapshots, parsing,
+  and security; retrieval cannot promote claims.
+- `packages/evidence`: canonical evidence, entailment, lineage, policy, audit, and
+  admission primitives.
+- `packages/persistence` and Postgres/CAS adapters: authoritative repositories,
+  ledgers, migrations, fences, effects, and publication records.
+- `packages/report-compiler`: manifest validation and deterministic rendering;
+  prose may not add factual nodes.
+- `packages/governance`: budgets, classification, egress, gates, revalidation,
+  cancellation, and fail-closed policy.
+- Temporal adapters orchestrate only and never become a shadow product store.
+- Observatory projections are read-only and non-authoritative.
+- Apps and adapters depend inward through ports; adapters do not import each other.
 
-One worker owns a file or package at a time. Cross-package contracts require an
-explicit integration task.
+One worker owns a file or package at a time. Cross-package exports, migrations,
+root scripts, CI, and lockfile changes require one named owner.
 
 ## Shared-checkout safety
 
-Assume the worktree may be shared and dirty. Inspect `git status --short --branch`
-before editing and preserve unexpected changes.
-
-- Never use `git reset --hard`, `git clean`, broad restore, force push, or a
-  destructive rebase.
-- Never stage with `git add .` or `git add -A`; stage owned paths only.
-- Never amend or rewrite another worker's commit.
-- Do not run repository-wide formatting while concurrent edits exist.
-- Prefer isolated branches or worktrees. In a shared checkout, declare ownership
-  and commit one coherent change at a time.
-- Do not hand-edit generated build output.
+Inspect `git status --short --branch` before editing and preserve unexpected work.
+Never use `git reset --hard`, `git clean`, broad restore, force push, destructive
+rebase, `git add .`, or `git add -A`. Never amend another worker's commit, format
+the repository during concurrent edits, hand-edit generated output, or use legacy
+P3-P7 worktrees for P8. Prefer one fresh branch and worktree per lane.
 
 ## Implementation discipline
 
-Build the smallest vertical slice that satisfies a measured gate. Keep clocks,
-IDs, network calls, storage, and side effects injectable. Validate trust boundaries
-at runtime, use strict TypeScript and exhaustive unions, and classify errors by
-retryability and policy effect. Never add fake receipts, test bypasses, embedded
-secrets, or happy-path-only recovery logic.
-
-Architecture decisions require an ADR with context, options, decision,
-consequences, and evidence. Migrations are forward-only and must test empty,
-upgrade, and interrupted states.
+Build the smallest vertical slice satisfying a measured P8 gate. Keep clocks, IDs,
+network calls, storage, parsers, and effects injectable. Validate every trust
+boundary, use strict types and exhaustive unions, and classify errors by
+retryability and policy effect. ADRs are required for architecture choices.
+Migrations are forward-only and test empty, upgrade, interrupted, and repeated
+states. Never add fake receipts, test bypasses, embedded secrets, or recovery that
+works only in process order.
 
 ## Verification ladder
 
-During implementation, run affected package tests, typecheck, and build. Before a
-handoff, format owned files and run the relevant phase verifier. Before merge or
-checkpoint, run:
+During work, run affected tests, typecheck, build, and the lane verifier. Handoffs
+must include P8 golden-path evidence relevant to the lane, not only package tests.
+Before merge or checkpoint, run the complete existing ladder through
+`pnpm verify:p7`, plus a non-recursive `pnpm verify:p8` that is visible in CI.
+Also run format, lint, typecheck, tests, and build from a clean checkout.
 
-```sh
-pnpm format:check
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-pnpm verify:evidence
-pnpm verify:audit
-pnpm verify:phase-1
-pnpm eval:offline
-```
+The deterministic P8 verifier uses a frozen data-center corpus and must not require
+the public web or paid providers. Live search/model exhibitions are separate and
+must record provider/model identity, source snapshots, configuration/prompt/report
+digests, costs, runtime, failures, and limitations. Never claim a command passed
+unless it ran and its exact result is recorded.
 
-Also run every verifier introduced by the active loop, including
-`verify:phase-2`, `verify:mvp`, `verify:adapters`, `verify:p2`, `verify:p3`,
-`verify:p4`, `verify:p5`, and `verify:p6`. Never claim a check passed unless it
-ran; record the command and result. P7 must introduce a non-recursive verifier
-that exercises production-shaped public boundaries while preserving every earlier
-gate unchanged. Live-provider evaluations remain separate, manually authorized
-exhibitions unless a frozen protocol explicitly promotes them.
-
-## Commits, reviews, and handoffs
-
-Use scoped, imperative commits containing one coherent concern. A pull request must
-state the objective, invariant and checkpoint item served, changed contracts, exact
-verification, risks, migrations, and compatibility notes. CI green is necessary,
-not sufficient: review the diff and failure behavior before merge.
+## Handoffs, review, and completion
 
 Every handoff includes:
 
 ```text
-Task / status / owned paths / commit or PR / contracts changed
-tests and results / risks or unverified areas / blockers / next task
+Task / state / runtime+session+run+model / owned paths / base SHA
+commit or PR / contracts changed / tests and golden-path evidence
+risks and unverified areas / blockers / next owner and integration predecessor
 ```
 
-An item is done only when its acceptance evidence exists, tests and docs are
-updated, required gates pass, the change is merged, and the active plan or
-receipt reflects reality. Do not stop because one task or PR is done; claim the
-next unblocked checkpoint item and continue until the checkpoint is proven.
+The coordinator reviews diffs and evidence before integration. Blocking review
+findings return to the original owner and require independent re-review. Workers
+do not rebase or force-push the integration branch. An item is done only when its
+acceptance evidence exists, required gates pass, it is merged, and the P8 plan,
+ledger, and receipt reflect reality. Continue to the highest unproved predicate;
+do not stop because one task or PR is green.
