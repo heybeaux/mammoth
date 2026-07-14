@@ -9,6 +9,7 @@
     "thresholds": "evals/fixtures/p8/thresholds.json",
     "expectedArtifacts": "evals/fixtures/p8/expected-artifacts.json",
     "adversarial": "evals/fixtures/p8/adversarial/manifest.json",
+    "hostileFixtures": "evals/fixtures/p8/hostile/manifest.json",
     "editorialRubric": "evals/fixtures/p8/editorial-rubric.json",
     "receiptSchema": "evals/fixtures/p8/receipt-schema.json"
   },
@@ -76,13 +77,14 @@
   ],
   "thresholdsAreFrozen": "Implementation lanes cannot relax thresholds.json, expected-artifacts.json, or this manifest; changes require a coordinator-serialized ADR before T8.",
   "inputDigests": {
-    "reportCorpus": "sha256:bf988d6af3200fcc77460bf84ece3ccd22b26585806a05ddd05e9441b8f96bb2",
+    "reportCorpus": "sha256:b11d749dda9e5bd4e4661b5c821351e8ec3301bda8e2250a591fdf0b4734b202",
     "exploreCorpus": "sha256:592da105b7eba5b1277ced27beb29b716c8266417afe990b099a65b0ae647400",
     "thresholds": "sha256:55c0fe4ea3de3f62f2dc7a96bf44c57dca1d11d4401f410bdb3d3f780c94bf08",
-    "expectedArtifacts": "sha256:71e335e33dc3f42be096933100f931d7f6cad01a22a90acc9911ceef721f2e40",
-    "adversarial": "sha256:4e0c1df377347b73d5f800039bdd9fb0bb870960763c9097c805f39bfdaa9910",
+    "expectedArtifacts": "sha256:83ad5aa3efb234942e4da87c8f7f6b27942e242776633eedef3a3d15e8f35722",
+    "adversarial": "sha256:f7fc495fbd7d5bba182836cca27eb323ac65182df5a0e93374d879c17c5dd0ea",
+    "hostileFixtures": "sha256:be88591bb3e17c815aa3cab1f455f0d4204e9a875bdf32afc212ebbfb7e5d3d3",
     "editorialRubric": "sha256:3505edcdb416593e4e718054f3952811d1bf773a02b26dd0069f342856ae24b2",
-    "receiptSchema": "sha256:197ae62c7041958bb0fbfac1123f5eb326cf60460f983c2fd132a7198c38a074"
+    "receiptSchema": "sha256:39443f08ef6229cf2d4626371fa2325c73f917b0bff806d63056d3b1565d76dd"
   },
-  "manifestDigest": "sha256:bebe10363a67f076a056c81afe8f173acdb9b86b80b1c9bff71d5ab2fb7a24b5"
+  "manifestDigest": "sha256:a9b7bf6c525a039d69c7f3cfba455e28265bc955b43dfea7620cb956e35b5a44"
 }

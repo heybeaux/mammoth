@@ -15,11 +15,62 @@ Each assignment is one structured block using the assignment schema below. The
 summary table indexes the blocks; the block, not the table, is the durable
 record.
 
-| Task ID | State | Assignment block |
-| ------- | ----- | ---------------- |
+| Task ID                   | State                                            | Assignment block |
+| ------------------------- | ------------------------------------------------ | ---------------- |
+| P8-T0-acceptance-baseline | completed (PR #51 under coordinator integration) | see below        |
 
-No implementation worker is assigned. T1-T8 delegation is blocked until the entry
-plan and T0 acceptance-baseline PR merge.
+No T1-T8 implementation worker is assigned. T1-T8 delegation is blocked until the
+T0 acceptance-baseline PR merges; implementation worktrees are then recreated
+from the T0 merge commit.
+
+```text
+Task ID: P8-T0-acceptance-baseline
+Objective: freeze the P8 acceptance baseline before any T1-T8 implementation:
+  both golden corpus manifests with digest-pinned source bytes, coverage/
+  sufficiency thresholds, independent-source-family diversity thresholds, typed
+  expected artifacts, editorial rubric, adversarial expected outcomes, verifier
+  manifest, receipt schemas, version/identity ADR, and search-provider spike
+  report with adapter/robots/licensing/credential-preflight/fallback ADR
+Acceptance evidence required: PR #51 merged to main with exact-head CI green
+  (full existing ladder through pnpm verify:p7); independent digest
+  re-verification; independent non-author review with blocking findings
+  resolved; both black-box acceptance paths mechanically measurable from the
+  frozen fixtures alone
+State: completed (handoff = PR #51; coordinator review and CI in progress)
+Runtime / session / run / resolved model: OpenClaw coordinator-session worker,
+  claude-cli/claude-fable-5 (same runtime family as coordinator; commits
+  5d425d3/a7e2565 authored 2026-07-14 10:20-10:25 PDT, pushed before handoff)
+Worktree / branch / base SHA: /private/tmp/mammoth-t0-baseline /
+  t0/acceptance-baseline / 86fff91 (merged PR #50 head of main)
+Owned paths: evals/fixtures/p8/**, docs/adr/0009*, docs/adr/0010*,
+  docs/reviews/p8-search-provider-spike.md, .prettierignore, .gitattributes,
+  docs/reviews/p8-coordinator-ledger.md (this record, coordinator-applied)
+Prohibited paths: packages/**, apps/**, scripts/**, .github/**, pnpm-lock.yaml,
+  all P2-P7 fixtures and verifiers (no product code before T0 merge)
+Contracts allowed to change: none existing; introduces frozen p8.v1 acceptance
+  fixtures and ADRs only
+Dependencies / integration predecessor: merged entry plan PR #50 (86fff91);
+  successor: T1 contract-freeze gate and all T1-T8 lanes resync from T0 merge
+Exact verification commands: node /private/tmp/t0-audit/verify-digests.cjs
+  (independent digest recomputation: 28 source rawDigests, 2 corpus
+  manifestDigests, 7 verifier inputDigests, verifier manifestDigest — all OK);
+  per-topic family-independence recount over admissible sources (all 10
+  mandatory topics >= 2 families); pnpm format:check; exact-head CI ladder
+  through pnpm verify:p7 on PR #51
+Handoff recipient: P8 coordinator (integration, review reconciliation, merge)
+Independent reviewer: independent non-author adversarial review against
+  P8_PLAN T0 contract (recorded in PR #51 thread) plus CodeRabbit automated
+  review (SUCCESS)
+Last registry proof: worker session ended after push (branch and PR are the
+  durable handoff; no live registry entry claimed)
+Last artifact proof: commits 5d425d3, a7e2565 on origin/t0/acceptance-baseline;
+  PR #51 open against main
+Handoff / commit: PR #51 (t0/acceptance-baseline, head a7e2565)
+Integration: coordinator digest re-verification and topic-coverage audit passed
+  2026-07-14; merge pending exact-head CI green and independent review
+Blockers / replacement audit: none; original worktree preserved and reused only
+  by the coordinator for integration
+```
 
 ## Assignment schema
 
@@ -56,7 +107,7 @@ Objective: freeze the P8 entry contract (plan, worker contract, loop, ledger,
 Acceptance evidence required: PR #50 merged to main with exact-head CI green and
   actionable review findings resolved; independent product and architecture
   reviews recorded
-State: producing (entry-plan PR #50 open; CI running)
+State: merged/verified (PR #50 squash-merged to main as 86fff91)
 Runtime / session / run / resolved model: root coordinator local work; not a
   delegated registry worker (N/A for worker liveness)
 Worktree / branch / base SHA: /private/tmp/mammoth-turnkey-research-plan /
@@ -76,7 +127,7 @@ Independent reviewer: independent product review and independent architecture
 Last registry proof: N/A (coordinator-local work, not a registry worker)
 Last artifact proof: commits 84fbb47, a13e751
 Handoff / commit: PR #50 (plan/turnkey-research-product)
-Integration: pending exact-head CI green and review reconciliation
+Integration: merged to main 2026-07-14 as 86fff911ff581aa45cc16d27b8f56db3b04f6b5c
 Blockers / replacement audit: none
 ```
 

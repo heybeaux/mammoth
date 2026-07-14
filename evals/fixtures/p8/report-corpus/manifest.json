@@ -275,7 +275,20 @@
       "url": "https://sources.p8.invalid/report/facility-variation-study.html",
       "bytes": 1450,
       "rawDigest": "sha256:5dc9b35de3b80e4844f51f618cebeb7c7a13d1db1957e62d362020e3aa27ac0c"
+    },
+    {
+      "id": "lifestyle-espresso-feature",
+      "file": "lifestyle-espresso-feature.html",
+      "mediaType": "text/html",
+      "category": "other",
+      "sourceFamily": "sunday-lifestyle-magazine",
+      "publishedDate": "2026-02-06",
+      "topics": [],
+      "seededRole": "irrelevant",
+      "url": "https://sources.p8.invalid/report/lifestyle-espresso-feature.html",
+      "bytes": 822,
+      "rawDigest": "sha256:14ed2e88291084fd1ac16a434dc50494edd6136b578e3afd689e6c23712bf867"
     }
   ],
-  "manifestDigest": "sha256:2831e837e2f84ca8f6c1ae66761e9d3dc37c2f20f6589a3c3c5943334b110bc2"
+  "manifestDigest": "sha256:f817fb5b6fe4194c76610b81985ec3711da01d0d35c97e62e11cd8d11cdc4ec9"
 }

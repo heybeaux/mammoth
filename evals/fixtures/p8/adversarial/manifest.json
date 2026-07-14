@@ -2,7 +2,7 @@
   "schemaVersion": "1.0.0",
   "contractFamily": "p8.v1",
   "frozenBy": "T0 acceptance baseline",
-  "note": "Adversarial expected outcomes for verify:p8. Each case names the gate that must fail closed and the expected named outcome. Cases marked corpusSourceId bind to seeded corpus documents; the rest are synthesized by the T2/T7 harness against these frozen expectations.",
+  "note": "Adversarial expected outcomes for verify:p8. Each case names the gate that must fail closed and the expected named outcome. Cases marked corpusSourceId bind to seeded corpus documents; cases marked hostileFixtureId bind to frozen bytes or frozen generator parameters in ../hostile/manifest.json. Only behavioral network/state cases (SSRF, redirects, DNS rebinding, races, kills, fences) are synthesized by the T2/T7 harness, always against these frozen expectations.",
   "cases": [
     {
       "id": "ssrf-private-origin",
@@ -25,24 +25,35 @@
     {
       "id": "oversized-body",
       "gate": "retrieval-limits",
+      "hostileFixtureId": "oversized-body-payload",
       "attack": "response exceeding maxResponseBytes",
       "expected": "typed_failure_size_limit"
     },
     {
       "id": "decompression-bomb",
       "gate": "retrieval-limits",
+      "hostileFixtureId": "decompression-bomb-payload",
       "attack": "compressed body expanding past maxDecompressedBytes",
       "expected": "typed_failure_size_limit"
     },
     {
       "id": "mime-confusion",
       "gate": "parser-dispatch",
+      "hostileFixtureId": "mime-confusion-pdf-as-html",
       "attack": "declared text/html bytes are actually an executable or PDF",
       "expected": "typed_failure_media_mismatch"
     },
     {
+      "id": "malformed-json-parse",
+      "gate": "parser-sandbox",
+      "hostileFixtureId": "malformed-truncated-json",
+      "attack": "declared application/json bytes truncated mid-value with control bytes",
+      "expected": "typed_failure_parse"
+    },
+    {
       "id": "malicious-pdf",
       "gate": "parser-sandbox",
+      "hostileFixtureId": "malicious-truncated-pdf",
       "attack": "malformed or hostile PDF crashing or escaping the parser",
       "expected": "parser_failure_contained"
     },
@@ -63,6 +74,18 @@
       "id": "secret-egress-attempt",
       "gate": "egress-policy",
       "attack": "prompt or model output containing credential material",
+      "expected": "policy_denied"
+    },
+    {
+      "id": "missing-provider-policy",
+      "gate": "egress-policy",
+      "attack": "search/retrieval/model effect requested without a named provider policy",
+      "expected": "fail_closed_missing_policy"
+    },
+    {
+      "id": "non-allowlisted-effect",
+      "gate": "effect-allowlist",
+      "attack": "typed model work proposing a tool or effect contract outside the allowlist",
       "expected": "policy_denied"
     },
     {
@@ -114,6 +137,13 @@
       "corpusSourceId": "stale-2009-energy-report",
       "attack": "stale source supporting volatile current-state claim under frozen clock",
       "expected": "freshness_expired"
+    },
+    {
+      "id": "irrelevant-source-claims",
+      "gate": "evidence-admission",
+      "corpusSourceId": "lifestyle-espresso-feature",
+      "attack": "topically irrelevant source proposed as support for mandatory-topic claims",
+      "expected": "admission_rejected_irrelevant"
     },
     {
       "id": "hidden-contradiction",
@@ -174,6 +204,18 @@
       "gate": "cycle-controller",
       "attack": "gap generator proposing unbounded follow-up work",
       "expected": "deterministic_stop_at_max_cycles"
+    },
+    {
+      "id": "follow-up-starvation",
+      "gate": "cycle-controller",
+      "attack": "follow-up query growth starving mandatory-topic coverage work",
+      "expected": "deterministic_scheduling_no_starvation"
+    },
+    {
+      "id": "stale-fence-write",
+      "gate": "authority-integrity",
+      "attack": "superseded workflow attempt writing through a stale fence after restart or cancellation",
+      "expected": "fenced_write_rejected"
     },
     {
       "id": "robots-denial",

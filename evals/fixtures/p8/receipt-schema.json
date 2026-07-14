@@ -47,6 +47,8 @@
           "budget_time",
           "budget_requests",
           "budget_bytes",
+          "critical_unsupported_conclusions",
+          "unresolved_contradictions",
           "cancelled",
           "provider_unavailable"
         ]
@@ -119,13 +121,21 @@
           "reportManifestDigest",
           "reportMdDigest",
           "reportHtmlDigest",
-          "sourcesJsonDigest"
+          "executiveSummaryMdDigest",
+          "sourcesJsonDigest",
+          "bibliographyMdDigest",
+          "coverageJsonDigest",
+          "unresolvedJsonDigest"
         ],
         "properties": {
           "reportManifestDigest": { "$ref": "#/$defs/digest" },
           "reportMdDigest": { "$ref": "#/$defs/digest" },
           "reportHtmlDigest": { "$ref": "#/$defs/digest" },
+          "executiveSummaryMdDigest": { "$ref": "#/$defs/digest" },
           "sourcesJsonDigest": { "$ref": "#/$defs/digest" },
+          "bibliographyMdDigest": { "$ref": "#/$defs/digest" },
+          "coverageJsonDigest": { "$ref": "#/$defs/digest" },
+          "unresolvedJsonDigest": { "$ref": "#/$defs/digest" },
           "publicationReceiptId": { "type": "string" }
         }
       },

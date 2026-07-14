@@ -1,1 +1,1 @@
-*.pdf -diff
+evals/fixtures/p8/**/*.pdf -diff
