@@ -106,6 +106,7 @@ export const P6_CASE_EXECUTION_GATES: Readonly<
   ],
   'duplicate-topology-child-budget-effect-cancellation-receipts': [
     'persistence-budget-lifecycle',
+    'postgres-topology-migration',
   ],
   'budget-starvation-before-dispatch-and-mid-topology': [
     'scheduler-budget-policy',
@@ -120,6 +121,8 @@ export const P6_CASE_EXECUTION_GATES: Readonly<
     'temporal-execution-recovery',
   ],
   'migration-fencing-digest-broken-future-projection-write-digest': [
+    'postgres-topology-migration',
+    'production-profile-p6-lifecycle',
     'projection-operator-inspection',
   ],
   'clean-multi-cell-acceptance-run-manifest-shape': ['fixture-manifest'],
@@ -140,31 +143,41 @@ export const P6_GATES: readonly P6GateSpec[] = [
   {
     id: 'topology-contract-planner',
     description: 'Lane A topology templates, planner policy, and validation',
-    requiredPath: 'packages/domain/package.json',
-    dependency:
-      'Lane A topology/domain contracts are not present in this worktree',
+    requiredPath: 'packages/domain/test/topology.test.ts',
+    command: ['pnpm', '--filter', '@mammoth/domain', 'test'],
   },
   {
     id: 'scheduler-budget-policy',
     description:
       'Lane A deterministic scheduler state and budget starvation policy',
-    requiredPath: 'packages/workflow/package.json',
-    dependency: 'Lane A scheduler contracts are not present in this worktree',
+    requiredPath: 'packages/workflow/test/p6-contract.test.ts',
+    command: ['pnpm', '--filter', '@mammoth/workflow', 'test'],
   },
   {
     id: 'persistence-budget-lifecycle',
     description:
       'Lane B authoritative topology persistence and budget lifecycle',
-    requiredPath: 'packages/persistence/package.json',
-    dependency:
-      'Lane B persistence and migration contracts are not present in this worktree',
+    requiredPath: 'packages/persistence/test/p6-topology.test.ts',
+    command: ['pnpm', '--filter', '@mammoth/persistence', 'test'],
+  },
+  {
+    id: 'postgres-topology-migration',
+    description: 'Lane B Postgres migration 7, constraints, and budget guards',
+    requiredPath: 'packages/postgres-adapter/src/p6-topology.ts',
+    command: ['pnpm', '--filter', '@mammoth/postgres-adapter', 'test'],
+  },
+  {
+    id: 'production-profile-p6-lifecycle',
+    description:
+      'Lane B production-profile P6 lifecycle and restart reconstruction',
+    requiredPath: 'packages/production-profile/src/verify.ts',
+    command: ['pnpm', '--filter', '@mammoth/production-profile', 'test'],
   },
   {
     id: 'temporal-execution-recovery',
     description: 'Lane B parent/child Temporal execution, recovery, and replay',
-    requiredPath: 'packages/temporal-adapter/package.json',
-    dependency:
-      'Lane B Temporal P6 execution contracts are not present in this worktree',
+    requiredPath: 'packages/temporal-adapter/test/p6-workflow-shell.test.ts',
+    command: ['pnpm', '--filter', '@mammoth/temporal-adapter', 'test'],
   },
   {
     id: 'synthesis-provenance',

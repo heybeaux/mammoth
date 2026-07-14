@@ -16,12 +16,12 @@ const repository = repositoryRoot();
 const firstGate = P6_GATES.at(0);
 if (firstGate === undefined) throw new Error('P6 gate registry is empty');
 
-await runsExecutableLaneCGatesAndMarksLaneABBlocked();
+await runsExecutableGates();
 await failsClosedOnMissingOrRedGate();
 await rejectsDuplicateGateIdentifiers();
 await freezesFixtureMatrix();
 
-async function runsExecutableLaneCGatesAndMarksLaneABBlocked(): Promise<void> {
+async function runsExecutableGates(): Promise<void> {
   const commands: string[] = [];
   const dependencies: P6VerifierDependencies = {
     exists: () => Promise.resolve(true),
@@ -34,15 +34,21 @@ async function runsExecutableLaneCGatesAndMarksLaneABBlocked(): Promise<void> {
 
   const result = await verifyP6(repository, dependencies);
 
-  assert.equal(result.ok, false);
+  assert.equal(result.ok, true);
   assert.deepEqual(commands, [
     'pnpm exec tsx evals/p6-acceptance/test/verifier-smoke.ts',
+    'pnpm --filter @mammoth/domain test',
+    'pnpm --filter @mammoth/workflow test',
+    'pnpm --filter @mammoth/persistence test',
+    'pnpm --filter @mammoth/postgres-adapter test',
+    'pnpm --filter @mammoth/production-profile test',
+    'pnpm --filter @mammoth/temporal-adapter test',
     'pnpm --filter @mammoth/report-compiler test',
     'pnpm --filter @mammoth/observatory-projection test',
   ]);
   assert.equal(
-    result.gates.filter(({ status }) => status === 'blocked').length,
-    4,
+    result.gates.every(({ status }) => status === 'passed'),
+    true,
   );
   const caseIds = result.gates.flatMap(({ caseIds }) => caseIds ?? []);
   for (const required of REQUIRED_P6_CASES)
