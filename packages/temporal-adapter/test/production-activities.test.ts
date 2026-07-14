@@ -38,7 +38,9 @@ function invocation(activityType: ActivityTypeV1): ActivityInvocationV1 {
                         ? 'outbox.publish'
                         : activityType === 'revalidation'
                           ? 'revalidation.complete'
-                          : 'human-gate.open',
+                          : activityType === 'human-gate-handoff'
+                            ? 'human-gate.open'
+                            : 'provider.chat-completion',
     contractVersion: '2.0.0',
     programId: 'program-1',
     workItemId: `work-${activityType}`,
@@ -55,7 +57,7 @@ function invocation(activityType: ActivityTypeV1): ActivityInvocationV1 {
 }
 
 describe('production Activity catalog', () => {
-  it('registers and directly executes all eleven separately testable Activities', async () => {
+  it('registers and directly executes every separately testable Activity', async () => {
     const effects = new InMemoryActivityEffectStore();
     const calls: string[] = [];
     const activities = createProductionActivities({
@@ -103,7 +105,7 @@ describe('production Activity catalog', () => {
       });
     }
     expect(calls).toEqual(activityTypes);
-    expect(effects.snapshot().effects).toHaveLength(11);
+    expect(effects.snapshot().effects).toHaveLength(12);
   });
 
   it('validates heartbeat progress before reporting it to Temporal', () => {

@@ -26,8 +26,8 @@ import {
 
 describe('P3 Activity catalog and policy', () => {
   it('freezes all eleven Activity types, operation kinds, routes, and retry ceilings', () => {
-    expect(activityTypes).toHaveLength(11);
-    expect(activityOperationKinds).toHaveLength(15);
+    expect(activityTypes).toHaveLength(12);
+    expect(activityOperationKinds).toHaveLength(16);
     expect(Object.keys(activityPolicies).sort()).toEqual(
       [...activityTypes].sort(),
     );
@@ -52,6 +52,11 @@ describe('P3 Activity catalog and policy', () => {
     expect(activityPolicies['human-gate-handoff']).toMatchObject({
       taskQueue: 'human-gate',
       maximumAttempts: 5,
+    });
+    expect(activityPolicies['model-provider']).toMatchObject({
+      taskQueue: 'local-large',
+      maximumAttempts: 3,
+      heartbeatTimeoutMs: 15_000,
     });
   });
 

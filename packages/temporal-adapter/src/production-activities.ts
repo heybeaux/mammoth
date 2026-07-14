@@ -71,6 +71,7 @@ export function createProductionActivities(
     'outbox-publication': createActivity('outbox-publication', dependencies),
     revalidation: createActivity('revalidation', dependencies),
     'human-gate-handoff': createActivity('human-gate-handoff', dependencies),
+    'model-provider': createActivity('model-provider', dependencies),
   });
 }
 

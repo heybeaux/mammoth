@@ -188,7 +188,7 @@ describe('research-cell migration', () => {
       "assignment_reviewer_agent <> new.authoritative_contract->>'reviewerAgentId'",
     );
     expect(foundationMigrations.map(({ version }) => version)).toEqual([
-      1, 2, 3, 4, 5, 6, 7,
+      1, 2, 3, 4, 5, 6, 7, 8,
     ]);
   });
 
@@ -350,10 +350,10 @@ describe('research-cell migration', () => {
     const repeated = await runner.migrate();
 
     expect(applied.map((entry) => entry.version)).toEqual([
-      1, 2, 3, 4, 5, 6, 7,
+      1, 2, 3, 4, 5, 6, 7, 8,
     ]);
     expect(repeated.map((entry) => entry.version)).toEqual([
-      1, 2, 3, 4, 5, 6, 7,
+      1, 2, 3, 4, 5, 6, 7, 8,
     ]);
     expect(database.executedMigrations).toEqual(
       foundationMigrations.map((migration) => migration.sql),
@@ -378,12 +378,13 @@ describe('research-cell migration', () => {
     const applied = await p4Runner.migrate();
 
     expect(applied.map((entry) => entry.version)).toEqual([
-      1, 2, 3, 4, 5, 6, 7,
+      1, 2, 3, 4, 5, 6, 7, 8,
     ]);
     expect(database.executedMigrations).toEqual([
       foundationMigrations[4]?.sql,
       foundationMigrations[5]?.sql,
       foundationMigrations[6]?.sql,
+      foundationMigrations[7]?.sql,
     ]);
   });
 
@@ -405,9 +406,12 @@ describe('research-cell migration', () => {
     const applied = await p6Runner.migrate();
 
     expect(applied.map((entry) => entry.version)).toEqual([
-      1, 2, 3, 4, 5, 6, 7,
+      1, 2, 3, 4, 5, 6, 7, 8,
     ]);
-    expect(database.executedMigrations).toEqual([foundationMigrations[6]?.sql]);
+    expect(database.executedMigrations).toEqual([
+      foundationMigrations[6]?.sql,
+      foundationMigrations[7]?.sql,
+    ]);
   });
 
   it('preserves interrupted P4 migration residue and fails closed on restart', async () => {
