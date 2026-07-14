@@ -111,3 +111,4 @@ export class P7ResearchApplicationService implements P7ResearchApplicationPort {
 }
 
 export * from './model-work-authority.js';
+export * from './governed-cell-executor.js';

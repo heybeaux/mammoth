@@ -14,6 +14,7 @@
   "dependencies": {
     "@mammoth/domain": "workspace:*",
     "@mammoth/persistence": "workspace:*",
+    "@mammoth/provider-port": "workspace:*",
     "@mammoth/retrieval": "workspace:*",
     "@mammoth/workflow": "workspace:*"
   },

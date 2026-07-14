@@ -261,6 +261,9 @@ importers:
       '@mammoth/persistence':
         specifier: workspace:*
         version: link:../persistence
+      '@mammoth/provider-port':
+        specifier: workspace:*
+        version: link:../provider-port
       '@mammoth/retrieval':
         specifier: workspace:*
         version: link:../retrieval
