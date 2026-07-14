@@ -10,6 +10,7 @@ export * from './p6-workflow-shell.js';
 export * from './p6-workflow-types.js';
 export * from './p6-workflows.js';
 export * from './p7-client.js';
+export * from './p7-activities.js';
 export * from './p7-workflow-shell.js';
 export * from './p7-workflow-types.js';
 export * from './p7-workflows.js';

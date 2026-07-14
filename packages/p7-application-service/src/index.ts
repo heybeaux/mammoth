@@ -27,6 +27,41 @@ export interface P7ResearchAuthorityReader {
   inspect(runId: string): Promise<P7ResearchInspection>;
 }
 
+export interface P7GovernedCellIdentity {
+  readonly cellId: string;
+  readonly modelWorkId: string;
+  readonly modelWorkIdentityDigest: string;
+  readonly providerAttemptId: string;
+  readonly providerAttemptDigest: string;
+}
+
+export interface P7GovernedCellOutcome {
+  readonly cellId: string;
+  readonly status: 'completed' | 'failed' | 'cancelled';
+  readonly retryable: boolean;
+  readonly receiptIds: readonly string[];
+  readonly failureCode?: string;
+  readonly authoritativeStatus: P7ResearchStatus;
+}
+
+export interface P7GovernedCellExecutor {
+  execute(input: {
+    readonly runId: string;
+    readonly request: P7ResearchRunRequest;
+    readonly cells: readonly P7GovernedCellIdentity[];
+    readonly cell: P7GovernedCellIdentity;
+  }): Promise<P7GovernedCellOutcome>;
+  cancel(input: {
+    readonly runId: string;
+    readonly request: P7ResearchRunRequest;
+    readonly cells: readonly P7GovernedCellIdentity[];
+    readonly reason: string;
+  }): Promise<{
+    readonly receiptId: string;
+    readonly authoritativeStatus: P7ResearchStatus;
+  }>;
+}
+
 export class P7ResearchApplicationService implements P7ResearchApplicationPort {
   constructor(
     private readonly orchestration: P7ResearchOrchestrationPort,
