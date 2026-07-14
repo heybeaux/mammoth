@@ -5,11 +5,49 @@ Local-first, hybrid, long-horizon epistemic engine.
 The completed MVP contract is documented in [MVP_PLAN.md](MVP_PLAN.md). Post-MVP
 delivery through P8 Turnkey Research is sequenced in
 [POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md). P8 adds a local plain-language
-question-to-report CLI with iterative evidence-bound research, immutable source
-snapshots, admitted-only Markdown/HTML reports, and receipt-bearing live
-exhibition evidence. The future read-only visualization contract is
+question-to-report CLI for the current data-center-impact research domain, with
+iterative evidence-bound research, immutable source snapshots, admitted-only
+Markdown/HTML reports, and receipt-bearing live exhibition evidence. The future
+read-only visualization contract is
 [Mammoth Observatory](docs/OBSERVATORY.md). Autonomous workers follow
 [AGENTS.md](AGENTS.md) and [LOOP.md](LOOP.md).
+The original blind product critique is preserved in
+[ADVERSARIAL_ANALYSIS.md](ADVERSARIAL_ANALYSIS.md); the post-P8 follow-up is
+[ADVERSARIAL_ANALYSIS_POST_P8.md](ADVERSARIAL_ANALYSIS_POST_P8.md).
+
+## See Mammoth work
+
+The flagship live exhibition asks:
+
+> What impacts do data centers have on the communities and environment around
+> them?
+
+Mammoth searched the public web, acquired and preserved 17 source snapshots,
+bound 94 admitted claims to 119 exact evidence spans, and rendered a 3,433-word
+report. The run used Brave Search plus `openai/gpt-5.6-luna` through OpenRouter;
+an independent `anthropic/claude-sonnet-5` review returned `pass_with_notes`
+with no blockers.
+
+- [Read the completed report](research/examples/data-center-community-impacts/report.md)
+- [Open the rendered HTML](research/examples/data-center-community-impacts/report.html)
+- [Read the executive summary](research/examples/data-center-community-impacts/executive-summary.md)
+- [Inspect the bibliography](research/examples/data-center-community-impacts/bibliography.md)
+- [Inspect source provenance](research/examples/data-center-community-impacts/sources.json)
+- [Inspect the execution receipt](research/examples/data-center-community-impacts/execution-receipt.json)
+- [Read the independent review](research/examples/data-center-community-impacts/independent-review.json)
+
+![Rendered Mammoth research report](docs/assets/research-showcase/report-ui.png)
+
+The same immutable bundle can be checked from the CLI. `research inspect`
+verifies the run state, manifest and receipt digests, and every required artifact.
+
+![Mammoth CLI inspecting a completed research bundle](docs/assets/research-showcase/cli-inspect.png)
+
+This is intentionally the only cross-source showcase today. P8's live planning
+taxonomy and search program are still specialized for data-center impact
+research; unrelated-topic examples would overstate the current product. The next
+product milestone is a governed, question-derived planning layer that can produce
+equally strong examples in unrelated domains without hard-coded topic templates.
 
 ## Development
 
@@ -79,11 +117,11 @@ Packages should extend `tsconfig.base.json` and expose the applicable `build`,
 - **P7 governed execution substrate:** provider-backed typed cell work, governed
   egress and budgets, effect/cost receipts, reconstruction, dossier projection,
   operator controls, and restart-safe resume.
-- **P8 turnkey research product:** local plain-language `research ask` intake,
-  Brave-backed live public-web discovery when authorized, immutable acquired
-  source snapshots, admitted-only report manifests, Markdown/HTML reports,
-  inspection, deterministic offline acceptance, and a receipt-bearing live
-  data-center exhibition.
+- **P8 turnkey research product:** local plain-language `research ask` intake for
+  the current data-center-impact domain, Brave-backed live public-web discovery
+  when authorized, immutable acquired source snapshots, admitted-only report
+  manifests, Markdown/HTML reports, inspection, deterministic offline acceptance,
+  and a receipt-bearing live exhibition.
 
 `pnpm verify:phase-1` runs the Phase 1 exit-gate suites. The compiler fails closed
 unless each factual sentence resolves through an eligible claim and named policy
@@ -130,6 +168,9 @@ diagnostics also go to stderr.
   as the live exhibition receipt.
 - The CLI exposes the P7 operator path and the P8 plain-language `research ask`,
   `research status`, `research inspect`, and `research doctor` commands.
+- P8's live search program, mandatory coverage topics, and report framing are
+  currently data-center-specific. The CLI does not yet support honest
+  arbitrary-domain research merely because it accepts a question string.
 - Postgres/CAS and Temporal have production-shaped local profiles and recovery
   evidence, not a managed hosted deployment or production operations claim.
 - Provider-dependent quality, cost, and reliability evaluations remain outside

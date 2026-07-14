@@ -1,5 +1,9 @@
 Adversarial assessment of heybeaux/mammoth
 
+> This was the blind pre-completion assessment. The evidence-based follow-up at
+> the completed P8 checkpoint is
+> [`ADVERSARIAL_ANALYSIS_POST_P8.md`](ADVERSARIAL_ANALYSIS_POST_P8.md).
+
 Verdict
 
 Mammoth is worth pursuing—but not yet as a broad “AI research operating system.”
