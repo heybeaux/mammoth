@@ -105,8 +105,12 @@ complete.
   loopback addresses only and refuses redirects. Governed non-loopback mode
   resolves every hostname before each request, rejects private, loopback,
   link-local, multicast, unspecified, reserved, and cloud-metadata IP ranges,
-  pins the approved destination origin, and repeats DNS/IP/origin validation for
-  every redirect. DNS rebinding or mixed allowed/denied answers fail closed.
+  pins the approved destination origin, and binds the validated address to the
+  transport connection through an approved-IP connector or equivalent pinned
+  resolver while preserving the requested `Host` header and TLS SNI. It repeats
+  DNS/IP/origin validation and transport pinning for every redirect. DNS rebinding,
+  a connection to an address outside the validated set, or mixed allowed/denied
+  answers fail closed.
 - `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and lowercase equivalents are ignored
   by default. A proxy may be used only when its exact origin is separately pinned
   by policy and passes the same scheme, DNS/IP, redirect, and classification
