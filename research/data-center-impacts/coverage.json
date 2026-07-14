@@ -15,34 +15,29 @@
     {
       "admittedSupportingClaims": 4,
       "claimIds": [
-        "claim-electricity-grid-gov-grid-reliability-order",
-        "claim-electricity-grid-utility-load-forecast",
-        "claim-electricity-grid-utility-rate-filing",
-        "claim-electricity-grid-critical-market-analysis"
+        "claim-electricity-grid-live-belfercenter-org-2943500c8e",
+        "claim-electricity-grid-live-stateimpactcenter-org-9822f71009",
+        "claim-electricity-grid-live-energy-gov-08148fbea6",
+        "claim-electricity-grid-live-eesi-org-74a59a4b4d"
       ],
       "independentSourceFamilies": [
-        "federal-grid-reliability-commission",
-        "interior-plains-power-cooperative",
-        "grid-integrity-project"
+        "belfercenter-org",
+        "stateimpactcenter-org",
+        "energy-gov",
+        "eesi-org"
       ],
       "status": "sufficient",
       "title": "Electricity demand, grid capacity, reliability, rates, and generation mix",
       "topicId": "electricity-grid"
     },
     {
-      "admittedSupportingClaims": 4,
+      "admittedSupportingClaims": 3,
       "claimIds": [
-        "claim-ghg-emissions-research-energy-emissions",
-        "claim-ghg-emissions-tech-lifecycle-materials",
-        "claim-ghg-emissions-industry-sustainability-report",
-        "claim-ghg-emissions-critical-market-analysis"
+        "claim-ghg-emissions-live-nih-gov-01111714a7",
+        "claim-ghg-emissions-live-msci-com-6441d591c6",
+        "claim-ghg-emissions-live-weforum-org-efbbb5c6a1"
       ],
-      "independentSourceFamilies": [
-        "journal-of-energy-systems",
-        "institute-for-infrastructure-analysis",
-        "northwind-digital-infrastructure",
-        "grid-integrity-project"
-      ],
+      "independentSourceFamilies": ["nih-gov", "msci-com", "weforum-org"],
       "status": "sufficient",
       "title": "Operational and embodied greenhouse-gas emissions",
       "topicId": "ghg-emissions"
@@ -50,16 +45,16 @@
     {
       "admittedSupportingClaims": 4,
       "claimIds": [
-        "claim-water-gov-water-assessment",
-        "claim-water-research-cooling-water",
-        "claim-water-ej-coalition-statement",
-        "claim-water-industry-sustainability-report"
+        "claim-water-live-eesi-org-3b00ff74dd",
+        "claim-water-live-uga-edu-75d30a2133",
+        "claim-water-live-akcp-com-a149f999dd",
+        "claim-water-live-fwpcoa-org-a496e377ae"
       ],
       "independentSourceFamilies": [
-        "national-water-resources-agency",
-        "journal-of-sustainable-computing",
-        "twin-rivers-ej-coalition",
-        "northwind-digital-infrastructure"
+        "eesi-org",
+        "uga-edu",
+        "akcp-com",
+        "fwpcoa-org"
       ],
       "status": "sufficient",
       "title": "Water withdrawal/consumption, cooling, drought stress, and thermal effects",
@@ -68,12 +63,12 @@
     {
       "admittedSupportingClaims": 2,
       "claimIds": [
-        "claim-land-materials-tech-lifecycle-materials",
-        "claim-land-materials-land-habitat-assessment"
+        "claim-land-materials-live-belfercenter-org-2943500c8e",
+        "claim-land-materials-live-stateimpactcenter-org-9822f71009"
       ],
       "independentSourceFamilies": [
-        "institute-for-infrastructure-analysis",
-        "state-environmental-quality-department"
+        "belfercenter-org",
+        "stateimpactcenter-org"
       ],
       "status": "sufficient",
       "title": "Land use, habitat, construction disturbance, materials, and e-waste",
@@ -82,100 +77,125 @@
     {
       "admittedSupportingClaims": 4,
       "claimIds": [
-        "claim-local-pollution-community-hearing-transcript",
-        "claim-local-pollution-industry-sustainability-report",
-        "claim-local-pollution-air-permit-backup-generators",
-        "claim-local-pollution-facility-variation-study"
+        "claim-local-pollution-live-eesi-org-8bd727062c",
+        "claim-local-pollution-live-usnews-com-59cf55221b",
+        "claim-local-pollution-live-environmentalhealthproject-org-636b97f437",
+        "claim-local-pollution-live-theconversation-com-8a81b0f41b"
       ],
       "independentSourceFamilies": [
-        "greenfield-county-planning-commission",
-        "northwind-digital-infrastructure",
-        "state-air-quality-bureau",
-        "journal-of-infrastructure-systems"
+        "eesi-org",
+        "usnews-com",
+        "environmentalhealthproject-org",
+        "theconversation-com"
       ],
       "status": "sufficient",
       "title": "Local air pollution, backup generation, noise, traffic, and visual impacts",
       "topicId": "local-pollution"
     },
     {
-      "admittedSupportingClaims": 4,
+      "admittedSupportingClaims": 5,
       "claimIds": [
-        "claim-economic-benefits-community-hearing-transcript",
-        "claim-economic-benefits-industry-sustainability-report",
-        "claim-economic-benefits-econ-impact-study",
-        "claim-economic-benefits-policy-mitigation-review"
+        "claim-economic-benefits-live-eesi-org-8bd727062c",
+        "claim-economic-benefits-live-usnews-com-59cf55221b",
+        "claim-economic-benefits-live-environmentalhealthproject-org-636b97f437",
+        "claim-economic-benefits-live-theconversation-com-8a81b0f41b",
+        "claim-economic-benefits-live-datacentercoalition-org-46a7b53f32"
       ],
       "independentSourceFamilies": [
-        "greenfield-county-planning-commission",
-        "northwind-digital-infrastructure",
-        "plains-state-university",
-        "center-for-grid-policy"
+        "eesi-org",
+        "usnews-com",
+        "environmentalhealthproject-org",
+        "theconversation-com",
+        "datacentercoalition-org"
       ],
       "status": "sufficient",
       "title": "Employment, taxes, infrastructure investment, and economic benefits",
       "topicId": "economic-benefits"
     },
     {
-      "admittedSupportingClaims": 3,
+      "admittedSupportingClaims": 5,
       "claimIds": [
-        "claim-housing-services-utility-rate-filing",
-        "claim-housing-services-community-hearing-transcript",
-        "claim-housing-services-econ-impact-study"
+        "claim-housing-services-live-belfercenter-org-2943500c8e",
+        "claim-housing-services-live-stateimpactcenter-org-9822f71009",
+        "claim-housing-services-live-energy-gov-08148fbea6",
+        "claim-housing-services-live-eesi-org-74a59a4b4d",
+        "claim-housing-services-live-datacentercoalition-org-46a7b53f32"
       ],
       "independentSourceFamilies": [
-        "interior-plains-power-cooperative",
-        "greenfield-county-planning-commission",
-        "plains-state-university"
+        "belfercenter-org",
+        "stateimpactcenter-org",
+        "energy-gov",
+        "eesi-org",
+        "datacentercoalition-org"
       ],
       "status": "sufficient",
       "title": "Housing, public services, utility allocation, and opportunity costs",
       "topicId": "housing-services"
     },
     {
-      "admittedSupportingClaims": 3,
+      "admittedSupportingClaims": 2,
       "claimIds": [
-        "claim-environmental-justice-ej-coalition-statement",
-        "claim-environmental-justice-land-habitat-assessment",
-        "claim-environmental-justice-policy-mitigation-review"
+        "claim-environmental-justice-live-belfercenter-org-2943500c8e",
+        "claim-environmental-justice-live-stateimpactcenter-org-9822f71009"
       ],
       "independentSourceFamilies": [
-        "twin-rivers-ej-coalition",
-        "state-environmental-quality-department",
-        "center-for-grid-policy"
+        "belfercenter-org",
+        "stateimpactcenter-org"
       ],
       "status": "sufficient",
       "title": "Environmental justice, Indigenous/local participation, siting, and governance",
       "topicId": "environmental-justice"
     },
     {
-      "admittedSupportingClaims": 3,
+      "admittedSupportingClaims": 7,
       "claimIds": [
-        "claim-variation-research-energy-emissions",
-        "claim-variation-research-cooling-water",
-        "claim-variation-facility-variation-study"
+        "claim-variation-live-eesi-org-3b00ff74dd",
+        "claim-variation-live-uga-edu-75d30a2133",
+        "claim-variation-live-akcp-com-a149f999dd",
+        "claim-variation-live-fwpcoa-org-a496e377ae",
+        "claim-variation-live-nih-gov-01111714a7",
+        "claim-variation-live-msci-com-6441d591c6",
+        "claim-variation-live-weforum-org-efbbb5c6a1"
       ],
       "independentSourceFamilies": [
-        "journal-of-energy-systems",
-        "journal-of-sustainable-computing",
-        "journal-of-infrastructure-systems"
+        "eesi-org",
+        "uga-edu",
+        "akcp-com",
+        "fwpcoa-org",
+        "nih-gov",
+        "msci-com",
+        "weforum-org"
       ],
       "status": "sufficient",
       "title": "Variation by facility type, climate, grid, cooling design, scale, and lifecycle",
       "topicId": "variation"
     },
     {
-      "admittedSupportingClaims": 4,
+      "admittedSupportingClaims": 11,
       "claimIds": [
-        "claim-mitigation-policy-gov-grid-reliability-order",
-        "claim-mitigation-policy-research-cooling-water",
-        "claim-mitigation-policy-air-permit-backup-generators",
-        "claim-mitigation-policy-policy-mitigation-review"
+        "claim-mitigation-policy-live-belfercenter-org-2943500c8e",
+        "claim-mitigation-policy-live-stateimpactcenter-org-9822f71009",
+        "claim-mitigation-policy-live-energy-gov-08148fbea6",
+        "claim-mitigation-policy-live-eesi-org-74a59a4b4d",
+        "claim-mitigation-policy-live-eesi-org-3b00ff74dd",
+        "claim-mitigation-policy-live-uga-edu-75d30a2133",
+        "claim-mitigation-policy-live-akcp-com-a149f999dd",
+        "claim-mitigation-policy-live-fwpcoa-org-a496e377ae",
+        "claim-mitigation-policy-live-nih-gov-01111714a7",
+        "claim-mitigation-policy-live-msci-com-6441d591c6",
+        "claim-mitigation-policy-live-weforum-org-efbbb5c6a1"
       ],
       "independentSourceFamilies": [
-        "federal-grid-reliability-commission",
-        "journal-of-sustainable-computing",
-        "state-air-quality-bureau",
-        "center-for-grid-policy"
+        "belfercenter-org",
+        "stateimpactcenter-org",
+        "energy-gov",
+        "eesi-org",
+        "uga-edu",
+        "akcp-com",
+        "fwpcoa-org",
+        "nih-gov",
+        "msci-com",
+        "weforum-org"
       ],
       "status": "sufficient",
       "title": "Mitigation, trade-offs, policy options, disputed findings, and evidence gaps",

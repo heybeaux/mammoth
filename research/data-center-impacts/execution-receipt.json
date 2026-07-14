@@ -4,24 +4,41 @@
   "contractFamily": "p8.v1",
   "costs": {
     "budgetUsd": 20,
-    "bytes": 16,
-    "currencyUsd": 0,
-    "provider": "fixture-search/v1 + deterministic local compiler",
-    "retrievalRequests": 16,
-    "searchRequests": 2,
+    "bytes": 4708269,
+    "currencyUsd": 0.018,
+    "provider": "brave-search/v1 + governed http acquisition + deterministic local compiler",
+    "retrievalRequests": 17,
+    "searchRequests": 6,
     "tokens": 0
   },
-  "coverageDigest": "sha256:c343eaeae2f8b3cf544b8670ed08e79f7e031d0f73f992ea5acdca3a00c7951a",
-  "depth": "comprehensive",
-  "generatedAt": "2026-07-01T00:00:00.000Z",
-  "limitations": [
-    "offline fixture corpus is release authority for deterministic gates",
-    "live exhibition remains credential-gated by ADR 0010"
+  "coverageDigest": "sha256:90ff685d3f31237ddffb6be96ce0cd84f66c49f3dd3ea1619c6435c2258da123",
+  "cycles": [
+    {
+      "decision": "continue",
+      "id": "cycle-1",
+      "reason": "live follow-up required for coverage and dissent checks"
+    },
+    {
+      "decision": "stop",
+      "id": "cycle-2",
+      "reason": "mandatory topics sufficient or explicitly accounted after live follow-up"
+    }
   ],
+  "depth": "comprehensive",
+  "generatedAt": "2026-07-14T19:49:27.361Z",
+  "limitations": [
+    "search snippets excluded from evidence",
+    "live public-web coverage bounded by configured budget"
+  ],
+  "liveSearchProvider": {
+    "billingAuthorization": "authorized",
+    "credential": "present-redacted",
+    "provider": "Brave Search API"
+  },
   "mode": "report",
   "outputDirectory": "/private/tmp/mammoth-p8-integration/research/data-center-impacts",
   "question": "What impacts do data centers have on the communities and environment around them?",
-  "reportManifestDigest": "sha256:43112e8e8a5ccc251793a46389e149bdf05f203f810fdcfeef9406f0bc9ab0b1",
+  "reportManifestDigest": "sha256:6202fc8f432b8aebd3edc0628ae763061bf5c6e33abaefcd6160585b2718c3c2",
   "requiredFiles": [
     "report.md",
     "report.html",
@@ -33,13 +50,13 @@
     "unresolved.json",
     "execution-receipt.json"
   ],
-  "runId": "p8-run:43112e8e8a5ccc25",
+  "runId": "p8-run:6202fc8f432b8aeb",
   "schemaVersion": "1.0.0",
   "status": "completed",
   "stopReason": "sufficiency_reached",
-  "unresolvedDigest": "sha256:3fc96719cfc7a61ff40ffc1771eb7e484021a9c61000d3fbee9c321a6adf1528",
+  "unresolvedDigest": "sha256:6f50799152a1374674bd8d823a725b47d16683efe18884f24b65fd9900cf44ff",
   "verificationCommands": [
     "pnpm verify:p8",
-    "pnpm mammoth research inspect /private/tmp/mammoth-p8-integration/research/data-center-impacts --json"
+    "pnpm mammoth research inspect /private/tmp/mammoth-p8-integration/research/data-center-impacts"
   ]
 }

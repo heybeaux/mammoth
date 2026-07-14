@@ -2,10 +2,11 @@
 
 ## Mission
 
-Convert the merged P7 governed execution substrate into the P8 product specified
-by `P8_PLAN.md`: plain-language question or theory in, iterative evidence-bound
-research and a comprehensive cited report bundle out. Preserve all P2-P7
-authority, durability, isolation, lineage, review, and effect-receipt invariants.
+P8 Turnkey Research is complete as the local CLI release specified by
+`P8_PLAN.md`: plain-language question or theory in, iterative evidence-bound
+research and a comprehensive cited report bundle out. Preserve all P2-P8
+authority, durability, isolation, lineage, review, and effect-receipt invariants
+in any follow-up work.
 
 ## Slice 0: reconcile and freeze
 
@@ -142,12 +143,12 @@ coordinator decisions.
 
 ## Stopping condition
 
-Do not stop at a green provider call, completed cells, or valid dossier. P8 stops
-only when the plain-language data-center command produces the complete report
-bundle; every factual sentence passes claim/policy/locator/snapshot provenance;
-mandatory coverage is covered or explicitly insufficient; at least one
-evidence-driven follow-up cycle is proved; dissent, contradictions, uncertainty,
-limitations, method, cost, and partiality remain visible; restart, idempotency,
-budgets, cancellation, and adversarial security pass; independent review is
-non-blocking; and merged-main CI, release receipt, and the annotated P8 tag prove
-the exact candidate.
+P8 stopped only when the plain-language data-center command produced the complete
+report bundle; every factual sentence passed claim/policy/locator/snapshot
+provenance; mandatory coverage was covered or explicitly insufficient; at least
+one evidence-driven follow-up cycle was proved; dissent, contradictions,
+uncertainty, limitations, method, cost, and partiality remained visible; restart,
+idempotency, budgets, cancellation, and adversarial security passed; independent
+review was non-blocking; and merged-main CI, release receipt, and the annotated
+P8 tag proved the exact candidate. Future release loops must define their own
+stopping condition before implementation begins.

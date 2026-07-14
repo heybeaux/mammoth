@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0.0",
+  "reviewer": "codex-subagent-independent-editorial-reviewer",
+  "reviewedAt": "2026-07-14T19:52:15.040Z",
+  "appliesTo": {
+    "bundlePath": "/private/tmp/mammoth-p8-integration/research/data-center-impacts",
+    "question": "What impacts do data centers have on the communities and environment around them?",
+    "runId": "p8-run:6202fc8f432b8aeb",
+    "manifestDigest": "sha256:6202fc8f432b8aebd3edc0628ae763061bf5c6e33abaefcd6160585b2718c3c2",
+    "receiptDigest": "sha256:82545b8c737516b2384cd48672267a5220c1d3003826bbd2fa87c1e5a5951d6e",
+    "sourceCount": 17,
+    "claimCount": 47,
+    "mode": "report",
+    "liveSearchProvider": {
+      "billingAuthorization": "authorized",
+      "credential": "present-redacted",
+      "provider": "Brave Search API"
+    }
+  },
+  "rubric": "evals/fixtures/p8/editorial-rubric.json",
+  "verdict": "pass_with_notes",
+  "criteria": [
+    {
+      "id": "answers-the-question",
+      "verdict": "pass",
+      "notes": "The executive summary directly names grid, climate, water, land/material, local pollution, community cost, environmental-justice, benefit, and mitigation impacts."
+    },
+    {
+      "id": "clarity",
+      "verdict": "pass_with_notes",
+      "notes": "The report is readable and structured for a non-expert, though intentionally terse because the deterministic compiler keeps factual sentences tightly bound to admitted evidence."
+    },
+    {
+      "id": "balance",
+      "verdict": "pass",
+      "notes": "Harms, benefits, industry-perspective evidence, and critical-analysis evidence are all represented without suppressing contested climate and economic claims."
+    },
+    {
+      "id": "relevance",
+      "verdict": "pass",
+      "notes": "Included sections map to the charter topics and the admitted sources; no padding or off-topic source families were found."
+    },
+    {
+      "id": "actionability",
+      "verdict": "pass",
+      "notes": "Mitigation options are concrete and separated from factual premises: cooling choices, hourly clean-energy procurement, demand flexibility, large-load tariffs, cumulative-impact permitting, and community-benefit agreements."
+    },
+    {
+      "id": "honest-uncertainty",
+      "verdict": "pass_with_notes",
+      "notes": "The bundle records contradictions, unresolved gaps, stop reason, rejected residue, and cost. The human-facing report could be more explanatory, but the required uncertainty accounting is present in the bundle."
+    }
+  ],
+  "blockers": [],
+  "notes": [
+    "No factual sentence was added, removed, or rewritten by this review.",
+    "Review checked the exact live exhibition bundle after PR #53 merge SHA 2b2b41321a06e5d7cea7070f38a8d2a1fd945a25.",
+    "Screenshots inspected: research/data-center-impacts/screenshots/report.png and research/data-center-impacts/screenshots/evidence-provenance.png."
+  ]
+}

@@ -3,13 +3,13 @@
 Local-first, hybrid, long-horizon epistemic engine.
 
 The completed MVP contract is documented in [MVP_PLAN.md](MVP_PLAN.md). Post-MVP
-delivery through P6 and the merged P7 governed execution substrate is sequenced in
-[POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md). The active checkpoint is
-[P8 Turnkey Research](P8_PLAN.md): plain-language question or theory in,
-iterative evidence-bound research and a comprehensive cited report bundle out.
-P7 is an execution substrate, not proof of that product outcome. The future
-read-only visualization contract is [Mammoth Observatory](docs/OBSERVATORY.md).
-Autonomous workers follow [AGENTS.md](AGENTS.md) and [LOOP.md](LOOP.md).
+delivery through P8 Turnkey Research is sequenced in
+[POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md). P8 adds a local plain-language
+question-to-report CLI with iterative evidence-bound research, immutable source
+snapshots, admitted-only Markdown/HTML reports, and receipt-bearing live
+exhibition evidence. The future read-only visualization contract is
+[Mammoth Observatory](docs/OBSERVATORY.md). Autonomous workers follow
+[AGENTS.md](AGENTS.md) and [LOOP.md](LOOP.md).
 
 ## Development
 
@@ -36,13 +36,15 @@ pnpm verify:p4
 pnpm verify:p5
 pnpm verify:p6
 pnpm verify:p7
+pnpm verify:p8
 pnpm eval:offline
 git diff --check
 ```
 
 Every verifier through `pnpm verify:p7` is independently runnable and enforced in
-default-branch CI. P8 must add its own visible non-recursive verifier without
-changing the meaning of earlier gates.
+default-branch CI. `pnpm verify:p8` is a visible non-recursive verifier that
+checks the frozen data-center acceptance path without changing the meaning of
+earlier gates.
 
 Run `pnpm format` to format tracked source and documentation, or
 `pnpm format:check` to check formatting without changing files.
@@ -77,6 +79,11 @@ Packages should extend `tsconfig.base.json` and expose the applicable `build`,
 - **P7 governed execution substrate:** provider-backed typed cell work, governed
   egress and budgets, effect/cost receipts, reconstruction, dossier projection,
   operator controls, and restart-safe resume.
+- **P8 turnkey research product:** local plain-language `research ask` intake,
+  Brave-backed live public-web discovery when authorized, immutable acquired
+  source snapshots, admitted-only report manifests, Markdown/HTML reports,
+  inspection, deterministic offline acceptance, and a receipt-bearing live
+  data-center exhibition.
 
 `pnpm verify:phase-1` runs the Phase 1 exit-gate suites. The compiler fails closed
 unless each factual sentence resolves through an eligible claim and named policy
@@ -118,13 +125,11 @@ diagnostics also go to stderr.
 ## Current product boundary
 
 - This checkpoint provides a local CLI, not the deferred desktop UI or hosted API.
-- The quickstart uses an immutable checked-in source. Live HTTP retrieval is
-  available, but offline fixtures are the reproducible release evidence.
-- P7 executes governed provider-backed cells, but its request does not yet accept
-  the human question/source content or discover evidence; it is not substantive
-  turnkey research.
-- The CLI exposes the P7 operator path, but the P8 plain-language `research ask`
-  command and comprehensive report bundle are not implemented yet.
+- The quickstart uses an immutable checked-in source. P8's reproducible release
+  gate is fixture-backed; the authorized Brave-backed run is recorded separately
+  as the live exhibition receipt.
+- The CLI exposes the P7 operator path and the P8 plain-language `research ask`,
+  `research status`, `research inspect`, and `research doctor` commands.
 - Postgres/CAS and Temporal have production-shaped local profiles and recovery
   evidence, not a managed hosted deployment or production operations claim.
 - Provider-dependent quality, cost, and reliability evaluations remain outside
@@ -133,8 +138,8 @@ diagnostics also go to stderr.
   stack adapters, and `mammoth-pipelines` remain future work.
 - A completed run may honestly contain unresolved claims. Only supported claims
   with a named policy assessment and exact immutable locator render as report facts.
-- Source parsing supports bounded plain text, HTML, and JSON; text-layer PDF is a
-  P8 requirement while browser rendering and OCR-heavy media remain deferred.
+- Source parsing supports bounded plain text, HTML, JSON, and the P8 text-layer
+  source path; browser rendering and OCR-heavy media remain deferred.
 - `inspect` verifies terminal receipts and declared artifact digests but is not a
   repair command. Tampered state fails closed.
 - The dossier remains `evidence_complete`; Mammoth never assigns human approval.
