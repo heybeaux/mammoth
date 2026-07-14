@@ -3,8 +3,8 @@
 ## Mission
 
 P5 `v0.5.0-isolated-divergence` is merged, verified, tagged, and recorded under
-`P5_PLAN.md`. Operate from that baseline toward P6 broader research topology only
-after the P6 acceptance contract is frozen. Preserve the P2 Postgres/CAS
+`P5_PLAN.md`. P6 broader research topology is the active checkpoint and is frozen
+under `P6_PLAN.md` once that entry PR is merged. Preserve the P2 Postgres/CAS
 authority boundary, P3 Temporal control plane, P4 research-cell/model-lineage
 contracts, and P5 isolated-divergence/blind-review contracts.
 
@@ -47,8 +47,9 @@ it and never assign overlapping workers to one worktree.
    deleted rejection residue, direct adapter imports, Temporal shadow state,
    projection writes, fake receipts, process-order "isolation," and hidden
    author/popularity/verdict fields.
-7. **Verify** — run focused gates, `pnpm verify:p5`, and the full clean-checkout
-   ladder; capture exact evidence in the receipt.
+7. **Verify** — run focused gates, `pnpm verify:p5`, the active P6 verifier once
+   implemented, and the full clean-checkout ladder; capture exact evidence in
+   the receipt.
 8. **Integrate** — resolve without discarding work, push, open a PR, repair CI,
    resolve independent findings, merge, and verify `main`.
 9. **Reconcile** — update plan, roadmap, receipt, and tag only from executed proof.
@@ -112,8 +113,8 @@ entry PR #36, code PR #37, code-bearing merge
 
 ## Stopping condition
 
-For the next checkpoint, stop only when its frozen plan's gates and fixtures pass;
-the clean-checkout ladder is green; required independent review is resolved and
-re-reviewed; the checkpoint verifier is enforced in default-branch CI; the PR is
-merged; post-merge `main` CI is green; the receipt is exact and merged; and the
-release tag points to the code-bearing merge.
+For P6, stop only when `P6_PLAN.md` gates and fixtures pass; the clean-checkout
+ladder is green; required independent review is resolved and re-reviewed;
+`pnpm verify:p6` is enforced in default-branch CI; the code PR is merged;
+post-merge `main` CI is green; the receipt is exact and merged; and the
+`v0.6.0-research-topology` tag points to the code-bearing merge.

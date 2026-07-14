@@ -9,7 +9,7 @@
 > Completed checkpoints: [`P2_PLAN.md`](P2_PLAN.md), [`P3_PLAN.md`](P3_PLAN.md),
 > [`P4_PLAN.md`](P4_PLAN.md), [`P5_PLAN.md`](P5_PLAN.md)
 >
-> Next checkpoint: P6 — broader research topology
+> Active checkpoint contract: [`P6_PLAN.md`](P6_PLAN.md)
 
 ## Outcome
 
@@ -136,6 +136,10 @@ A complete multi-cell program survives restart, preserves dissent, stays within
 budget, and emits a dossier whose factual sentences retain the MVP provenance
 guarantee.
 
+Frozen plan: [`P6_PLAN.md`](P6_PLAN.md). Implementation may not claim P6 progress
+until that plan is merged to `main` and implementation worktrees are resynced to
+the merged P6-plan baseline.
+
 ## Dependency order
 
 ```text
@@ -166,10 +170,10 @@ cannot become release scope until P2 and P3 pass their exit gates.
 
 ## Next implementation checkpoint
 
-P5 isolated divergence and blind review is complete. The next checkpoint is P6
-broader research topology. A P6 plan must freeze its exact entry gate, slices,
-adversarial fixtures, verifier, receipt, release label, and stopping condition
-before implementation claims begin.
+P5 isolated divergence and blind review is complete. P6 broader research topology
+is active under [`P6_PLAN.md`](P6_PLAN.md). The P6 plan freezes its exact entry
+gate, slices, adversarial fixtures, verifier, receipt, release label, and
+stopping condition before implementation claims begin.
 
 The read-only visualization track is specified in
 [`docs/OBSERVATORY.md`](docs/OBSERVATORY.md). A high-fidelity shell and 3D
