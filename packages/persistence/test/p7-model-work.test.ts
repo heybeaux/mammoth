@@ -19,6 +19,7 @@ import {
   InMemoryP7ModelWorkRepository,
   P7PersistenceConflictError,
   P7PersistenceIntegrityError,
+  P7ProviderUsageSchema,
   type P7ArtifactReferenceRecord,
   type P7BudgetSettlementRecord,
   type P7CancellationFenceRecord,
@@ -220,6 +221,17 @@ function chargeSettlement(authoritativeRequest: ModelWorkRequest) {
 }
 
 describe('P7 model-work persistence', () => {
+  it('accepts zero-duration provider usage while request ceilings stay positive', () => {
+    expect(
+      P7ProviderUsageSchema.parse({
+        inputTokens: 0,
+        outputTokens: 0,
+        currencyMicros: 0,
+        wallClockMs: 0,
+        toolCalls: 0,
+      }),
+    ).toMatchObject({ wallClockMs: 0 });
+  });
   it('replays stable identities and rejects conflicting reuse', async () => {
     const repository = new InMemoryP7ModelWorkRepository();
     const work = modelWork();

@@ -1,0 +1,24 @@
+{
+  "name": "@mammoth/p7-application-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mammoth/domain": "workspace:*",
+    "@mammoth/persistence": "workspace:*",
+    "@mammoth/retrieval": "workspace:*",
+    "@mammoth/workflow": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}

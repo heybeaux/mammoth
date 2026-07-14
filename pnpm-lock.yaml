@@ -253,6 +253,28 @@ importers:
         specifier: ^3.25.0
         version: 3.25.76
 
+  packages/p7-application-service:
+    dependencies:
+      '@mammoth/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@mammoth/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+      '@mammoth/retrieval':
+        specifier: workspace:*
+        version: link:../retrieval
+      '@mammoth/workflow':
+        specifier: workspace:*
+        version: link:../workflow
+    devDependencies:
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
+
   packages/persistence:
     dependencies:
       '@mammoth/domain':
@@ -439,6 +461,9 @@ importers:
       '@mammoth/adapter-contracts':
         specifier: workspace:*
         version: link:../adapter-contracts
+      '@mammoth/p7-application-service':
+        specifier: workspace:*
+        version: link:../p7-application-service
       '@mammoth/work-queue':
         specifier: workspace:*
         version: link:../work-queue
