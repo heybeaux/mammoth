@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0.0",
+  "cases": [
+    { "id": "local-non-loopback", "expectedCode": "policy_denied" },
+    { "id": "governed-private-address", "expectedCode": "policy_denied" },
+    { "id": "governed-mixed-dns", "expectedCode": "policy_denied" },
+    { "id": "unapproved-redirect-origin", "expectedCode": "policy_denied" },
+    { "id": "checkpoint-drift", "expectedCode": "profile_drift" },
+    { "id": "secret-in-prompt", "expectedCode": "secret_detected" },
+    { "id": "rate-limited", "expectedCode": "rate_limited" },
+    { "id": "provider-outage", "expectedCode": "provider_unavailable" },
+    {
+      "id": "ambiguous-after-acceptance",
+      "expectedCode": "ambiguous_delivery"
+    },
+    { "id": "oversized-response", "expectedCode": "oversized_output" },
+    {
+      "id": "unsupported-seed",
+      "expectedCode": "unsupported_capability"
+    },
+    { "id": "cancel-during-discovery", "expectedCode": "late_response" },
+    { "id": "inconsistent-usage", "expectedCode": "schema_incompatible" },
+    { "id": "reservation-exhausted", "expectedCode": "budget_exhausted" }
+  ]
+}

@@ -228,6 +228,28 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
 
+  packages/openai-compatible-provider:
+    dependencies:
+      '@mammoth/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@mammoth/provider-port':
+        specifier: workspace:*
+        version: link:../provider-port
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.15.34
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+
   packages/persistence:
     dependencies:
       '@mammoth/domain':
@@ -3970,4 +3992,3 @@ packages:
 
   /zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
-    dev: false
