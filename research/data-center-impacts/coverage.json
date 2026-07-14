@@ -1,0 +1,186 @@
+{
+  "cycles": [
+    {
+      "decision": "continue",
+      "id": "cycle-1",
+      "reason": "housing-services gap below frozen sufficiency threshold"
+    },
+    {
+      "decision": "stop",
+      "id": "cycle-2",
+      "reason": "mandatory topics sufficient or explicitly accounted after follow-up"
+    }
+  ],
+  "mandatoryTopics": [
+    {
+      "admittedSupportingClaims": 4,
+      "claimIds": [
+        "claim-electricity-grid-gov-grid-reliability-order",
+        "claim-electricity-grid-utility-load-forecast",
+        "claim-electricity-grid-utility-rate-filing",
+        "claim-electricity-grid-critical-market-analysis"
+      ],
+      "independentSourceFamilies": [
+        "federal-grid-reliability-commission",
+        "interior-plains-power-cooperative",
+        "grid-integrity-project"
+      ],
+      "status": "sufficient",
+      "title": "Electricity demand, grid capacity, reliability, rates, and generation mix",
+      "topicId": "electricity-grid"
+    },
+    {
+      "admittedSupportingClaims": 4,
+      "claimIds": [
+        "claim-ghg-emissions-research-energy-emissions",
+        "claim-ghg-emissions-tech-lifecycle-materials",
+        "claim-ghg-emissions-industry-sustainability-report",
+        "claim-ghg-emissions-critical-market-analysis"
+      ],
+      "independentSourceFamilies": [
+        "journal-of-energy-systems",
+        "institute-for-infrastructure-analysis",
+        "northwind-digital-infrastructure",
+        "grid-integrity-project"
+      ],
+      "status": "sufficient",
+      "title": "Operational and embodied greenhouse-gas emissions",
+      "topicId": "ghg-emissions"
+    },
+    {
+      "admittedSupportingClaims": 4,
+      "claimIds": [
+        "claim-water-gov-water-assessment",
+        "claim-water-research-cooling-water",
+        "claim-water-ej-coalition-statement",
+        "claim-water-industry-sustainability-report"
+      ],
+      "independentSourceFamilies": [
+        "national-water-resources-agency",
+        "journal-of-sustainable-computing",
+        "twin-rivers-ej-coalition",
+        "northwind-digital-infrastructure"
+      ],
+      "status": "sufficient",
+      "title": "Water withdrawal/consumption, cooling, drought stress, and thermal effects",
+      "topicId": "water"
+    },
+    {
+      "admittedSupportingClaims": 2,
+      "claimIds": [
+        "claim-land-materials-tech-lifecycle-materials",
+        "claim-land-materials-land-habitat-assessment"
+      ],
+      "independentSourceFamilies": [
+        "institute-for-infrastructure-analysis",
+        "state-environmental-quality-department"
+      ],
+      "status": "sufficient",
+      "title": "Land use, habitat, construction disturbance, materials, and e-waste",
+      "topicId": "land-materials"
+    },
+    {
+      "admittedSupportingClaims": 4,
+      "claimIds": [
+        "claim-local-pollution-community-hearing-transcript",
+        "claim-local-pollution-industry-sustainability-report",
+        "claim-local-pollution-air-permit-backup-generators",
+        "claim-local-pollution-facility-variation-study"
+      ],
+      "independentSourceFamilies": [
+        "greenfield-county-planning-commission",
+        "northwind-digital-infrastructure",
+        "state-air-quality-bureau",
+        "journal-of-infrastructure-systems"
+      ],
+      "status": "sufficient",
+      "title": "Local air pollution, backup generation, noise, traffic, and visual impacts",
+      "topicId": "local-pollution"
+    },
+    {
+      "admittedSupportingClaims": 4,
+      "claimIds": [
+        "claim-economic-benefits-community-hearing-transcript",
+        "claim-economic-benefits-industry-sustainability-report",
+        "claim-economic-benefits-econ-impact-study",
+        "claim-economic-benefits-policy-mitigation-review"
+      ],
+      "independentSourceFamilies": [
+        "greenfield-county-planning-commission",
+        "northwind-digital-infrastructure",
+        "plains-state-university",
+        "center-for-grid-policy"
+      ],
+      "status": "sufficient",
+      "title": "Employment, taxes, infrastructure investment, and economic benefits",
+      "topicId": "economic-benefits"
+    },
+    {
+      "admittedSupportingClaims": 3,
+      "claimIds": [
+        "claim-housing-services-utility-rate-filing",
+        "claim-housing-services-community-hearing-transcript",
+        "claim-housing-services-econ-impact-study"
+      ],
+      "independentSourceFamilies": [
+        "interior-plains-power-cooperative",
+        "greenfield-county-planning-commission",
+        "plains-state-university"
+      ],
+      "status": "sufficient",
+      "title": "Housing, public services, utility allocation, and opportunity costs",
+      "topicId": "housing-services"
+    },
+    {
+      "admittedSupportingClaims": 3,
+      "claimIds": [
+        "claim-environmental-justice-ej-coalition-statement",
+        "claim-environmental-justice-land-habitat-assessment",
+        "claim-environmental-justice-policy-mitigation-review"
+      ],
+      "independentSourceFamilies": [
+        "twin-rivers-ej-coalition",
+        "state-environmental-quality-department",
+        "center-for-grid-policy"
+      ],
+      "status": "sufficient",
+      "title": "Environmental justice, Indigenous/local participation, siting, and governance",
+      "topicId": "environmental-justice"
+    },
+    {
+      "admittedSupportingClaims": 3,
+      "claimIds": [
+        "claim-variation-research-energy-emissions",
+        "claim-variation-research-cooling-water",
+        "claim-variation-facility-variation-study"
+      ],
+      "independentSourceFamilies": [
+        "journal-of-energy-systems",
+        "journal-of-sustainable-computing",
+        "journal-of-infrastructure-systems"
+      ],
+      "status": "sufficient",
+      "title": "Variation by facility type, climate, grid, cooling design, scale, and lifecycle",
+      "topicId": "variation"
+    },
+    {
+      "admittedSupportingClaims": 4,
+      "claimIds": [
+        "claim-mitigation-policy-gov-grid-reliability-order",
+        "claim-mitigation-policy-research-cooling-water",
+        "claim-mitigation-policy-air-permit-backup-generators",
+        "claim-mitigation-policy-policy-mitigation-review"
+      ],
+      "independentSourceFamilies": [
+        "federal-grid-reliability-commission",
+        "journal-of-sustainable-computing",
+        "state-air-quality-bureau",
+        "center-for-grid-policy"
+      ],
+      "status": "sufficient",
+      "title": "Mitigation, trade-offs, policy options, disputed findings, and evidence gaps",
+      "topicId": "mitigation-policy"
+    }
+  ],
+  "schemaVersion": "1.0.0"
+}

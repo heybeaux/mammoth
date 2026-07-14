@@ -1,0 +1,1346 @@
+{
+  "blocks": [
+    {
+      "id": "executive_summary",
+      "kind": "section",
+      "sentences": [
+        {
+          "claimIds": [],
+          "id": "sentence-question",
+          "kind": "question",
+          "locatorIds": [],
+          "policyVerdicts": [],
+          "snapshotDigests": [],
+          "sourceLineageIds": [],
+          "text": "Research question: What impacts do data centers have on the communities and environment around them?"
+        },
+        {
+          "claimIds": [
+            "claim-electricity-grid-gov-grid-reliability-order",
+            "claim-electricity-grid-utility-load-forecast"
+          ],
+          "id": "sentence-electricity-grid",
+          "kind": "factual",
+          "locatorIds": [
+            "span-gov-grid-reliability-order",
+            "span-utility-load-forecast"
+          ],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:supported"
+          ],
+          "snapshotDigests": [
+            "sha256:dbe186708f3b6484b095676760496c260b51688d8d70f0ca9bbd9b061460f85c",
+            "sha256:fe00c61ba5a0256ab4f4f51d6ec980cd1e4fa2acae1a912d5a2f0df97c354dbd"
+          ],
+          "sourceLineageIds": [
+            "federal-grid-reliability-commission",
+            "interior-plains-power-cooperative"
+          ],
+          "text": "Large data-center loads can strain grid interconnection queues, reliability studies, transmission cost allocation, and generation planning when new campuses concentrate faster than network upgrades."
+        },
+        {
+          "claimIds": [
+            "claim-ghg-emissions-research-energy-emissions",
+            "claim-ghg-emissions-tech-lifecycle-materials"
+          ],
+          "id": "sentence-ghg-emissions",
+          "kind": "factual",
+          "locatorIds": [
+            "span-research-energy-emissions",
+            "span-tech-lifecycle-materials"
+          ],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:supported"
+          ],
+          "snapshotDigests": [
+            "sha256:3f86cb45f6c522e92ee9c6a85d5eefb56e10205e7312ec69a883a6f338e0ceb5",
+            "sha256:c600f50e45a30bdaa6bde67a9a472e32f5de33f859dd19e1fde2e5d72d8dec6e"
+          ],
+          "sourceLineageIds": [
+            "journal-of-energy-systems",
+            "institute-for-infrastructure-analysis"
+          ],
+          "text": "Data-center climate impact depends on both embodied hardware-and-construction emissions and hourly electricity supply, so annual renewable matching can conflict with hourly fossil generation evidence."
+        },
+        {
+          "claimIds": [
+            "claim-water-gov-water-assessment",
+            "claim-water-research-cooling-water"
+          ],
+          "id": "sentence-water",
+          "kind": "factual",
+          "locatorIds": [
+            "span-gov-water-assessment",
+            "span-research-cooling-water"
+          ],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:supported"
+          ],
+          "snapshotDigests": [
+            "sha256:5d07596560acad3c444c87e7ecbd66c021dcb14ecc3b2ddbb6e98cb4ed522500",
+            "sha256:46c6a6d13b2022af6ba7d5277305077a9fab0f0ae374a1966b5b44119639f276"
+          ],
+          "sourceLineageIds": [
+            "national-water-resources-agency",
+            "journal-of-sustainable-computing"
+          ],
+          "text": "Water impacts vary sharply by cooling design and drought context: evaporative systems can consume town-scale volumes, while dry or closed-loop alternatives trade lower water use for higher energy demand."
+        }
+      ],
+      "title": "Executive summary"
+    },
+    {
+      "id": "scope_definitions",
+      "kind": "section",
+      "sentences": [
+        {
+          "claimIds": [],
+          "id": "sentence-scope",
+          "kind": "method",
+          "locatorIds": [],
+          "policyVerdicts": [],
+          "snapshotDigests": [],
+          "sourceLineageIds": [],
+          "text": "The bundle uses P8 report mode, fixture-search/v1 discovery, immutable snapshots, and a frozen 2026-07-01 clock."
+        }
+      ],
+      "title": "Scope and definitions"
+    },
+    {
+      "id": "methods_source_criteria",
+      "kind": "section",
+      "sentences": [
+        {
+          "claimIds": [],
+          "id": "sentence-methods",
+          "kind": "method",
+          "locatorIds": [],
+          "policyVerdicts": [],
+          "snapshotDigests": [],
+          "sourceLineageIds": [],
+          "text": "Search snippets were excluded from evidence; only admitted snapshots with exact locators entered the report manifest."
+        }
+      ],
+      "title": "Methods and source criteria"
+    },
+    {
+      "id": "environmental_effects",
+      "kind": "section",
+      "sentences": [
+        {
+          "claimIds": [
+            "claim-land-materials-tech-lifecycle-materials",
+            "claim-land-materials-land-habitat-assessment"
+          ],
+          "id": "sentence-land-materials",
+          "kind": "factual",
+          "locatorIds": [
+            "span-tech-lifecycle-materials",
+            "span-land-habitat-assessment"
+          ],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:supported"
+          ],
+          "snapshotDigests": [
+            "sha256:c600f50e45a30bdaa6bde67a9a472e32f5de33f859dd19e1fde2e5d72d8dec6e",
+            "sha256:c0010b36eb8f5fd2d23d46025d3a37777f8138bf615e4f13c74780e81e5d2ecd"
+          ],
+          "sourceLineageIds": [
+            "institute-for-infrastructure-analysis",
+            "state-environmental-quality-department"
+          ],
+          "text": "Hyperscale campuses can convert hundreds of acres, disturb habitat, add impervious surface, and create recurring material and e-waste burdens through construction and server-refresh cycles."
+        },
+        {
+          "claimIds": [
+            "claim-local-pollution-community-hearing-transcript",
+            "claim-local-pollution-industry-sustainability-report"
+          ],
+          "id": "sentence-local-pollution",
+          "kind": "factual",
+          "locatorIds": [
+            "span-community-hearing-transcript",
+            "span-industry-sustainability-report"
+          ],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:supported"
+          ],
+          "snapshotDigests": [
+            "sha256:36988f1a147cebcd33c25ca3d4b2f5372f6f44633dd800aec96ce92ae13e285d",
+            "sha256:9ecf629486cadc6079a3a87b5397e6b2c9613dc9bf4bdde233684a731b2c2820"
+          ],
+          "sourceLineageIds": [
+            "greenfield-county-planning-commission",
+            "northwind-digital-infrastructure"
+          ],
+          "text": "Local impacts include backup-generator emissions, noise, construction traffic, and visual or operational burdens that may exceed nearby residential limits without enforceable mitigation."
+        },
+        {
+          "claimIds": [
+            "claim-economic-benefits-community-hearing-transcript",
+            "claim-economic-benefits-industry-sustainability-report"
+          ],
+          "id": "sentence-economic-benefits",
+          "kind": "factual",
+          "locatorIds": [
+            "span-community-hearing-transcript",
+            "span-industry-sustainability-report"
+          ],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:supported"
+          ],
+          "snapshotDigests": [
+            "sha256:36988f1a147cebcd33c25ca3d4b2f5372f6f44633dd800aec96ce92ae13e285d",
+            "sha256:9ecf629486cadc6079a3a87b5397e6b2c9613dc9bf4bdde233684a731b2c2820"
+          ],
+          "sourceLineageIds": [
+            "greenfield-county-planning-commission",
+            "northwind-digital-infrastructure"
+          ],
+          "text": "Economic benefits are real but uneven: construction work, permanent jobs, tax revenue, infrastructure investment, abatements, and community-benefit commitments all change the local net effect."
+        }
+      ],
+      "title": "Environmental effects"
+    },
+    {
+      "id": "community_economic_effects",
+      "kind": "section",
+      "sentences": [
+        {
+          "claimIds": [
+            "claim-housing-services-utility-rate-filing",
+            "claim-housing-services-community-hearing-transcript"
+          ],
+          "id": "sentence-housing-services",
+          "kind": "factual",
+          "locatorIds": [
+            "span-utility-rate-filing",
+            "span-community-hearing-transcript"
+          ],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:supported"
+          ],
+          "snapshotDigests": [
+            "sha256:9f450df5fe240e8cc763d5e9450e38859ad6f9384d53ef6366e1ef7c259dc928",
+            "sha256:36988f1a147cebcd33c25ca3d4b2f5372f6f44633dd800aec96ce92ae13e285d"
+          ],
+          "sourceLineageIds": [
+            "interior-plains-power-cooperative",
+            "greenfield-county-planning-commission"
+          ],
+          "text": "Utility allocation, public-service load, housing pressure, and opportunity costs can shift part of data-center growth costs onto households unless large-load tariffs and local planning controls hold."
+        },
+        {
+          "claimIds": [
+            "claim-environmental-justice-ej-coalition-statement",
+            "claim-environmental-justice-land-habitat-assessment"
+          ],
+          "id": "sentence-environmental-justice",
+          "kind": "factual",
+          "locatorIds": [
+            "span-ej-coalition-statement",
+            "span-land-habitat-assessment"
+          ],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:supported"
+          ],
+          "snapshotDigests": [
+            "sha256:502fb5d260a48c2ff4d43a82e7836688804cd86ea8f8236950c51cd0a41c73be",
+            "sha256:c0010b36eb8f5fd2d23d46025d3a37777f8138bf615e4f13c74780e81e5d2ecd"
+          ],
+          "sourceLineageIds": [
+            "twin-rivers-ej-coalition",
+            "state-environmental-quality-department"
+          ],
+          "text": "Siting and governance risks are distributional when projects cluster near overburdened tracts or proceed without meaningful consultation with affected local, Indigenous, or environmental-justice communities."
+        }
+      ],
+      "title": "Community and economic effects"
+    },
+    {
+      "id": "distributional_environmental_justice",
+      "kind": "section",
+      "sentences": [
+        {
+          "claimIds": [
+            "claim-environmental-justice-ej-coalition-statement",
+            "claim-environmental-justice-land-habitat-assessment"
+          ],
+          "id": "sentence-environmental-justice",
+          "kind": "factual",
+          "locatorIds": [
+            "span-ej-coalition-statement",
+            "span-land-habitat-assessment"
+          ],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:supported"
+          ],
+          "snapshotDigests": [
+            "sha256:502fb5d260a48c2ff4d43a82e7836688804cd86ea8f8236950c51cd0a41c73be",
+            "sha256:c0010b36eb8f5fd2d23d46025d3a37777f8138bf615e4f13c74780e81e5d2ecd"
+          ],
+          "sourceLineageIds": [
+            "twin-rivers-ej-coalition",
+            "state-environmental-quality-department"
+          ],
+          "text": "Siting and governance risks are distributional when projects cluster near overburdened tracts or proceed without meaningful consultation with affected local, Indigenous, or environmental-justice communities."
+        },
+        {
+          "claimIds": [
+            "claim-variation-research-energy-emissions",
+            "claim-variation-research-cooling-water"
+          ],
+          "id": "sentence-variation",
+          "kind": "factual",
+          "locatorIds": [
+            "span-research-energy-emissions",
+            "span-research-cooling-water"
+          ],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:supported"
+          ],
+          "snapshotDigests": [
+            "sha256:3f86cb45f6c522e92ee9c6a85d5eefb56e10205e7312ec69a883a6f338e0ceb5",
+            "sha256:46c6a6d13b2022af6ba7d5277305077a9fab0f0ae374a1966b5b44119639f276"
+          ],
+          "sourceLineageIds": [
+            "journal-of-energy-systems",
+            "journal-of-sustainable-computing"
+          ],
+          "text": "No single average data center describes the sector: impacts vary by facility type, climate, grid mix, cooling architecture, scale, lifecycle stage, and operating flexibility."
+        }
+      ],
+      "title": "Distributional and environmental-justice analysis"
+    },
+    {
+      "id": "benefits_counterarguments",
+      "kind": "section",
+      "sentences": [
+        {
+          "claimIds": [
+            "claim-economic-benefits-community-hearing-transcript",
+            "claim-economic-benefits-industry-sustainability-report"
+          ],
+          "id": "sentence-economic-benefits",
+          "kind": "factual",
+          "locatorIds": [
+            "span-community-hearing-transcript",
+            "span-industry-sustainability-report"
+          ],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:supported"
+          ],
+          "snapshotDigests": [
+            "sha256:36988f1a147cebcd33c25ca3d4b2f5372f6f44633dd800aec96ce92ae13e285d",
+            "sha256:9ecf629486cadc6079a3a87b5397e6b2c9613dc9bf4bdde233684a731b2c2820"
+          ],
+          "sourceLineageIds": [
+            "greenfield-county-planning-commission",
+            "northwind-digital-infrastructure"
+          ],
+          "text": "Economic benefits are real but uneven: construction work, permanent jobs, tax revenue, infrastructure investment, abatements, and community-benefit commitments all change the local net effect."
+        },
+        {
+          "claimIds": [
+            "claim-ghg-emissions-industry-sustainability-report",
+            "claim-ghg-emissions-critical-market-analysis"
+          ],
+          "id": "sentence-contradiction",
+          "kind": "uncertainty",
+          "locatorIds": [
+            "span-industry-sustainability-report",
+            "span-critical-market-analysis"
+          ],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:contradicted"
+          ],
+          "snapshotDigests": [
+            "sha256:9ecf629486cadc6079a3a87b5397e6b2c9613dc9bf4bdde233684a731b2c2820",
+            "sha256:215d0840e99dc874f36cddcf89c23524d0de62ab3ddafdcac333d5a292a1d0da"
+          ],
+          "sourceLineageIds": [
+            "northwind-digital-infrastructure",
+            "grid-integrity-project"
+          ],
+          "text": "Interior Plains facility electricity is fully renewable remains disputed and is preserved as dissent rather than resolved by agreement."
+        }
+      ],
+      "title": "Benefits and counterarguments"
+    },
+    {
+      "id": "context_comparison",
+      "kind": "section",
+      "sentences": [
+        {
+          "claimIds": [
+            "claim-variation-research-energy-emissions",
+            "claim-variation-research-cooling-water"
+          ],
+          "id": "sentence-variation",
+          "kind": "factual",
+          "locatorIds": [
+            "span-research-energy-emissions",
+            "span-research-cooling-water"
+          ],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:supported"
+          ],
+          "snapshotDigests": [
+            "sha256:3f86cb45f6c522e92ee9c6a85d5eefb56e10205e7312ec69a883a6f338e0ceb5",
+            "sha256:46c6a6d13b2022af6ba7d5277305077a9fab0f0ae374a1966b5b44119639f276"
+          ],
+          "sourceLineageIds": [
+            "journal-of-energy-systems",
+            "journal-of-sustainable-computing"
+          ],
+          "text": "No single average data center describes the sector: impacts vary by facility type, climate, grid mix, cooling architecture, scale, lifecycle stage, and operating flexibility."
+        }
+      ],
+      "title": "Context comparison"
+    },
+    {
+      "id": "mitigations_policy_options",
+      "kind": "section",
+      "sentences": [
+        {
+          "claimIds": [
+            "claim-mitigation-policy-gov-grid-reliability-order",
+            "claim-mitigation-policy-research-cooling-water"
+          ],
+          "id": "sentence-mitigation-policy",
+          "kind": "factual",
+          "locatorIds": [
+            "span-gov-grid-reliability-order",
+            "span-research-cooling-water"
+          ],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:supported"
+          ],
+          "snapshotDigests": [
+            "sha256:dbe186708f3b6484b095676760496c260b51688d8d70f0ca9bbd9b061460f85c",
+            "sha256:46c6a6d13b2022af6ba7d5277305077a9fab0f0ae374a1966b5b44119639f276"
+          ],
+          "sourceLineageIds": [
+            "federal-grid-reliability-commission",
+            "journal-of-sustainable-computing"
+          ],
+          "text": "Mitigation options include dry or hybrid cooling, hourly clean-energy procurement, demand flexibility, large-load tariff classes, cumulative-impact permitting, and enforceable community-benefit agreements."
+        }
+      ],
+      "title": "Mitigations and policy options"
+    },
+    {
+      "id": "conflicts_uncertainties_gaps",
+      "kind": "section",
+      "sentences": [
+        {
+          "claimIds": [
+            "claim-housing-services-utility-rate-filing",
+            "claim-housing-services-econ-impact-study"
+          ],
+          "id": "sentence-gap-cycle",
+          "kind": "uncertainty",
+          "locatorIds": ["span-utility-rate-filing", "span-econ-impact-study"],
+          "policyVerdicts": [
+            "p8.v1-evidence-admission-policy:supported",
+            "p8.v1-evidence-admission-policy:supported"
+          ],
+          "snapshotDigests": [
+            "sha256:9f450df5fe240e8cc763d5e9450e38859ad6f9384d53ef6366e1ef7c259dc928",
+            "sha256:84e0331eb354e24bea105b4b8967271886e17ee6ce41cd9e3bbe3a0ee7e415b9"
+          ],
+          "sourceLineageIds": [
+            "interior-plains-power-cooperative",
+            "plains-state-university"
+          ],
+          "text": "The first cycle left a housing-services gap, so the second cycle acquired utility-rate-filing and econ-impact-study before publication."
+        }
+      ],
+      "title": "Conflicts, uncertainties, and gaps"
+    },
+    {
+      "id": "conclusion",
+      "kind": "section",
+      "sentences": [
+        {
+          "claimIds": [],
+          "id": "sentence-conclusion",
+          "kind": "method",
+          "locatorIds": [],
+          "policyVerdicts": [],
+          "snapshotDigests": [],
+          "sourceLineageIds": [],
+          "text": "The report is intentionally partial: it answers from the admitted fixture corpus and records limitations, dissent, cost, and rejected residue."
+        }
+      ],
+      "title": "Conclusion"
+    },
+    {
+      "id": "references_provenance",
+      "kind": "appendix",
+      "sentences": [
+        {
+          "claimIds": [],
+          "id": "sentence-provenance",
+          "kind": "method",
+          "locatorIds": [],
+          "policyVerdicts": [],
+          "snapshotDigests": [],
+          "sourceLineageIds": [],
+          "text": "The appendix files list source IDs, lineage families, raw snapshot digests, parsed artifact digests, locator IDs, and verification commands."
+        }
+      ],
+      "title": "References and provenance"
+    }
+  ],
+  "briefDigest": "sha256:35d0f625fb371e7c2c2bbe227bad694044f1acac183d6796366571074243aa7a",
+  "charterDigest": "sha256:1f91bc3d45d9c890126f4e2526c1fd0557c9565f6dc711c7f05f4737db07b67a",
+  "claims": [
+    {
+      "claimDigest": "sha256:652f326b4ed8dbc9a9ac07c0f3eb2afa9ccd19a0632a69afa811fa9f96cdcc7d",
+      "evidenceSpanIds": ["span-gov-grid-reliability-order"],
+      "id": "claim-electricity-grid-gov-grid-reliability-order",
+      "lineageFamilyIds": ["federal-grid-reliability-commission"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["gov-grid-reliability-order"],
+      "text": "Federal reliability records show large-load interconnection requests grew from 11 in 2022 to 94 in 2025, with 18 regional studies identifying reliability violations absent upgrades.",
+      "topicId": "electricity-grid"
+    },
+    {
+      "claimDigest": "sha256:a51ecd5a16d221e8b12431637d9ad60d1fa954b6e28dca61ca25627a6bf662ec",
+      "evidenceSpanIds": ["span-utility-load-forecast"],
+      "id": "claim-electricity-grid-utility-load-forecast",
+      "lineageFamilyIds": ["interior-plains-power-cooperative"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["utility-load-forecast"],
+      "text": "The utility forecast projects data centers rising from 8.2 percent of peak load in 2024 to 21.4 percent in 2030, with 2,310 MW of committed interconnection agreements.",
+      "topicId": "electricity-grid"
+    },
+    {
+      "claimDigest": "sha256:4c59e3b50fa059007b72e35f3408753571e6b2ad50adc14bc4f0604bee07d6ad",
+      "evidenceSpanIds": ["span-utility-rate-filing"],
+      "id": "claim-electricity-grid-utility-rate-filing",
+      "lineageFamilyIds": ["interior-plains-power-cooperative"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["utility-rate-filing"],
+      "text": "The rate filing attributes most of a 480 million dollar transmission-upgrade request to three contracted data-center campuses and proposes a large flexible load rider.",
+      "topicId": "electricity-grid"
+    },
+    {
+      "claimDigest": "sha256:80df45c6107dabef121882e8da99f078fb9d8829b5f45ef4c7e1623e8bd7a6a3",
+      "evidenceSpanIds": ["span-critical-market-analysis"],
+      "id": "claim-electricity-grid-critical-market-analysis",
+      "lineageFamilyIds": ["grid-integrity-project"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "contradicted",
+      "reasonCodes": ["credible_contradiction_preserved"],
+      "sourceIds": ["critical-market-analysis"],
+      "text": "Hourly settlement analysis found Interior Plains data-center campuses drew substantial overnight electricity from gas and coal units despite annual renewable matching claims.",
+      "topicId": "electricity-grid"
+    },
+    {
+      "claimDigest": "sha256:1ff84df3fdd1537d5f2f23e8c1ef08ec437c78796c4b438277374df84751d9c6",
+      "evidenceSpanIds": ["span-research-energy-emissions"],
+      "id": "claim-ghg-emissions-research-energy-emissions",
+      "lineageFamilyIds": ["journal-of-energy-systems"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["research-energy-emissions"],
+      "text": "The peer-reviewed emissions fixture attributes 20 to 35 percent of lifecycle emissions to embodied construction and hardware on moderately clean grids, rising on very low-carbon grids.",
+      "topicId": "ghg-emissions"
+    },
+    {
+      "claimDigest": "sha256:26ef7b76d9652ff183af038352dcb15b8bf627dd655aea28a08feed7c1597c9d",
+      "evidenceSpanIds": ["span-tech-lifecycle-materials"],
+      "id": "claim-ghg-emissions-tech-lifecycle-materials",
+      "lineageFamilyIds": ["institute-for-infrastructure-analysis"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["tech-lifecycle-materials"],
+      "text": "The lifecycle materials report estimates a reference 250 MW campus uses large concrete and steel volumes and produces roughly 260,000 tonnes CO2-equivalent in embodied emissions.",
+      "topicId": "ghg-emissions"
+    },
+    {
+      "claimDigest": "sha256:0341957de1a3f836ef68db5c69fc163b5fa9fddea7a40ef8125c404852c46a46",
+      "evidenceSpanIds": ["span-industry-sustainability-report"],
+      "id": "claim-ghg-emissions-industry-sustainability-report",
+      "lineageFamilyIds": ["northwind-digital-infrastructure"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["industry-sustainability-report"],
+      "text": "The operator report claims annual renewable-energy matching across its fleet and describes Interior Plains operations as renewable on that annual basis.",
+      "topicId": "ghg-emissions"
+    },
+    {
+      "claimDigest": "sha256:fc547048a8f6906cb4e1f97deafff8bd5b99867a1c77b3c8711a28d5cc675c0f",
+      "evidenceSpanIds": ["span-critical-market-analysis"],
+      "id": "claim-ghg-emissions-critical-market-analysis",
+      "lineageFamilyIds": ["grid-integrity-project"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "contradicted",
+      "reasonCodes": ["credible_contradiction_preserved"],
+      "sourceIds": ["critical-market-analysis"],
+      "text": "The critical analysis contradicts annual-matching claims with hourly data and attributes 1.9 million tonnes CO2-equivalent to incremental regional data-center load in 2025.",
+      "topicId": "ghg-emissions"
+    },
+    {
+      "claimDigest": "sha256:753fee4e7956b155b96fc6a9e3ca667d28d05c9b86b28485606b1674db173d47",
+      "evidenceSpanIds": ["span-gov-water-assessment"],
+      "id": "claim-water-gov-water-assessment",
+      "lineageFamilyIds": ["national-water-resources-agency"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["gov-water-assessment"],
+      "text": "The water agency estimates a representative 100 MW evaporatively cooled data center consumes about 1.3 million cubic meters of water per year.",
+      "topicId": "water"
+    },
+    {
+      "claimDigest": "sha256:4396f92df631300d13d0291f170042603d8aedfbd57aaeb0b491dbc1e5897983",
+      "evidenceSpanIds": ["span-research-cooling-water"],
+      "id": "claim-water-research-cooling-water",
+      "lineageFamilyIds": ["journal-of-sustainable-computing"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["research-cooling-water"],
+      "text": "The cooling study finds dry cooling reduces onsite water consumption by 91 to 97 percent while increasing power usage effectiveness by 0.10 to 0.19.",
+      "topicId": "water"
+    },
+    {
+      "claimDigest": "sha256:f705642821664a2f00d164f0223efe20b25b74a6e396efcb7cbb2d627fabb5e7",
+      "evidenceSpanIds": ["span-ej-coalition-statement"],
+      "id": "claim-water-ej-coalition-statement",
+      "lineageFamilyIds": ["twin-rivers-ej-coalition"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["ej-coalition-statement"],
+      "text": "The coalition statement reports contested water-rights and consultation concerns around a 9,800 acre-foot annual withdrawal permit.",
+      "topicId": "water"
+    },
+    {
+      "claimDigest": "sha256:d4fd21c889fbacb59991ce5e16155d235f8cbd4b905d71ea0f911907f5fc4a3a",
+      "evidenceSpanIds": ["span-industry-sustainability-report"],
+      "id": "claim-water-industry-sustainability-report",
+      "lineageFamilyIds": ["northwind-digital-infrastructure"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["industry-sustainability-report"],
+      "text": "The industry report records a water-positive pledge and replenishment projects totaling 2.1 million cubic meters in 2024.",
+      "topicId": "water"
+    },
+    {
+      "claimDigest": "sha256:4c50f1932e26cc8c9862696917b6e721ba93d96319c95a9354db76f9d4d1bc49",
+      "evidenceSpanIds": ["span-tech-lifecycle-materials"],
+      "id": "claim-land-materials-tech-lifecycle-materials",
+      "lineageFamilyIds": ["institute-for-infrastructure-analysis"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["tech-lifecycle-materials"],
+      "text": "The technical report estimates a reference 250 MW campus occupies 320 to 410 acres and generates 1,900 to 2,600 tonnes of decommissioned IT hardware per refresh.",
+      "topicId": "land-materials"
+    },
+    {
+      "claimDigest": "sha256:bff8b755d31599998be3e667e15ee8546b08517bb68a2dc51ea98821f6f84ece",
+      "evidenceSpanIds": ["span-land-habitat-assessment"],
+      "id": "claim-land-materials-land-habitat-assessment",
+      "lineageFamilyIds": ["state-environmental-quality-department"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["land-habitat-assessment"],
+      "text": "The environmental assessment says the Cedar Flats expansion converts 350 acres, including 61 acres mapped as burrowing owl habitat.",
+      "topicId": "land-materials"
+    },
+    {
+      "claimDigest": "sha256:de1539bf805c11ec920295496009ed50f0e3d0affd179325c38f2b0270fbf46c",
+      "evidenceSpanIds": ["span-community-hearing-transcript"],
+      "id": "claim-local-pollution-community-hearing-transcript",
+      "lineageFamilyIds": ["greenfield-county-planning-commission"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["community-hearing-transcript"],
+      "text": "The hearing transcript records concerns about 55 dBA cooling noise, generator testing, and 340 projected construction truck trips per day.",
+      "topicId": "local-pollution"
+    },
+    {
+      "claimDigest": "sha256:2a5138649c653fa4a42313c45b8eb9e7c51d31ad086baa5eab43f51efb28d4e6",
+      "evidenceSpanIds": ["span-industry-sustainability-report"],
+      "id": "claim-local-pollution-industry-sustainability-report",
+      "lineageFamilyIds": ["northwind-digital-infrastructure"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["industry-sustainability-report"],
+      "text": "The operator report presents mitigation commitments that must be compared against local permit, hearing, and monitoring records.",
+      "topicId": "local-pollution"
+    },
+    {
+      "claimDigest": "sha256:120098d41ebc209c080469fe2204ddaa3a526c1affd08cf89a4423f1c342047b",
+      "evidenceSpanIds": ["span-air-permit-backup-generators"],
+      "id": "claim-local-pollution-air-permit-backup-generators",
+      "lineageFamilyIds": ["state-air-quality-bureau"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["air-permit-backup-generators"],
+      "text": "The air permit authorizes 44 diesel emergency generators totaling 132 MW and caps potential nitrogen oxides emissions at 94 tonnes per year.",
+      "topicId": "local-pollution"
+    },
+    {
+      "claimDigest": "sha256:f8accf1d2e0c811fedb771cfed68172edb75e44115fb5118355c46646eaaf665",
+      "evidenceSpanIds": ["span-facility-variation-study"],
+      "id": "claim-local-pollution-facility-variation-study",
+      "lineageFamilyIds": ["journal-of-infrastructure-systems"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["facility-variation-study"],
+      "text": "The variation study finds smaller edge and colocation facilities can have proportionally higher diesel-generator emissions per unit of compute.",
+      "topicId": "local-pollution"
+    },
+    {
+      "claimDigest": "sha256:3df32d39d5e68977358df709ff1f5a322fabda529d3830e89d6e11774eb8c547",
+      "evidenceSpanIds": ["span-community-hearing-transcript"],
+      "id": "claim-economic-benefits-community-hearing-transcript",
+      "lineageFamilyIds": ["greenfield-county-planning-commission"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["community-hearing-transcript"],
+      "text": "The county hearing record includes local concerns about infrastructure and construction impacts alongside applicant economic claims.",
+      "topicId": "economic-benefits"
+    },
+    {
+      "claimDigest": "sha256:bce1aa12e3102324cd6ad43ffb31075d64ee7f5f771ef42bed7ce1c9e404973e",
+      "evidenceSpanIds": ["span-industry-sustainability-report"],
+      "id": "claim-economic-benefits-industry-sustainability-report",
+      "lineageFamilyIds": ["northwind-digital-infrastructure"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["industry-sustainability-report"],
+      "text": "The operator report claims jobs, investment, and community programs as benefits that require independent local accounting.",
+      "topicId": "economic-benefits"
+    },
+    {
+      "claimDigest": "sha256:857c60ef5f6d47aa3e4f35bffe7647e6c62d21e6005e903407f92fdad1e295cf",
+      "evidenceSpanIds": ["span-econ-impact-study"],
+      "id": "claim-economic-benefits-econ-impact-study",
+      "lineageFamilyIds": ["plains-state-university"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["econ-impact-study"],
+      "text": "The economic study finds construction employment averaged 1,150 worker-years per campus, while permanent onsite employment averaged 84 jobs.",
+      "topicId": "economic-benefits"
+    },
+    {
+      "claimDigest": "sha256:f31f0d55107dfa0a79ae0146fcac7a47f615ff972f475ef13132f9cba6d8ce36",
+      "evidenceSpanIds": ["span-policy-mitigation-review"],
+      "id": "claim-economic-benefits-policy-mitigation-review",
+      "lineageFamilyIds": ["center-for-grid-policy"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["policy-mitigation-review"],
+      "text": "The policy review identifies community-benefit agreements and cumulative-impact permitting as tools for distributing project benefits and burdens.",
+      "topicId": "economic-benefits"
+    },
+    {
+      "claimDigest": "sha256:84c265844597591e24a6755d521aa950d882f7a571da94999031ea143d5b7e44",
+      "evidenceSpanIds": ["span-utility-rate-filing"],
+      "id": "claim-housing-services-utility-rate-filing",
+      "lineageFamilyIds": ["interior-plains-power-cooperative"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["utility-rate-filing"],
+      "text": "The rate filing says residential bills would rise 7.8 percent without a new large-load class, compared with 3.1 percent under the proposed allocation.",
+      "topicId": "housing-services"
+    },
+    {
+      "claimDigest": "sha256:02e9190d3bb1355e28892828d2c719b0124a58554ef6f852b47c45e760a3215a",
+      "evidenceSpanIds": ["span-community-hearing-transcript"],
+      "id": "claim-housing-services-community-hearing-transcript",
+      "lineageFamilyIds": ["greenfield-county-planning-commission"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["community-hearing-transcript"],
+      "text": "The hearing transcript records local service, road, and nuisance concerns that are not captured by project-level tax claims alone.",
+      "topicId": "housing-services"
+    },
+    {
+      "claimDigest": "sha256:35032aa2ffa4b7d2175cc1461f33788725bf6726c82026ae35b7eb60deeac30e",
+      "evidenceSpanIds": ["span-econ-impact-study"],
+      "id": "claim-housing-services-econ-impact-study",
+      "lineageFamilyIds": ["plains-state-university"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["econ-impact-study"],
+      "text": "The economic study notes abatements and worker relocation can reduce or redistribute local fiscal benefits.",
+      "topicId": "housing-services"
+    },
+    {
+      "claimDigest": "sha256:2d3afa3625e28d97f65369e74fd7ab4e3e68a42bc2e5eaa179ca7aaa485eb94d",
+      "evidenceSpanIds": ["span-ej-coalition-statement"],
+      "id": "claim-environmental-justice-ej-coalition-statement",
+      "lineageFamilyIds": ["twin-rivers-ej-coalition"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["ej-coalition-statement"],
+      "text": "The coalition states three of four recent basin campuses are within two miles of tracts in the state environmental-burden top decile.",
+      "topicId": "environmental-justice"
+    },
+    {
+      "claimDigest": "sha256:56d290ad0772570de01ac39fcbb13e18294c927aca96f7397117be3de8da8df8",
+      "evidenceSpanIds": ["span-land-habitat-assessment"],
+      "id": "claim-environmental-justice-land-habitat-assessment",
+      "lineageFamilyIds": ["state-environmental-quality-department"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["land-habitat-assessment"],
+      "text": "The environmental assessment flags nearby environmental-justice tracts as part of the expansion review.",
+      "topicId": "environmental-justice"
+    },
+    {
+      "claimDigest": "sha256:5f06b6bbc80b1b1ed3d9629b0f81d07789f004cfc3f31138098f680365ee7b32",
+      "evidenceSpanIds": ["span-policy-mitigation-review"],
+      "id": "claim-environmental-justice-policy-mitigation-review",
+      "lineageFamilyIds": ["center-for-grid-policy"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["policy-mitigation-review"],
+      "text": "The policy review treats cumulative-impact permitting and binding community agreements as governance mitigations.",
+      "topicId": "environmental-justice"
+    },
+    {
+      "claimDigest": "sha256:d0c2fa2e91ebb2739530695a46f1235361125a71dc3e843c13ed7520cd39ed83",
+      "evidenceSpanIds": ["span-research-energy-emissions"],
+      "id": "claim-variation-research-energy-emissions",
+      "lineageFamilyIds": ["journal-of-energy-systems"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["research-energy-emissions"],
+      "text": "The emissions study shows lifecycle emissions shares change with grid cleanliness and facility characteristics.",
+      "topicId": "variation"
+    },
+    {
+      "claimDigest": "sha256:f15d3032f72a89347bc85670ec70809d5e5a3d3dc3bba9993705b6bcd7aaead5",
+      "evidenceSpanIds": ["span-research-cooling-water"],
+      "id": "claim-variation-research-cooling-water",
+      "lineageFamilyIds": ["journal-of-sustainable-computing"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["research-cooling-water"],
+      "text": "The cooling study shows water and energy trade-offs differ across facility-climate pairs and cooling technologies.",
+      "topicId": "variation"
+    },
+    {
+      "claimDigest": "sha256:9a876a418930197d99a0c7259557d224fa0ccc59771d5d5d33477a9d17c0cf07",
+      "evidenceSpanIds": ["span-facility-variation-study"],
+      "id": "claim-variation-facility-variation-study",
+      "lineageFamilyIds": ["journal-of-infrastructure-systems"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["facility-variation-study"],
+      "text": "The heterogeneity study finds water-stress-weighted consumption per MWh varies 40-fold between facility and regional configurations.",
+      "topicId": "variation"
+    },
+    {
+      "claimDigest": "sha256:3fd468b5c5b275a9c5049723a77dfb16760fa26abfaa187bb1f84e10982310eb",
+      "evidenceSpanIds": ["span-gov-grid-reliability-order"],
+      "id": "claim-mitigation-policy-gov-grid-reliability-order",
+      "lineageFamilyIds": ["federal-grid-reliability-commission"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["gov-grid-reliability-order"],
+      "text": "The reliability order requires large-load tariff provisions that causally assign upgrade costs and limit socialization of those costs.",
+      "topicId": "mitigation-policy"
+    },
+    {
+      "claimDigest": "sha256:17d4c6897d9eeef02313d92a1de009b719990db45c31775d7a71b9d5f22d375f",
+      "evidenceSpanIds": ["span-research-cooling-water"],
+      "id": "claim-mitigation-policy-research-cooling-water",
+      "lineageFamilyIds": ["journal-of-sustainable-computing"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["research-cooling-water"],
+      "text": "The cooling study supports dry, air, and immersion cooling as water mitigations with explicit energy penalties.",
+      "topicId": "mitigation-policy"
+    },
+    {
+      "claimDigest": "sha256:f897569e04c28a5e283850db70968d79cb86459c986dfbd73079f6119fdd3ebf",
+      "evidenceSpanIds": ["span-air-permit-backup-generators"],
+      "id": "claim-mitigation-policy-air-permit-backup-generators",
+      "lineageFamilyIds": ["state-air-quality-bureau"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["air-permit-backup-generators"],
+      "text": "The air permit uses testing limits, high-ozone-day prohibitions, and emissions caps as local pollution controls.",
+      "topicId": "mitigation-policy"
+    },
+    {
+      "claimDigest": "sha256:c8aa76f3c0187d3f0ff3de29da79bebd0b5f2a8d45223ad9c1c38e9fc8e0db20",
+      "evidenceSpanIds": ["span-policy-mitigation-review"],
+      "id": "claim-mitigation-policy-policy-mitigation-review",
+      "lineageFamilyIds": ["center-for-grid-policy"],
+      "policyId": "p8.v1-evidence-admission-policy",
+      "policyVerdict": "supported",
+      "reasonCodes": [
+        "direct_entailment",
+        "fresh_snapshot",
+        "lineage_independent"
+      ],
+      "sourceIds": ["policy-mitigation-review"],
+      "text": "The policy review lists dry or hybrid cooling, hourly carbon-free procurement, demand flexibility, large-load tariffs, cumulative-impact permitting, and community-benefit agreements.",
+      "topicId": "mitigation-policy"
+    }
+  ],
+  "contractFamily": "p8.v1",
+  "evidenceSpans": [
+    {
+      "id": "span-gov-water-assessment",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "National Water Resources Agency — 2025 Assessment of Data Center Water Use 2025 Assessment of Data Center Water Use Publisher: National Water Resources Agency (fixture primary regulator). Published: 2025-03-18. Document ID: NWRA-2025-041. F",
+        "quoteDigest": "sha256:72775333c232ce4870b84f096b89c6fbbfbcde02af7ef40b9876d0c1d6f7ac86",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:af37d76e3a4ad560f05f1034688b7867086699a450e84e2ca308260ff66c1948",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:5d07596560acad3c444c87e7ecbd66c021dcb14ecc3b2ddbb6e98cb4ed522500",
+      "sourceId": "gov-water-assessment",
+      "spanDigest": "sha256:9d674bc3b12aca78d6b8c73246f2bdcc311ebc53b790e17f21e8520b4b12d77c"
+    },
+    {
+      "id": "span-gov-grid-reliability-order",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "FEDERAL GRID RELIABILITY COMMISSION (fixture primary regulator) Order No. 2041 — Interconnection of Large Loads Issued: 2026-01-22. Docket RL26-104. 1. The Commission finds that requests to interconnect single loads exceeding 75 MW, predomi",
+        "quoteDigest": "sha256:34b73b967e24050b4e01107798108c036fa2fed634f09caeaad5f3c184f72195",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:490c430eb7fdbb9ca0da8542ef1e946e22831afcfe52f45368b99856eeb0d239",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:dbe186708f3b6484b095676760496c260b51688d8d70f0ca9bbd9b061460f85c",
+      "sourceId": "gov-grid-reliability-order",
+      "spanDigest": "sha256:b4065dbcc4f6229a2590ffc4f3493a0956a4303a78ba4586c456aa168cae2ccf"
+    },
+    {
+      "id": "span-utility-load-forecast",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "{ \"publisher\": \"Interior Plains Power Cooperative (fixture utility)\", \"document\": \"2026 Integrated Resource Plan — Load Forecast Extract\", \"published\": \"2026-02-10\", \"peakLoadForecastMW\": { \"2024\": 9140, \"2026\": 10480, \"2028\": 12210, \"2030\"",
+        "quoteDigest": "sha256:f0f55e8af968ebf1e18746e333ec8aa999784f63e9b554bd66e144e3d65bcd44",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:d41d96460d297b5700a890b1a560d9b4e58f6cffd0c74b6ccc09f616911cf594",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:fe00c61ba5a0256ab4f4f51d6ec980cd1e4fa2acae1a912d5a2f0df97c354dbd",
+      "sourceId": "utility-load-forecast",
+      "spanDigest": "sha256:b8e8e9283d875b8c8cb73034de21828fcab074993c2f5c7529cda7cc8579f6d4"
+    },
+    {
+      "id": "span-utility-rate-filing",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "Interior Plains Power Cooperative — 2026 General Rate Case Filing Summary 2026 General Rate Case — Filing Summary Publisher: Interior Plains Power Cooperative (fixture utility). Filed: 2026-04-02. Docket UR-26-233. The cooperative requests",
+        "quoteDigest": "sha256:fd63d81a0dfa68e46e4434951273fcbf93a726a3ee04a16c448a0f853b1f0686",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:f539154f4c9244671ff9d5b88f2304fa2c1173f4b1f6b95206358c942d89add9",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:9f450df5fe240e8cc763d5e9450e38859ad6f9384d53ef6366e1ef7c259dc928",
+      "sourceId": "utility-rate-filing",
+      "spanDigest": "sha256:e4742de96c1ea1dc949e0cdfa805f638f5affd7264c34f9e33629b663dc92744"
+    },
+    {
+      "id": "span-research-energy-emissions",
+      "locator": {
+        "coordinateSpace": "pdf-page-text",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "%PDF-1.4 1 0 obj > endobj 2 0 obj > endobj 3 0 obj > >> >> endobj 4 0 obj > stream BT /F1 10 Tf 50 780 Td 14 TL (Journal of Energy Systems \\(fixture peer-reviewed\\) 22\\(4\\): 301-329) Tj T* (Operational and Embodied Greenhouse-Gas Emissions",
+        "quoteDigest": "sha256:a9615bae30c089682dcc5760303537cf71a393018bd0b67cec08b6cb5948110c",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:7d50734d249637dc93891ce5304a70472311a7b626fe9063e33ec96f95d55bf3",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:3f86cb45f6c522e92ee9c6a85d5eefb56e10205e7312ec69a883a6f338e0ceb5",
+      "sourceId": "research-energy-emissions",
+      "spanDigest": "sha256:cc878aee5bfa5694e6e8afee35a579e45c3c8cdb31d928827154dc25fd7f8e4e"
+    },
+    {
+      "id": "span-research-cooling-water",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "Journal of Sustainable Computing (fixture peer-reviewed) — Cooling Architectures and Regional Water Stress Cooling Architectures and Regional Water Stress: A Comparative Study Venue: Journal of Sustainable Computing 14(2), pages 88-114 (fix",
+        "quoteDigest": "sha256:fa5f208234bca3b662dbede05ae85dfa378058ebd3855e91bd58c3780432c717",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:b844978b618f897abc3e4dc1e26d9b1801d134f090f24721d51f1706e8cb9264",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:46c6a6d13b2022af6ba7d5277305077a9fab0f0ae374a1966b5b44119639f276",
+      "sourceId": "research-cooling-water",
+      "spanDigest": "sha256:e5b37510d8943c549537e606154274ec6eac88c90fd6d2a1d54b85073978b33a"
+    },
+    {
+      "id": "span-tech-lifecycle-materials",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "Lifecycle Materials and Land Assessment of Hyperscale Campuses Institute for Infrastructure Analysis (fixture technical institute) Technical Report TR-2025-frozen-17. Published 2025-06-12. Key quantified findings: - A reference 250 MW hyper",
+        "quoteDigest": "sha256:6741858710b53c2a5cc5e4960015dd1d47fc9a8cd3fe5eaba29078d950f86570",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:ed514b9178935ce8ba8f5a0ba3f34243ee8d64a4847c4244237e53e14335a642",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:c600f50e45a30bdaa6bde67a9a472e32f5de33f859dd19e1fde2e5d72d8dec6e",
+      "sourceId": "tech-lifecycle-materials",
+      "spanDigest": "sha256:b6f1229de4e54057f9a38ebde906455785084c092b9d0df1e641bd546aab8809"
+    },
+    {
+      "id": "span-community-hearing-transcript",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "GREENFIELD COUNTY PLANNING COMMISSION (fixture local government) Public Hearing Transcript — Proposed Ridgeway Data Center Campus Date: 2026-03-05. Case PC-26-018. Excerpts. COMMISSIONER OKAFOR: The applicant's acoustic study shows 55 dBA a",
+        "quoteDigest": "sha256:1c05338a470a668e5ebd1b9fb2c748ce41cf6f95459e265b5a9094a8cdaed9ce",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:c09ae640a9774fe85fbfcf57f41086b40125c5c247f880984dfaf9f73248fd49",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:36988f1a147cebcd33c25ca3d4b2f5372f6f44633dd800aec96ce92ae13e285d",
+      "sourceId": "community-hearing-transcript",
+      "spanDigest": "sha256:43a32905b512192db7a5cc36fca82aaa653be1fc42884df5e01751dec1b2000c"
+    },
+    {
+      "id": "span-ej-coalition-statement",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "Twin Rivers Environmental Justice Coalition — Statement on Data Center Siting Statement on Data Center Siting and Water Rights Publisher: Twin Rivers Environmental Justice Coalition with the Kaweno Nation Environmental Office (fixture commu",
+        "quoteDigest": "sha256:7939b8eb2f6cc6e7e3bf0bb1bcf1fd5cc47786dd39b6ebcaf021106742998bac",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:87d7e8a14090cda13b957d8a8dda80c807516202f8d697bd30e715485e28a631",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:502fb5d260a48c2ff4d43a82e7836688804cd86ea8f8236950c51cd0a41c73be",
+      "sourceId": "ej-coalition-statement",
+      "spanDigest": "sha256:01a177aef699aa6f700635165c3c33fb30d52c8e7af5aaa86b6a3434eda036c3"
+    },
+    {
+      "id": "span-industry-sustainability-report",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "Northwind Digital Infrastructure — 2025 Sustainability Report Northwind Digital Infrastructure — 2025 Sustainability Report Publisher: Northwind Digital Infrastructure Inc. (fixture operator). Published: 2025-08-05. In 2024, 100 percent of",
+        "quoteDigest": "sha256:bc9462e70e09cda5b083083c771eb9341c5ef060caa7e2f4c28a8ee124b73f60",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:417e5a41a84cbd6aeb73bf86a3d75fe17a342987e56e5a17bed6acd23fef460f",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:9ecf629486cadc6079a3a87b5397e6b2c9613dc9bf4bdde233684a731b2c2820",
+      "sourceId": "industry-sustainability-report",
+      "spanDigest": "sha256:3fd5e15a5dffa86d38cc7da8905db0ee7586a9317ce338d03088f350e7d116f6"
+    },
+    {
+      "id": "span-critical-market-analysis",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "Grid Integrity Project — Hourly Accounting of Data Center Power Claims Hourly Accounting of Data Center Power Claims in the Interior Plains Publisher: Grid Integrity Project (fixture independent research group). Published: 2026-02-27. Annua",
+        "quoteDigest": "sha256:edef57609d87002653e49f7d8868c4d311591523b3c16a59112db7b2d65a1a11",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:211ee2e70bfa7590dcbc12a2efcce957bd435137a9e5d93b5cbe3211d7770b5a",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:215d0840e99dc874f36cddcf89c23524d0de62ab3ddafdcac333d5a292a1d0da",
+      "sourceId": "critical-market-analysis",
+      "spanDigest": "sha256:7aa22735f20c45d30a991a231b95d36af10e7a3b672ac20c5262dd5f69fffcab"
+    },
+    {
+      "id": "span-econ-impact-study",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "Plains State University Center for Regional Economics — Fiscal and Employment Effects of Data Center Campuses Fiscal and Employment Effects of Data Center Campuses, 2020-2025 Publisher: Plains State University Center for Regional Economics",
+        "quoteDigest": "sha256:a22fd3c83e363f751cc1b4138e6fc166ab354cca6b907c20f27ddad844c193aa",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:0db28fc677e9510263a1cb49cb596f1975c731e8b9c994b8edf0661ab7cfce29",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:84e0331eb354e24bea105b4b8967271886e17ee6ce41cd9e3bbe3a0ee7e415b9",
+      "sourceId": "econ-impact-study",
+      "spanDigest": "sha256:fcd43fa76d0ecf5c0f95864ff6b135eb18456dd2432ff7db5ded4d1b79b88a38"
+    },
+    {
+      "id": "span-land-habitat-assessment",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "STATE ENVIRONMENTAL QUALITY DEPARTMENT (fixture state regulator) Environmental Assessment EA-26-007 — Cedar Flats Campus Expansion Published 2026-01-30. - The proposed expansion converts 350 acres of mixed shortgrass prairie and dryland agr",
+        "quoteDigest": "sha256:f8ab8dc8f61dfaf44a1d47a15179d26b31b8b1142b7e140396cb2144f1e6aa7a",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:1e7568f5c4730e692a8021ec56512da1c665593c4929a6b4039b72dca426db64",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:c0010b36eb8f5fd2d23d46025d3a37777f8138bf615e4f13c74780e81e5d2ecd",
+      "sourceId": "land-habitat-assessment",
+      "spanDigest": "sha256:5af35e4882151f57b7b80b7a5c75d634764d4540028c80f28b49cb300e9d6c67"
+    },
+    {
+      "id": "span-air-permit-backup-generators",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "State Air Quality Bureau — Permit 26-AQ-118, Ridgeway Campus Backup Generation Air Quality Permit 26-AQ-118 — Ridgeway Campus Backup Generation Publisher: State Air Quality Bureau (fixture state regulator). Issued: 2026-02-19. The permit au",
+        "quoteDigest": "sha256:5381cbc0b91dcbed1eeb04c0c348d475e072f75604570914b05441e900245776",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:8760d21d84bd473119fe9c875e202dc9202369bfd203691e5a8fd4091c1b52e2",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:fa7f0573ba7cc7016d82fb5c5c18194c7ca2fd73e5816cade511bf8947e0a9a4",
+      "sourceId": "air-permit-backup-generators",
+      "spanDigest": "sha256:ac9e2274d498cde854615b23aef3dc8b3402edcec58b604c853b7c55cbf55588"
+    },
+    {
+      "id": "span-policy-mitigation-review",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "Center for Grid Policy — Mitigating Data Center Impacts: Options and Open Questions Mitigating Data Center Impacts: Options and Open Questions Publisher: Center for Grid Policy (fixture policy institute). Published: 2026-04-11. Documented m",
+        "quoteDigest": "sha256:e16031e915d71876fbd9b8340c65951e3847e8cd002c9634b12bf8561cdb0e24",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:6f9d185b1cc827a4dacef7a351d8f8e55ff02feb0d86fbeade393b348aedaea6",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:fcb9de379acca8742ae54eee12d3e30315c4fae8abb7214830f17c7dcebb98b1",
+      "sourceId": "policy-mitigation-review",
+      "spanDigest": "sha256:5e3d066c8ecb3f272568cf63fdf32abdf1af68d67ea00fea0b259f0ef212f744"
+    },
+    {
+      "id": "span-facility-variation-study",
+      "locator": {
+        "coordinateSpace": "text-offset",
+        "lineEnd": 1,
+        "lineStart": 1,
+        "quote": "Journal of Infrastructure Systems (fixture peer-reviewed) — Heterogeneity of Data Center Externalities Heterogeneity of Data Center Externalities by Type, Climate, and Grid Venue: Journal of Infrastructure Systems 31(1), pages 12-39 (fixtur",
+        "quoteDigest": "sha256:f4d2b819b9c383f8896ccfca2dcfedb5bfd1ae1b2c376ed3487f4ea2010bc9f1",
+        "version": "1.0.0"
+      },
+      "parsedArtifactDigest": "sha256:cf14c2d69cc58f2913446c813e41c9b840ebf0ce97b06f2071ce841d3c3ef2c2",
+      "parserId": "p8-fixture-parser",
+      "parserVersion": "1.0.0",
+      "rawSnapshotDigest": "sha256:5dc9b35de3b80e4844f51f618cebeb7c7a13d1db1957e62d362020e3aa27ac0c",
+      "sourceId": "facility-variation-study",
+      "spanDigest": "sha256:1605562ba635ce4a6fa19127b2961a4f9d765002cfd0fb8c8432ac324e1889d1"
+    }
+  ],
+  "generatedAt": "2026-07-01T00:00:00.000Z",
+  "manifestDigest": "sha256:43112e8e8a5ccc251793a46389e149bdf05f203f810fdcfeef9406f0bc9ab0b1",
+  "mode": "report",
+  "question": "What impacts do data centers have on the communities and environment around them?",
+  "schemaVersion": "1.0.0"
+}

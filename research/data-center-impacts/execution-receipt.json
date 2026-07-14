@@ -1,0 +1,45 @@
+{
+  "briefDigest": "sha256:35d0f625fb371e7c2c2bbe227bad694044f1acac183d6796366571074243aa7a",
+  "charterDigest": "sha256:1f91bc3d45d9c890126f4e2526c1fd0557c9565f6dc711c7f05f4737db07b67a",
+  "contractFamily": "p8.v1",
+  "costs": {
+    "budgetUsd": 20,
+    "bytes": 16,
+    "currencyUsd": 0,
+    "provider": "fixture-search/v1 + deterministic local compiler",
+    "retrievalRequests": 16,
+    "searchRequests": 2,
+    "tokens": 0
+  },
+  "coverageDigest": "sha256:c343eaeae2f8b3cf544b8670ed08e79f7e031d0f73f992ea5acdca3a00c7951a",
+  "depth": "comprehensive",
+  "generatedAt": "2026-07-01T00:00:00.000Z",
+  "limitations": [
+    "offline fixture corpus is release authority for deterministic gates",
+    "live exhibition remains credential-gated by ADR 0010"
+  ],
+  "mode": "report",
+  "outputDirectory": "/private/tmp/mammoth-p8-integration/research/data-center-impacts",
+  "question": "What impacts do data centers have on the communities and environment around them?",
+  "reportManifestDigest": "sha256:43112e8e8a5ccc251793a46389e149bdf05f203f810fdcfeef9406f0bc9ab0b1",
+  "requiredFiles": [
+    "report.md",
+    "report.html",
+    "executive-summary.md",
+    "sources.json",
+    "bibliography.md",
+    "report-manifest.json",
+    "coverage.json",
+    "unresolved.json",
+    "execution-receipt.json"
+  ],
+  "runId": "p8-run:43112e8e8a5ccc25",
+  "schemaVersion": "1.0.0",
+  "status": "completed",
+  "stopReason": "sufficiency_reached",
+  "unresolvedDigest": "sha256:3fc96719cfc7a61ff40ffc1771eb7e484021a9c61000d3fbee9c321a6adf1528",
+  "verificationCommands": [
+    "pnpm verify:p8",
+    "pnpm mammoth research inspect /private/tmp/mammoth-p8-integration/research/data-center-impacts --json"
+  ]
+}

@@ -1,0 +1,117 @@
+{
+  "schemaVersion": "1.0.0",
+  "sources": [
+    {
+      "locatorId": "span-gov-water-assessment",
+      "parsedArtifactDigest": "sha256:af37d76e3a4ad560f05f1034688b7867086699a450e84e2ca308260ff66c1948",
+      "quoteDigest": "sha256:72775333c232ce4870b84f096b89c6fbbfbcde02af7ef40b9876d0c1d6f7ac86",
+      "rawSnapshotDigest": "sha256:5d07596560acad3c444c87e7ecbd66c021dcb14ecc3b2ddbb6e98cb4ed522500",
+      "sourceId": "gov-water-assessment"
+    },
+    {
+      "locatorId": "span-gov-grid-reliability-order",
+      "parsedArtifactDigest": "sha256:490c430eb7fdbb9ca0da8542ef1e946e22831afcfe52f45368b99856eeb0d239",
+      "quoteDigest": "sha256:34b73b967e24050b4e01107798108c036fa2fed634f09caeaad5f3c184f72195",
+      "rawSnapshotDigest": "sha256:dbe186708f3b6484b095676760496c260b51688d8d70f0ca9bbd9b061460f85c",
+      "sourceId": "gov-grid-reliability-order"
+    },
+    {
+      "locatorId": "span-utility-load-forecast",
+      "parsedArtifactDigest": "sha256:d41d96460d297b5700a890b1a560d9b4e58f6cffd0c74b6ccc09f616911cf594",
+      "quoteDigest": "sha256:f0f55e8af968ebf1e18746e333ec8aa999784f63e9b554bd66e144e3d65bcd44",
+      "rawSnapshotDigest": "sha256:fe00c61ba5a0256ab4f4f51d6ec980cd1e4fa2acae1a912d5a2f0df97c354dbd",
+      "sourceId": "utility-load-forecast"
+    },
+    {
+      "locatorId": "span-utility-rate-filing",
+      "parsedArtifactDigest": "sha256:f539154f4c9244671ff9d5b88f2304fa2c1173f4b1f6b95206358c942d89add9",
+      "quoteDigest": "sha256:fd63d81a0dfa68e46e4434951273fcbf93a726a3ee04a16c448a0f853b1f0686",
+      "rawSnapshotDigest": "sha256:9f450df5fe240e8cc763d5e9450e38859ad6f9384d53ef6366e1ef7c259dc928",
+      "sourceId": "utility-rate-filing"
+    },
+    {
+      "locatorId": "span-research-energy-emissions",
+      "parsedArtifactDigest": "sha256:7d50734d249637dc93891ce5304a70472311a7b626fe9063e33ec96f95d55bf3",
+      "quoteDigest": "sha256:a9615bae30c089682dcc5760303537cf71a393018bd0b67cec08b6cb5948110c",
+      "rawSnapshotDigest": "sha256:3f86cb45f6c522e92ee9c6a85d5eefb56e10205e7312ec69a883a6f338e0ceb5",
+      "sourceId": "research-energy-emissions"
+    },
+    {
+      "locatorId": "span-research-cooling-water",
+      "parsedArtifactDigest": "sha256:b844978b618f897abc3e4dc1e26d9b1801d134f090f24721d51f1706e8cb9264",
+      "quoteDigest": "sha256:fa5f208234bca3b662dbede05ae85dfa378058ebd3855e91bd58c3780432c717",
+      "rawSnapshotDigest": "sha256:46c6a6d13b2022af6ba7d5277305077a9fab0f0ae374a1966b5b44119639f276",
+      "sourceId": "research-cooling-water"
+    },
+    {
+      "locatorId": "span-tech-lifecycle-materials",
+      "parsedArtifactDigest": "sha256:ed514b9178935ce8ba8f5a0ba3f34243ee8d64a4847c4244237e53e14335a642",
+      "quoteDigest": "sha256:6741858710b53c2a5cc5e4960015dd1d47fc9a8cd3fe5eaba29078d950f86570",
+      "rawSnapshotDigest": "sha256:c600f50e45a30bdaa6bde67a9a472e32f5de33f859dd19e1fde2e5d72d8dec6e",
+      "sourceId": "tech-lifecycle-materials"
+    },
+    {
+      "locatorId": "span-community-hearing-transcript",
+      "parsedArtifactDigest": "sha256:c09ae640a9774fe85fbfcf57f41086b40125c5c247f880984dfaf9f73248fd49",
+      "quoteDigest": "sha256:1c05338a470a668e5ebd1b9fb2c748ce41cf6f95459e265b5a9094a8cdaed9ce",
+      "rawSnapshotDigest": "sha256:36988f1a147cebcd33c25ca3d4b2f5372f6f44633dd800aec96ce92ae13e285d",
+      "sourceId": "community-hearing-transcript"
+    },
+    {
+      "locatorId": "span-ej-coalition-statement",
+      "parsedArtifactDigest": "sha256:87d7e8a14090cda13b957d8a8dda80c807516202f8d697bd30e715485e28a631",
+      "quoteDigest": "sha256:7939b8eb2f6cc6e7e3bf0bb1bcf1fd5cc47786dd39b6ebcaf021106742998bac",
+      "rawSnapshotDigest": "sha256:502fb5d260a48c2ff4d43a82e7836688804cd86ea8f8236950c51cd0a41c73be",
+      "sourceId": "ej-coalition-statement"
+    },
+    {
+      "locatorId": "span-industry-sustainability-report",
+      "parsedArtifactDigest": "sha256:417e5a41a84cbd6aeb73bf86a3d75fe17a342987e56e5a17bed6acd23fef460f",
+      "quoteDigest": "sha256:bc9462e70e09cda5b083083c771eb9341c5ef060caa7e2f4c28a8ee124b73f60",
+      "rawSnapshotDigest": "sha256:9ecf629486cadc6079a3a87b5397e6b2c9613dc9bf4bdde233684a731b2c2820",
+      "sourceId": "industry-sustainability-report"
+    },
+    {
+      "locatorId": "span-critical-market-analysis",
+      "parsedArtifactDigest": "sha256:211ee2e70bfa7590dcbc12a2efcce957bd435137a9e5d93b5cbe3211d7770b5a",
+      "quoteDigest": "sha256:edef57609d87002653e49f7d8868c4d311591523b3c16a59112db7b2d65a1a11",
+      "rawSnapshotDigest": "sha256:215d0840e99dc874f36cddcf89c23524d0de62ab3ddafdcac333d5a292a1d0da",
+      "sourceId": "critical-market-analysis"
+    },
+    {
+      "locatorId": "span-econ-impact-study",
+      "parsedArtifactDigest": "sha256:0db28fc677e9510263a1cb49cb596f1975c731e8b9c994b8edf0661ab7cfce29",
+      "quoteDigest": "sha256:a22fd3c83e363f751cc1b4138e6fc166ab354cca6b907c20f27ddad844c193aa",
+      "rawSnapshotDigest": "sha256:84e0331eb354e24bea105b4b8967271886e17ee6ce41cd9e3bbe3a0ee7e415b9",
+      "sourceId": "econ-impact-study"
+    },
+    {
+      "locatorId": "span-land-habitat-assessment",
+      "parsedArtifactDigest": "sha256:1e7568f5c4730e692a8021ec56512da1c665593c4929a6b4039b72dca426db64",
+      "quoteDigest": "sha256:f8ab8dc8f61dfaf44a1d47a15179d26b31b8b1142b7e140396cb2144f1e6aa7a",
+      "rawSnapshotDigest": "sha256:c0010b36eb8f5fd2d23d46025d3a37777f8138bf615e4f13c74780e81e5d2ecd",
+      "sourceId": "land-habitat-assessment"
+    },
+    {
+      "locatorId": "span-air-permit-backup-generators",
+      "parsedArtifactDigest": "sha256:8760d21d84bd473119fe9c875e202dc9202369bfd203691e5a8fd4091c1b52e2",
+      "quoteDigest": "sha256:5381cbc0b91dcbed1eeb04c0c348d475e072f75604570914b05441e900245776",
+      "rawSnapshotDigest": "sha256:fa7f0573ba7cc7016d82fb5c5c18194c7ca2fd73e5816cade511bf8947e0a9a4",
+      "sourceId": "air-permit-backup-generators"
+    },
+    {
+      "locatorId": "span-policy-mitigation-review",
+      "parsedArtifactDigest": "sha256:6f9d185b1cc827a4dacef7a351d8f8e55ff02feb0d86fbeade393b348aedaea6",
+      "quoteDigest": "sha256:e16031e915d71876fbd9b8340c65951e3847e8cd002c9634b12bf8561cdb0e24",
+      "rawSnapshotDigest": "sha256:fcb9de379acca8742ae54eee12d3e30315c4fae8abb7214830f17c7dcebb98b1",
+      "sourceId": "policy-mitigation-review"
+    },
+    {
+      "locatorId": "span-facility-variation-study",
+      "parsedArtifactDigest": "sha256:cf14c2d69cc58f2913446c813e41c9b840ebf0ce97b06f2071ce841d3c3ef2c2",
+      "quoteDigest": "sha256:f4d2b819b9c383f8896ccfca2dcfedb5bfd1ae1b2c376ed3487f4ea2010bc9f1",
+      "rawSnapshotDigest": "sha256:5dc9b35de3b80e4844f51f618cebeb7c7a13d1db1957e62d362020e3aa27ac0c",
+      "sourceId": "facility-variation-study"
+    }
+  ]
+}
