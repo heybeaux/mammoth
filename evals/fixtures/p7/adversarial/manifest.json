@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "v0.7.0-live-research-loop",
+  "modelWorkRequestVersion": "1.0.0",
+  "modelWorkResultVersion": "1.0.0",
+  "providerErrorVersion": "1.0.0",
+  "modelWorkPolicyVersion": "1.0.0",
+  "capabilityManifestVersion": "1.0.0",
+  "applicationContractMajor": 1,
+  "workflowVersion": 1,
+  "dossierContractVersion": "1.0.0",
+  "projectionExtensionVersion": "1.0.0",
+  "cases": [
+    {
+      "id": "contract-manifest-drift",
+      "gate": "fixture-manifest",
+      "expected": "rejected"
+    },
+    {
+      "id": "provider-alias-or-checkpoint-drift",
+      "gate": "provider-conformance",
+      "expected": "profile_drift"
+    },
+    {
+      "id": "provider-hostile-transport-and-egress",
+      "gate": "provider-conformance",
+      "expected": "policy_denied"
+    },
+    {
+      "id": "provider-malformed-oversized-or-truncated-output",
+      "gate": "provider-conformance",
+      "expected": "typed_failure"
+    },
+    {
+      "id": "prompt-tool-policy-or-schema-drift",
+      "gate": "model-work-authority",
+      "expected": "identity_rejected"
+    },
+    {
+      "id": "secret-in-prompt-or-egress",
+      "gate": "model-work-authority",
+      "expected": "secret_detected"
+    },
+    {
+      "id": "unknown-provider-capability-or-profile",
+      "gate": "model-work-authority",
+      "expected": "unsupported_capability"
+    },
+    {
+      "id": "duplicate-dispatch-at-durable-boundaries",
+      "gate": "activity-effects",
+      "expected": "idempotent"
+    },
+    {
+      "id": "ambiguous-delivery-reconciliation",
+      "gate": "activity-effects",
+      "expected": "reconciled_or_blocked"
+    },
+    {
+      "id": "usage-cost-budget-exhaustion",
+      "gate": "activity-effects",
+      "expected": "budget_exhausted"
+    },
+    {
+      "id": "cancellation-and-late-response-fencing",
+      "gate": "activity-effects",
+      "expected": "fenced"
+    },
+    {
+      "id": "migration-8-empty-upgrade-duplicate-interrupted",
+      "gate": "postgres-reconstruction",
+      "expected": "deterministic"
+    },
+    {
+      "id": "postgres-cas-restart-reconstruction",
+      "gate": "postgres-reconstruction",
+      "expected": "reconstructed"
+    },
+    {
+      "id": "raw-cas-digest-corruption",
+      "gate": "postgres-reconstruction",
+      "expected": "rejected"
+    },
+    {
+      "id": "offline-cli-complete-dossier",
+      "gate": "offline-cli-dossier",
+      "expected": "completed"
+    },
+    {
+      "id": "offline-cli-partial-dossier",
+      "gate": "offline-cli-dossier",
+      "expected": "partial"
+    },
+    {
+      "id": "process-kill-status-resume-no-duplicate-effects",
+      "gate": "offline-cli-dossier",
+      "expected": "resumed"
+    },
+    {
+      "id": "temporal-worker-client-service-recovery",
+      "gate": "temporal-provider-recovery",
+      "expected": "replayed"
+    },
+    {
+      "id": "temporal-history-excludes-provider-bytes",
+      "gate": "temporal-provider-recovery",
+      "expected": "redacted"
+    },
+    {
+      "id": "unsupported-provider-claim-cannot-render",
+      "gate": "dossier-provenance",
+      "expected": "rejected"
+    },
+    {
+      "id": "evidence-bound-claim-provenance",
+      "gate": "dossier-provenance",
+      "expected": "admitted"
+    },
+    {
+      "id": "dissent-assumption-failure-cancellation-residue",
+      "gate": "dossier-provenance",
+      "expected": "preserved"
+    },
+    {
+      "id": "secret-bearing-dossier-fact",
+      "gate": "dossier-provenance",
+      "expected": "rejected"
+    },
+    {
+      "id": "projection-future-authority",
+      "gate": "readonly-projection",
+      "expected": "rejected"
+    },
+    {
+      "id": "projection-broken-reference",
+      "gate": "readonly-projection",
+      "expected": "rejected"
+    },
+    {
+      "id": "projection-raw-content-secret-leakage",
+      "gate": "readonly-projection",
+      "expected": "absent"
+    },
+    {
+      "id": "projection-write-attempt",
+      "gate": "readonly-projection",
+      "expected": "impossible"
+    }
+  ]
+}

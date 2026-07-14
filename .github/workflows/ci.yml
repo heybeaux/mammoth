@@ -100,3 +100,6 @@ jobs:
 
       - name: Verify P6 research topology
         run: pnpm verify:p6
+
+      - name: Verify P7 live research loop
+        run: pnpm verify:p7

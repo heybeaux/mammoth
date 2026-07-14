@@ -1,5 +1,5 @@
 {
-  "name": "@mammoth/observatory-projection",
+  "name": "@mammoth/p7-application-service",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,9 +14,9 @@
   "dependencies": {
     "@mammoth/domain": "workspace:*",
     "@mammoth/persistence": "workspace:*",
-    "@mammoth/report-compiler": "workspace:*",
-    "@mammoth/workflow": "workspace:*",
-    "zod": "^3.25.0"
+    "@mammoth/provider-port": "workspace:*",
+    "@mammoth/retrieval": "workspace:*",
+    "@mammoth/workflow": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.0",

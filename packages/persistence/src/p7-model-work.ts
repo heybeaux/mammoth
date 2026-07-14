@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import {
-  ModelWorkBudgetSchema,
   ModelWorkRequestSchema,
   ProviderCapabilityManifestSchema,
   canonicalDigest,
@@ -9,6 +8,16 @@ import {
 const DigestSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/u);
 const TimestampSchema = z.string().datetime();
 const NonemptySchema = z.string().min(1);
+
+export const P7ProviderUsageSchema = z
+  .object({
+    inputTokens: z.number().int().nonnegative(),
+    outputTokens: z.number().int().nonnegative(),
+    currencyMicros: z.number().int().nonnegative(),
+    wallClockMs: z.number().int().nonnegative(),
+    toolCalls: z.literal(0),
+  })
+  .strict();
 
 export class P7PersistenceConflictError extends Error {
   constructor(message: string) {
@@ -228,7 +237,7 @@ export const P7ProviderChargeRecordSchema = digestRecord(
       providerEffectIdempotencyKey: DigestSchema,
       provider: NonemptySchema,
       providerOperationId: NonemptySchema,
-      usage: ModelWorkBudgetSchema,
+      usage: P7ProviderUsageSchema,
       priceVersion: NonemptySchema,
       currencyConversionPolicy: NonemptySchema,
       chargedAt: TimestampSchema,
@@ -247,7 +256,7 @@ export const P7BudgetSettlementRecordSchema = digestRecord(
       modelWorkId: NonemptySchema,
       reservationId: NonemptySchema,
       providerChargeId: NonemptySchema,
-      amount: ModelWorkBudgetSchema,
+      amount: P7ProviderUsageSchema,
       settledAt: TimestampSchema,
       receiptDigest: DigestSchema,
     })

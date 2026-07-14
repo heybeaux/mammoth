@@ -332,7 +332,7 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
           this.#options.inputCurrencyMicrosPerMillionTokens,
         outputCurrencyMicrosPerMillionTokens:
           this.#options.outputCurrencyMicrosPerMillionTokens,
-        wallClockMs: Math.max(0, this.#now() - dispatchStartedAt),
+        wallClockMs: Math.ceil(Math.max(0, this.#now() - dispatchStartedAt)),
       });
       if (
         envelope.usage.inputTokens > limits.inputTokens ||
@@ -696,7 +696,15 @@ function validateCanonicalChatRequest(
 ): void {
   const record = requireExactRecord(
     value,
-    ['model', 'messages', 'stream', 'response_format', 'temperature', 'seed'],
+    [
+      'model',
+      'messages',
+      'stream',
+      'response_format',
+      'temperature',
+      'seed',
+      'max_tokens',
+    ],
     ['model', 'messages', 'stream'],
     'provider chat request',
   );
@@ -721,6 +729,9 @@ function validateCanonicalChatRequest(
       failureError('unsupported_capability', 'provider seed is not supported'),
     );
   }
+  if (record.max_tokens !== undefined) {
+    requirePositiveInteger(record.max_tokens, 'provider max tokens');
+  }
   if (
     record.temperature !== undefined &&
     (typeof record.temperature !== 'number' ||
@@ -735,11 +746,39 @@ function validateCanonicalChatRequest(
   if (record.response_format !== undefined) {
     const format = requireExactRecord(
       record.response_format,
-      ['type'],
+      ['type', 'json_schema'],
       ['type'],
       'provider response format',
     );
-    if (format.type !== 'json_object') {
+    if (format.type === 'json_schema') {
+      const jsonSchema = requireExactRecord(
+        format.json_schema,
+        ['name', 'strict', 'schema'],
+        ['name', 'strict', 'schema'],
+        'provider JSON schema response format',
+      );
+      requireNonempty(jsonSchema.name, 'provider JSON schema name');
+      if (jsonSchema.strict !== true) {
+        throw new ProviderBoundaryError(
+          failureError(
+            'schema_incompatible',
+            'provider JSON schema response format must be strict',
+          ),
+        );
+      }
+      const schema = requireRecord(
+        jsonSchema.schema,
+        'provider JSON schema response schema',
+      );
+      if (schema.type !== 'object') {
+        throw new ProviderBoundaryError(
+          failureError(
+            'schema_incompatible',
+            'provider JSON schema response schema must describe an object',
+          ),
+        );
+      }
+    } else if (format.type !== 'json_object') {
       throw new ProviderBoundaryError(
         failureError(
           'unsupported_capability',

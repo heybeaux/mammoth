@@ -15,6 +15,10 @@
     "./research-client": {
       "types": "./src/research-client.ts",
       "import": "./dist/research-client.js"
+    },
+    "./p7-client": {
+      "types": "./src/p7-client.ts",
+      "import": "./dist/p7-client.js"
     }
   },
   "bin": {
@@ -26,14 +30,16 @@
     "status": "tsx src/cli.ts status",
     "start": "tsx src/cli.ts start",
     "stop": "tsx src/cli.ts stop",
-    "test": "pnpm --filter @mammoth/adapter-contracts build && vitest run test/config.test.ts test/readiness.test.ts test/service.test.ts test/activity-policy.test.ts test/production-activities.test.ts test/p5-workflow-shell.test.ts test/p6-workflow-shell.test.ts",
+    "test": "pnpm --filter @mammoth/adapter-contracts build && vitest run test/config.test.ts test/readiness.test.ts test/service.test.ts test/activity-policy.test.ts test/production-activities.test.ts test/p5-workflow-shell.test.ts test/p6-workflow-shell.test.ts test/p7-activities.test.ts test/p7-workflow-shell.test.ts",
     "test:live": "pnpm --filter @mammoth/adapter-contracts build && pnpm --filter @mammoth/workflow build && vitest run test/live-probe.test.ts test/research-workflow.test.ts test/research-cli.test.ts test/p5-live-workflow.test.ts --test-timeout 120000 --no-file-parallelism",
     "test:p6-live": "pnpm --filter @mammoth/adapter-contracts build && vitest run test/p6-live-workflow.test.ts --test-timeout 120000 --no-file-parallelism",
+    "test:p7-live": "pnpm --filter @mammoth/adapter-contracts build && vitest run test/p7-live-workflow.test.ts test/p7-governed-live-workflow.test.ts --test-timeout 120000 --no-file-parallelism",
     "test:recovery": "pnpm --filter @mammoth/adapter-contracts build && vitest run test/recovery-probe.test.ts test/process-recovery.test.ts --test-timeout 120000",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@mammoth/adapter-contracts": "workspace:*",
+    "@mammoth/p7-application-service": "workspace:*",
     "@mammoth/work-queue": "workspace:*",
     "@mammoth/workflow": "workspace:*",
     "@temporalio/activity": "1.20.2",
@@ -43,6 +49,11 @@
     "@temporalio/workflow": "1.20.2"
   },
   "devDependencies": {
+    "@mammoth/domain": "workspace:*",
+    "@mammoth/governance": "workspace:*",
+    "@mammoth/persistence": "workspace:*",
+    "@mammoth/provider-port": "workspace:*",
+    "@mammoth/retrieval": "workspace:*",
     "@temporalio/testing": "1.20.2",
     "@types/node": "^22.0.0",
     "tsx": "^4.20.3",

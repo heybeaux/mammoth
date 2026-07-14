@@ -126,7 +126,12 @@ export function chatResponse(
 
 export function buildModelWorkRequest(
   manifest: ProviderCapabilityManifest,
-  options: { readonly prompt?: string; readonly seed?: number } = {},
+  options: {
+    readonly prompt?: string;
+    readonly seed?: number;
+    readonly responseFormat?: unknown;
+    readonly maxTokens?: number;
+  } = {},
 ): {
   readonly modelWork: ModelWorkRequest;
   readonly canonicalRequestBytes: Uint8Array;
@@ -138,8 +143,11 @@ export function buildModelWorkRequest(
         role: 'user',
       },
     ],
+    ...(options.maxTokens === undefined
+      ? {}
+      : { max_tokens: options.maxTokens }),
     model: manifest.concreteModel,
-    response_format: { type: 'json_object' },
+    response_format: options.responseFormat ?? { type: 'json_object' },
     stream: false,
     temperature: 0,
     ...(options.seed === undefined ? {} : { seed: options.seed }),

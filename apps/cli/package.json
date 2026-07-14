@@ -15,6 +15,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mammoth/domain": "workspace:*",
+    "@mammoth/governance": "workspace:*",
+    "@mammoth/openai-compatible-provider": "workspace:*",
+    "@mammoth/observatory-projection": "workspace:*",
+    "@mammoth/p7-application-service": "workspace:*",
+    "@mammoth/persistence": "workspace:*",
+    "@mammoth/provider-port": "workspace:*",
+    "@mammoth/report-compiler": "workspace:*",
+    "@mammoth/retrieval": "workspace:*",
     "@mammoth/runtime": "workspace:*",
     "@mammoth/temporal-adapter": "workspace:*",
     "@mammoth/workflow": "workspace:*",
@@ -24,6 +33,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "esbuild": "^0.28.1",
+    "tsx": "^4.20.3",
     "typescript": "^5.8.0",
     "vitest": "^3.2.0"
   }

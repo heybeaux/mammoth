@@ -38,6 +38,33 @@ importers:
 
   apps/cli:
     dependencies:
+      '@mammoth/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@mammoth/governance':
+        specifier: workspace:*
+        version: link:../../packages/governance
+      '@mammoth/observatory-projection':
+        specifier: workspace:*
+        version: link:../../packages/observatory-projection
+      '@mammoth/openai-compatible-provider':
+        specifier: workspace:*
+        version: link:../../packages/openai-compatible-provider
+      '@mammoth/p7-application-service':
+        specifier: workspace:*
+        version: link:../../packages/p7-application-service
+      '@mammoth/persistence':
+        specifier: workspace:*
+        version: link:../../packages/persistence
+      '@mammoth/provider-port':
+        specifier: workspace:*
+        version: link:../../packages/provider-port
+      '@mammoth/report-compiler':
+        specifier: workspace:*
+        version: link:../../packages/report-compiler
+      '@mammoth/retrieval':
+        specifier: workspace:*
+        version: link:../../packages/retrieval
       '@mammoth/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
@@ -60,6 +87,9 @@ importers:
       esbuild:
         specifier: ^0.28.1
         version: 0.28.1
+      tsx:
+        specifier: ^4.20.3
+        version: 4.20.3
       typescript:
         specifier: ^5.8.0
         version: 5.8.3
@@ -140,6 +170,18 @@ importers:
         specifier: ^3.2.0
         version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
 
+  evals/p7-acceptance:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.15.34
+      tsx:
+        specifier: ^4.20.3
+        version: 4.20.3
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+
   packages/adapter-contracts:
     dependencies:
       '@mammoth/persistence':
@@ -217,9 +259,15 @@ importers:
       '@mammoth/domain':
         specifier: workspace:*
         version: link:../domain
+      '@mammoth/persistence':
+        specifier: workspace:*
+        version: link:../persistence
       '@mammoth/report-compiler':
         specifier: workspace:*
         version: link:../report-compiler
+      '@mammoth/workflow':
+        specifier: workspace:*
+        version: link:../workflow
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -252,6 +300,31 @@ importers:
       zod:
         specifier: ^3.25.0
         version: 3.25.76
+
+  packages/p7-application-service:
+    dependencies:
+      '@mammoth/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@mammoth/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+      '@mammoth/provider-port':
+        specifier: workspace:*
+        version: link:../provider-port
+      '@mammoth/retrieval':
+        specifier: workspace:*
+        version: link:../retrieval
+      '@mammoth/workflow':
+        specifier: workspace:*
+        version: link:../workflow
+    devDependencies:
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.15.34)(tsx@4.20.3)
 
   packages/persistence:
     dependencies:
@@ -374,6 +447,15 @@ importers:
       '@mammoth/domain':
         specifier: workspace:*
         version: link:../domain
+      '@mammoth/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+      '@mammoth/retrieval':
+        specifier: workspace:*
+        version: link:../retrieval
+      '@mammoth/workflow':
+        specifier: workspace:*
+        version: link:../workflow
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -439,6 +521,9 @@ importers:
       '@mammoth/adapter-contracts':
         specifier: workspace:*
         version: link:../adapter-contracts
+      '@mammoth/p7-application-service':
+        specifier: workspace:*
+        version: link:../p7-application-service
       '@mammoth/work-queue':
         specifier: workspace:*
         version: link:../work-queue
@@ -461,6 +546,21 @@ importers:
         specifier: 1.20.2
         version: 1.20.2
     devDependencies:
+      '@mammoth/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@mammoth/governance':
+        specifier: workspace:*
+        version: link:../governance
+      '@mammoth/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+      '@mammoth/provider-port':
+        specifier: workspace:*
+        version: link:../provider-port
+      '@mammoth/retrieval':
+        specifier: workspace:*
+        version: link:../retrieval
       '@temporalio/testing':
         specifier: 1.20.2
         version: 1.20.2(tslib@2.8.1)
