@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "v0.6.0-research-topology",
+  "topologyPlanSchemaVersion": "1.0.0",
+  "cellTemplateCatalogSchemaVersion": "1.0.0",
+  "plannerPolicyVersion": "1.0.0",
+  "budgetPolicyVersion": "1.0.0",
+  "synthesisContractVersion": "1.0.0",
+  "topologyProjectionExtensionVersion": "1.0.0",
+  "workflowApplicationContractMajor": 1,
+  "workflowVersion": 1,
+  "cases": [
+    {
+      "id": "topology-cycle",
+      "gate": "topology-contract-planner",
+      "expected": "reject"
+    },
+    {
+      "id": "topology-missing-dependency-node",
+      "gate": "topology-contract-planner",
+      "expected": "reject"
+    },
+    {
+      "id": "topology-unknown-template-version",
+      "gate": "topology-contract-planner",
+      "expected": "reject"
+    },
+    {
+      "id": "topology-unbounded-concurrency-or-budget",
+      "gate": "topology-contract-planner",
+      "expected": "reject"
+    },
+    {
+      "id": "topology-duplicate-stable-node-identities",
+      "gate": "topology-contract-planner",
+      "expected": "reject"
+    },
+    {
+      "id": "criterion-drift-parent-child",
+      "gate": "topology-contract-planner",
+      "expected": "reject"
+    },
+    {
+      "id": "landscape-output-missing-claim-or-evidence-ids",
+      "gate": "topology-contract-planner",
+      "expected": "reject"
+    },
+    {
+      "id": "divergence-agreement-over-unsupported-claims",
+      "gate": "synthesis-provenance",
+      "expected": "reject"
+    },
+    {
+      "id": "correlated-consensus-presented-as-independent-support",
+      "gate": "synthesis-provenance",
+      "expected": "reject"
+    },
+    {
+      "id": "valid-dissent-retained-through-synthesis",
+      "gate": "synthesis-provenance",
+      "expected": "accept"
+    },
+    {
+      "id": "adversarial-dissent-with-admissible-contradictory-evidence",
+      "gate": "synthesis-provenance",
+      "expected": "retain"
+    },
+    {
+      "id": "prior-art-novelty-statuses-without-universal-novelty",
+      "gate": "topology-contract-planner",
+      "expected": "accept"
+    },
+    {
+      "id": "falsification-preserves-counterexamples-and-invalid-critiques",
+      "gate": "topology-contract-planner",
+      "expected": "retain"
+    },
+    {
+      "id": "experiment-hidden-holdout-invalid-failed-cancelled-valid",
+      "gate": "synthesis-provenance",
+      "expected": "reject-invalid"
+    },
+    {
+      "id": "evidence-aware-synthesis-invalid-inputs-and-admitted-only",
+      "gate": "synthesis-provenance",
+      "expected": "reject-invalid"
+    },
+    {
+      "id": "scheduler-idle-blocked-concurrency-budget-distinct",
+      "gate": "scheduler-budget-policy",
+      "expected": "distinguish"
+    },
+    {
+      "id": "duplicate-topology-child-budget-effect-cancellation-receipts",
+      "gate": "persistence-budget-lifecycle",
+      "expected": "idempotent"
+    },
+    {
+      "id": "budget-starvation-before-dispatch-and-mid-topology",
+      "gate": "scheduler-budget-policy",
+      "expected": "budget_starved"
+    },
+    {
+      "id": "cancellation-before-during-after-child-synthesis-settlement",
+      "gate": "temporal-execution-recovery",
+      "expected": "partial-results"
+    },
+    {
+      "id": "worker-activity-client-service-death-parent-child-boundaries",
+      "gate": "temporal-execution-recovery",
+      "expected": "recover"
+    },
+    {
+      "id": "continue-as-new-and-replay-supported-p6-versions",
+      "gate": "temporal-execution-recovery",
+      "expected": "recover"
+    },
+    {
+      "id": "migration-fencing-digest-broken-future-projection-write-digest",
+      "gate": "projection-operator-inspection",
+      "expected": "reject"
+    },
+    {
+      "id": "clean-multi-cell-acceptance-run-manifest-shape",
+      "gate": "fixture-manifest",
+      "expected": "accept"
+    }
+  ]
+}
