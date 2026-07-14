@@ -26,7 +26,7 @@
     "status": "tsx src/cli.ts status",
     "start": "tsx src/cli.ts start",
     "stop": "tsx src/cli.ts stop",
-    "test": "pnpm --filter @mammoth/adapter-contracts build && vitest run test/config.test.ts test/readiness.test.ts test/service.test.ts test/activity-policy.test.ts test/production-activities.test.ts test/p5-workflow-shell.test.ts",
+    "test": "pnpm --filter @mammoth/adapter-contracts build && vitest run test/config.test.ts test/readiness.test.ts test/service.test.ts test/activity-policy.test.ts test/production-activities.test.ts test/p5-workflow-shell.test.ts test/p6-workflow-shell.test.ts",
     "test:live": "pnpm --filter @mammoth/adapter-contracts build && pnpm --filter @mammoth/workflow build && vitest run test/live-probe.test.ts test/research-workflow.test.ts test/research-cli.test.ts test/p5-live-workflow.test.ts --test-timeout 120000 --no-file-parallelism",
     "test:recovery": "pnpm --filter @mammoth/adapter-contracts build && vitest run test/recovery-probe.test.ts test/process-recovery.test.ts --test-timeout 120000",
     "typecheck": "tsc --noEmit"

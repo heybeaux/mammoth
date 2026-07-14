@@ -6,6 +6,8 @@ export * from './live-probe-types.js';
 export * from './p5-workflow-shell.js';
 export * from './p5-workflow-types.js';
 export * from './p5-workflows.js';
+export * from './p6-workflow-shell.js';
+export * from './p6-workflow-types.js';
 export * from './readiness.js';
 export * from './production-activities.js';
 export * from './recovery-probe.js';
