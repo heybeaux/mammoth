@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.0.0",
+  "reviewer": "codex-subagent-independent-editorial-reviewer",
+  "reviewedAt": "2026-07-14T20:36:30.000Z",
+  "appliesTo": {
+    "bundlePath": "/private/tmp/mammoth-p8-integration/research/live-data-center-impacts",
+    "question": "What impacts do data centers have on the communities and environment around them?",
+    "runId": "p8-run:427c5e9e10bb98e1",
+    "manifestDigest": "sha256:427c5e9e10bb98e1ad6af41b00fedf2a13ca62900dbed8b1e9509f9275f95b57",
+    "receiptDigest": "sha256:7dec3674715aa2bd331dbb3f46763c917d7c4372f74348a1fc876dad9c1b1737",
+    "sourceCount": 17,
+    "citedClaimCount": 20,
+    "mode": "report",
+    "liveSearchProvider": {
+      "billingAuthorization": "authorized",
+      "credential": "present-redacted",
+      "provider": "Brave Search API"
+    },
+    "screenshots": {
+      "report": "research/live-data-center-impacts/screenshots/report.png",
+      "evidenceProvenance": "research/live-data-center-impacts/screenshots/evidence-provenance.png"
+    }
+  },
+  "rubric": "evals/fixtures/p8/editorial-rubric.json",
+  "verdict": "pass_with_notes",
+  "criteria": [
+    {
+      "id": "answers-the-question",
+      "verdict": "pass",
+      "notes": "The report directly covers grid, greenhouse-gas, water, land/material, local pollution, community cost, environmental-justice, benefit, and mitigation impacts."
+    },
+    {
+      "id": "clarity",
+      "verdict": "pass_with_notes",
+      "notes": "The report is concise and readable; its terse style reflects deterministic factual sentences bound to admitted evidence."
+    },
+    {
+      "id": "balance",
+      "verdict": "pass",
+      "notes": "The bundle preserves harms, economic benefits, counterarguments, climate-accounting dissent, unresolved gaps, and explicit limitations."
+    },
+    {
+      "id": "relevance",
+      "verdict": "pass",
+      "notes": "The sections map to the charter topics, and cited factual sentences traverse claim IDs to exact locators and immutable live snapshots."
+    },
+    {
+      "id": "actionability",
+      "verdict": "pass",
+      "notes": "Mitigation options include cooling choices, hourly clean-energy procurement, demand flexibility, large-load tariffs, cumulative-impact permitting, and community-benefit agreements."
+    },
+    {
+      "id": "honest-uncertainty",
+      "verdict": "pass_with_notes",
+      "notes": "The bundle records the stop reason, two-cycle decision trail, contradiction entry, limitations, zero rejected residue, costs, and provider identity."
+    }
+  ],
+  "blockers": [],
+  "notes": [
+    "No factual sentence was added, removed, or rewritten by this review.",
+    "This review applies to the separate Brave-backed live bundle preserved outside research/data-center-impacts.",
+    "Secret leakage audit found no Brave API key value in the reviewed bundle."
+  ]
+}

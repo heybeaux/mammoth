@@ -1,0 +1,17 @@
+{
+  "contradictions": [
+    {
+      "id": "live-contradiction-climate-accounting",
+      "statement": "Data-center climate benefit claims remain sensitive to annual versus hourly accounting and local marginal generation.",
+      "status": "preserved_dissent",
+      "topicId": "ghg-emissions"
+    }
+  ],
+  "limitations": [
+    "live_public_web_not_exhaustive",
+    "pdf_ocr_heavy_sources_out_of_scope",
+    "paywall_or_captcha_bypass_prohibited"
+  ],
+  "rejectedResidue": [],
+  "schemaVersion": "1.0.0"
+}
