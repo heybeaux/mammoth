@@ -357,6 +357,7 @@ function forceOfflineP8Environment(): () => void {
     'MAMMOTH_P8_PROVIDER_BASE_URL',
     'MAMMOTH_P8_PROVIDER_MODEL',
     'MAMMOTH_P8_PROVIDER_API_KEY_ENV',
+    'MAMMOTH_P8_PROVIDER_TIMEOUT_MS',
   ] as const;
   const previous = new Map<string, string | undefined>(
     keys.map((key) => [key, process.env[key]]),
