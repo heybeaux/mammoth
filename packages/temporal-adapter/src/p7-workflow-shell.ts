@@ -1,7 +1,7 @@
 import {
   deriveP7ResearchRunId,
   type P7ResearchStatus,
-} from '@mammoth/workflow';
+} from '@mammoth/workflow/p7-contract';
 import type {
   P7LiveResearchCarry,
   P7LiveResearchWorkflowInput,

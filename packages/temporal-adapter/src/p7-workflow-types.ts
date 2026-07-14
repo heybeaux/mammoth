@@ -2,7 +2,7 @@ import type {
   P7ResearchInspection,
   P7ResearchRunRequest,
   P7ResearchStatus,
-} from '@mammoth/workflow';
+} from '@mammoth/workflow/p7-contract';
 
 export const P7_MODEL_PROVIDER_TASK_QUEUE = 'mammoth-local-large-v1';
 

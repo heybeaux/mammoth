@@ -10,7 +10,7 @@ import {
 import {
   deriveP7ResearchRunId,
   type P7ResearchStatus,
-} from '@mammoth/workflow';
+} from '@mammoth/workflow/p7-contract';
 import { carryFrom, executeP7ResearchShell } from './p7-workflow-shell.js';
 import {
   P7_MODEL_PROVIDER_TASK_QUEUE,
