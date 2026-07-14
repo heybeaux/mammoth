@@ -37,6 +37,7 @@ try {
 
 export async function verifyP8(root: string): Promise<P8VerifierResult> {
   const temp = await mkdtemp(join(tmpdir(), 'mammoth-p8-verify-'));
+  const restoredEnvironment = forceOfflineP8Environment();
   try {
     const output = join(temp, 'data-center-impacts');
     const summary = await runP8TurnkeyResearch({
@@ -133,6 +134,74 @@ export async function verifyP8(root: string): Promise<P8VerifierResult> {
         readonly maxDuplicateFactualSentenceRatio: number;
       };
     }>(join(root, 'evals/fixtures/p8/thresholds.json'));
+    const words = markdown
+      .split(/\s+/u)
+      .map((word) => word.trim())
+      .filter((word) => word.length > 0);
+    const spanCountsBySource = new Map<string, number>();
+    for (const span of manifest.evidenceSpans) {
+      spanCountsBySource.set(
+        span.sourceId,
+        (spanCountsBySource.get(span.sourceId) ?? 0) + 1,
+      );
+    }
+    const thinSources = [...spanCountsBySource.entries()]
+      .filter(([, count]) => count < 3)
+      .map(([sourceId]) => sourceId);
+    const spanById = new Map(
+      manifest.evidenceSpans.map((span) => [span.id, span]),
+    );
+    const claimBoundSentences = manifest.blocks.flatMap((block) =>
+      block.sentences.filter((sentence) => sentence.claimIds.length > 0),
+    );
+    const nonQuoteDerivedSentences = claimBoundSentences.filter((sentence) => {
+      const quotes = sentence.locatorIds
+        .map((locatorId) => spanById.get(locatorId)?.locator.quote)
+        .filter((quote): quote is string => Boolean(quote));
+      return (
+        quotes.length === 0 ||
+        !quotes.some((quote) => sentence.text.includes(quote))
+      );
+    });
+    const sectionSentenceCounts = new Map(
+      manifest.blocks.map((block) => [
+        block.id,
+        block.sentences.filter((sentence) => sentence.claimIds.length > 0)
+          .length,
+      ]),
+    );
+    const thinSections = [
+      ['environmental_effects', 12],
+      ['community_economic_effects', 6],
+      ['distributional_environmental_justice', 4],
+      ['benefits_counterarguments', 4],
+      ['context_comparison', 4],
+      ['mitigations_policy_options', 6],
+      ['conflicts_uncertainties_gaps', 1],
+    ].filter(
+      ([sectionId, minimum]) =>
+        (sectionSentenceCounts.get(String(sectionId)) ?? 0) < Number(minimum),
+    );
+    const lowerMarkdown = markdown.toLowerCase();
+    const requiredContentTerms = [
+      'greenhouse',
+      'water',
+      'cooling',
+      'drought',
+      'diesel',
+      'noise',
+      'jobs',
+      'tax',
+      'residential',
+      'environmental justice',
+      'habitat',
+      'tariff',
+      'mitigation',
+      'contested',
+    ];
+    const missingContentTerms = requiredContentTerms.filter(
+      (term) => !lowerMarkdown.includes(term),
+    );
     const rejectsUnrelatedQuestion = await rejectsP8Ask(root, {
       question: 'Do bananas improve battery storage economics?',
       depth: 'comprehensive',
@@ -176,6 +245,13 @@ export async function verifyP8(root: string): Promise<P8VerifierResult> {
       duplicateFactualSentenceRatioWithinThreshold:
         duplicateFactualSentenceRatio <=
         thresholds.readability.maxDuplicateFactualSentenceRatio,
+      substantiveWordCount: words.length >= 2500 && words.length <= 6000,
+      multipleSpansPerAdmittedSource:
+        manifest.evidenceSpans.length >= 30 && thinSources.length === 0,
+      modelAssistedClaimDensity: manifest.claims.length >= 40,
+      contentDerivedClaimText: nonQuoteDerivedSentences.length === 0,
+      comprehensiveSectionDepth: thinSections.length === 0,
+      requiredDomainContentPresent: missingContentTerms.length === 0,
       unrelatedQuestionRejected: rejectsUnrelatedQuestion,
       exploreModeNotSilentlyDowngraded: rejectsExploreMode,
       returnedRunIdCommandsWorkAcrossCwd: runIdCommands,
@@ -198,11 +274,39 @@ export async function verifyP8(root: string): Promise<P8VerifierResult> {
                 (text, index) => factualTexts.indexOf(text) !== index,
               )
             : [],
+        thinSources,
+        nonQuoteDerivedSentences: nonQuoteDerivedSentences.map(
+          (sentence) => sentence.id,
+        ),
+        thinSections: thinSections.map(([sectionId]) => String(sectionId)),
+        missingContentTerms,
       },
     };
   } finally {
+    restoredEnvironment();
     await rm(temp, { recursive: true, force: true });
   }
+}
+
+function forceOfflineP8Environment(): () => void {
+  const keys = [
+    'MAMMOTH_P8_LIVE_RESEARCH',
+    'MAMMOTH_SEARCH_BRAVE_API_KEY',
+    'MAMMOTH_SEARCH_BRAVE_BILLING_AUTHORIZATION',
+    'MAMMOTH_P8_PROVIDER_BASE_URL',
+    'MAMMOTH_P8_PROVIDER_MODEL',
+    'MAMMOTH_P8_PROVIDER_API_KEY_ENV',
+  ] as const;
+  const previous = new Map<string, string | undefined>(
+    keys.map((key) => [key, process.env[key]]),
+  );
+  for (const key of keys) Reflect.deleteProperty(process.env, key);
+  return () => {
+    for (const [key, value] of previous) {
+      if (value === undefined) Reflect.deleteProperty(process.env, key);
+      else process.env[key] = value;
+    }
+  };
 }
 
 async function rejectsP8Ask(
