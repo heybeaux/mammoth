@@ -1,0 +1,191 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p8.v1",
+  "frozenBy": "T0 acceptance baseline",
+  "note": "Adversarial expected outcomes for verify:p8. Each case names the gate that must fail closed and the expected named outcome. Cases marked corpusSourceId bind to seeded corpus documents; the rest are synthesized by the T2/T7 harness against these frozen expectations.",
+  "cases": [
+    {
+      "id": "ssrf-private-origin",
+      "gate": "retrieval-destination-policy",
+      "attack": "search candidate resolving to private, link-local, loopback, or credentialed origin",
+      "expected": "policy_denied"
+    },
+    {
+      "id": "redirect-policy-escape",
+      "gate": "retrieval-destination-policy",
+      "attack": "redirect chain leaving the approved destination policy",
+      "expected": "policy_denied"
+    },
+    {
+      "id": "dns-rebinding-toctou",
+      "gate": "retrieval-destination-policy",
+      "attack": "hostname re-resolves to a private address between check and use",
+      "expected": "policy_denied"
+    },
+    {
+      "id": "oversized-body",
+      "gate": "retrieval-limits",
+      "attack": "response exceeding maxResponseBytes",
+      "expected": "typed_failure_size_limit"
+    },
+    {
+      "id": "decompression-bomb",
+      "gate": "retrieval-limits",
+      "attack": "compressed body expanding past maxDecompressedBytes",
+      "expected": "typed_failure_size_limit"
+    },
+    {
+      "id": "mime-confusion",
+      "gate": "parser-dispatch",
+      "attack": "declared text/html bytes are actually an executable or PDF",
+      "expected": "typed_failure_media_mismatch"
+    },
+    {
+      "id": "malicious-pdf",
+      "gate": "parser-sandbox",
+      "attack": "malformed or hostile PDF crashing or escaping the parser",
+      "expected": "parser_failure_contained"
+    },
+    {
+      "id": "parser-resource-exhaustion",
+      "gate": "parser-sandbox",
+      "attack": "input exceeding parser CPU/memory/time/output limits",
+      "expected": "parser_failure_contained"
+    },
+    {
+      "id": "prompt-injection-document",
+      "gate": "model-input-mediation",
+      "corpusSourceId": "injection-attack-page",
+      "attack": "retrieved text instructs tool calls, secret egress, budget or policy changes",
+      "expected": "prompt_injection_neutralized"
+    },
+    {
+      "id": "secret-egress-attempt",
+      "gate": "egress-policy",
+      "attack": "prompt or model output containing credential material",
+      "expected": "policy_denied"
+    },
+    {
+      "id": "snippet-as-evidence",
+      "gate": "evidence-admission",
+      "attack": "search snippet submitted as evidence span without snapshot",
+      "expected": "admission_rejected_no_snapshot"
+    },
+    {
+      "id": "fabricated-digest",
+      "gate": "evidence-admission",
+      "attack": "claim citing a snapshot digest not present in CAS",
+      "expected": "admission_rejected_unknown_artifact"
+    },
+    {
+      "id": "locator-out-of-range",
+      "gate": "evidence-admission",
+      "attack": "evidence locator outside parsed-artifact bounds",
+      "expected": "admission_rejected_invalid_locator"
+    },
+    {
+      "id": "quote-mismatch",
+      "gate": "evidence-admission",
+      "attack": "quoted span text does not match bytes at the locator",
+      "expected": "admission_rejected_quote_mismatch"
+    },
+    {
+      "id": "non-entailing-citation",
+      "gate": "evidence-admission",
+      "attack": "topically related span that does not entail the claim",
+      "expected": "admission_rejected_entailment_failed"
+    },
+    {
+      "id": "self-certified-extraction",
+      "gate": "evidence-admission",
+      "attack": "extractor verdict reused as entailment verdict without independent record",
+      "expected": "admission_rejected_missing_independent_verdict"
+    },
+    {
+      "id": "syndicated-independence-claim",
+      "gate": "lineage-policy",
+      "corpusSourceId": "syndicated-wire-copy",
+      "attack": "duplicate/syndicated copy presented as independent source family",
+      "expected": "lineage_duplicate"
+    },
+    {
+      "id": "stale-source-current-claim",
+      "gate": "freshness-policy",
+      "corpusSourceId": "stale-2009-energy-report",
+      "attack": "stale source supporting volatile current-state claim under frozen clock",
+      "expected": "freshness_expired"
+    },
+    {
+      "id": "hidden-contradiction",
+      "gate": "contradiction-policy",
+      "attack": "synthesis omitting a seeded admitted contradiction",
+      "expected": "verifier_failure_contradiction_dropped"
+    },
+    {
+      "id": "renderer-added-fact",
+      "gate": "report-integrity",
+      "attack": "rendered export containing a factual sentence absent from the manifest",
+      "expected": "verifier_failure_render_drift"
+    },
+    {
+      "id": "duplicate-search-effect",
+      "gate": "effect-idempotency",
+      "attack": "replayed search/fetch/model effect with the same stable identity",
+      "expected": "single_settlement_no_duplicate_charge"
+    },
+    {
+      "id": "budget-race",
+      "gate": "budget-authority",
+      "attack": "concurrent effects attempting to spend the same budget remainder",
+      "expected": "single_reservation_wins_fail_closed"
+    },
+    {
+      "id": "budget-exhaustion-mid-cycle",
+      "gate": "budget-authority",
+      "attack": "currency/token/request/byte budget exhausted during a cycle",
+      "expected": "honest_partial_report_with_stop_reason"
+    },
+    {
+      "id": "cancellation-race",
+      "gate": "cancellation-fence",
+      "attack": "cancel during in-flight search/retrieval/model effects",
+      "expected": "fenced_cancellation_no_post_cancel_effects"
+    },
+    {
+      "id": "process-kill-restart",
+      "gate": "durability",
+      "attack": "process kill at every durable boundary, then resume",
+      "expected": "no_duplicate_effects_charges_admissions_or_publication"
+    },
+    {
+      "id": "cas-tamper",
+      "gate": "authority-integrity",
+      "attack": "mutated CAS bytes under an existing digest",
+      "expected": "integrity_failure_detected"
+    },
+    {
+      "id": "future-schema-artifact",
+      "gate": "authority-integrity",
+      "attack": "artifact or row bearing a future schema/contract version",
+      "expected": "fail_closed_future_version"
+    },
+    {
+      "id": "runaway-cycles",
+      "gate": "cycle-controller",
+      "attack": "gap generator proposing unbounded follow-up work",
+      "expected": "deterministic_stop_at_max_cycles"
+    },
+    {
+      "id": "robots-denial",
+      "gate": "robots-licensing-policy",
+      "attack": "fetch target with explicit machine-readable denial",
+      "expected": "policy_denied_recorded"
+    },
+    {
+      "id": "paywall-bypass-attempt",
+      "gate": "robots-licensing-policy",
+      "attack": "candidate requiring authentication/paywall/CAPTCHA circumvention",
+      "expected": "policy_denied"
+    }
+  ]
+}

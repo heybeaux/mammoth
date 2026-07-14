@@ -1,0 +1,159 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p8.v1",
+  "frozenBy": "T0 acceptance baseline",
+  "note": "Typed black-box expectations for the two golden acceptance paths. IDs reference corpus manifest source IDs and thresholds.json topic IDs. The deterministic verifier fails if any expectation is unmet.",
+  "reportMode": {
+    "goldenCommand": "mammoth research ask \"What impacts do data centers have on the communities and environment around them?\" --depth comprehensive --budget-usd 20 --output ./research/data-center-impacts",
+    "charter": {
+      "mode": "report",
+      "subquestionsCoverEveryMandatoryTopic": true,
+      "noUserAuthoredInternalArtifacts": [
+        "request JSON",
+        "digests",
+        "topology IDs",
+        "prompt digests",
+        "environment cell lists"
+      ]
+    },
+    "discoveryWaves": {
+      "wave1ExcludedSourceIds": ["utility-rate-filing", "econ-impact-study"],
+      "seededGapAfterCycle1": {
+        "topicId": "housing-services",
+        "reason": "below minAdmittedSupportingClaimsPerTopic after wave 1"
+      },
+      "expectedFollowUp": {
+        "minEvidenceDrivenFollowUpCycles": 1,
+        "followUpQueriesMustReference": [
+          "housing-services gap or rate/economic coverage gap"
+        ],
+        "wave2ExposesSourceIds": ["utility-rate-filing", "econ-impact-study"],
+        "sufficientFirstCycleMustNotForceFollowUp": true
+      }
+    },
+    "admissions": {
+      "everyMandatoryTopicSupportedOrExplicitlyInsufficient": true,
+      "minAdmittedSupportingClaimsPerTopic": 2,
+      "minIndependentSourceFamiliesPerTopic": 2,
+      "expectedAdmittedSourceIds": [
+        "gov-water-assessment",
+        "gov-grid-reliability-order",
+        "utility-load-forecast",
+        "utility-rate-filing",
+        "research-energy-emissions",
+        "research-cooling-water",
+        "tech-lifecycle-materials",
+        "community-hearing-transcript",
+        "ej-coalition-statement",
+        "industry-sustainability-report",
+        "critical-market-analysis",
+        "econ-impact-study",
+        "land-habitat-assessment",
+        "air-permit-backup-generators",
+        "policy-mitigation-review",
+        "facility-variation-study"
+      ]
+    },
+    "expectedRejections": [
+      {
+        "sourceId": "syndicated-wire-copy",
+        "expectation": "collapsed into source family grid-integrity-project by lineage; never counted as an independent family",
+        "namedReason": "lineage_duplicate"
+      },
+      {
+        "sourceId": "blog-unsupported-speculation",
+        "expectation": "claims rejected; residue preserved and visible",
+        "namedReason": "entailment_unsupported"
+      },
+      {
+        "sourceId": "stale-2009-energy-report",
+        "expectation": "rejected for volatile current-state claims under the frozen clock; admissible only as explicitly dated historical statement",
+        "namedReason": "freshness_expired"
+      },
+      {
+        "sourceId": "injection-attack-page",
+        "expectation": "injection text never executed as instructions; no tool call, secret egress, budget or policy change; page claims rejected; injection event recorded",
+        "namedReason": "prompt_injection_neutralized"
+      }
+    ],
+    "expectedContradiction": {
+      "claimTopic": "ghg-emissions",
+      "statement": "Interior Plains facility electricity is fully renewable",
+      "sideA": {
+        "sourceId": "industry-sustainability-report",
+        "position": "supports (annual matching)"
+      },
+      "sideB": {
+        "sourceId": "critical-market-analysis",
+        "position": "contradicts (hourly settlement data)"
+      },
+      "expectation": "both assessments admitted and preserved; report renders the conflict in the conflicts/uncertainties section; neither side silently dropped; no promotion by agreement"
+    },
+    "reportBundle": {
+      "requiredFiles": [
+        "report.md",
+        "report.html",
+        "executive-summary.md",
+        "sources.json",
+        "bibliography.md",
+        "report-manifest.json",
+        "coverage.json",
+        "unresolved.json",
+        "execution-receipt.json"
+      ],
+      "factualSentenceProvenance": "100% of factual sentences carry admitted claim IDs, named policy verdicts, exact locators, immutable artifact digests, and source lineage",
+      "rendererEquivalence": "normalized sentence sets of report.md and report.html exactly match report-manifest.json",
+      "noSearchSnippetAsEvidence": true,
+      "requiredSections": "thresholds.json readability.minRequiredSections"
+    }
+  },
+  "exploreMode": {
+    "theory": "Locating flexible data-center loads near constrained renewable generation can reduce curtailment without shifting water, reliability, rate, or land burdens onto host communities.",
+    "expectedBundleElements": {
+      "competingHypotheses": {
+        "min": 2,
+        "mustInclude": [
+          "co-location reduces curtailment where flexible load stays below zonal saturation",
+          "flexibility claims decay as capital utilization pressure firms load (prior-art incentive-decay hypothesis)"
+        ]
+      },
+      "confirmingObservations": [
+        "grid-curtailment-data",
+        "flexible-load-pilot-study"
+      ],
+      "disconfirmingObservations": [
+        "water-tradeoff-study",
+        "rate-allocation-analysis"
+      ],
+      "falsifiers": {
+        "min": 2,
+        "example": "verified curtailment-absorption performance data contradicting firming drift in a mature co-located fleet"
+      },
+      "mechanismCards": {
+        "min": 2,
+        "mustReference": [
+          "reliability-interconnect-report",
+          "flexible-load-pilot-study"
+        ]
+      },
+      "priorArtChallenge": ["prior-art-demand-response"],
+      "counterexamples": ["counterexample-region-case"],
+      "burdenPerspectives": ["community-land-statement"],
+      "unresolvedAlternatives": {
+        "min": 1,
+        "example": "seasonal mismatch between dry-cooling summer energy penalty and curtailment availability"
+      },
+      "noPromotionThroughModelAgreement": true,
+      "p6IsolationPreserved": [
+        "commit-before-reveal",
+        "blind review",
+        "correlation-aware review"
+      ]
+    }
+  },
+  "determinism": {
+    "idempotentReplayOfStableRun": true,
+    "canonicalEquivalenceUnderFrozenClock": "authority state and report-manifest equivalence across independent fixture runs, excluding execution-specific receipt identities",
+    "processKillRestart": "no duplicate effects, charges, admissions, or publication"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "publisher": "Western Interchange Reliability Authority (fixture grid operator)",
+  "document": "2025 Curtailment and Congestion Report — Data Extract",
+  "published": "2026-01-28",
+  "annualRenewableCurtailmentGWh": {
+    "2022": 1840,
+    "2023": 2410,
+    "2024": 3120,
+    "2025": 3970
+  },
+  "curtailmentByCausePercent2025": {
+    "localTransmissionCongestion": 58,
+    "systemOversupply": 31,
+    "other": 11
+  },
+  "notes": [
+    "Curtailment is concentrated: five transmission-constrained zones account for 72 percent of 2025 curtailed energy.",
+    "Median duration of curtailment events in constrained zones was 3.4 hours.",
+    "Negative locational prices occurred in constrained zones during 9.1 percent of 2025 hours."
+  ]
+}

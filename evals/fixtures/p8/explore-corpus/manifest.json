@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p8.v1",
+  "corpus": "explore",
+  "frozenBy": "T0 acceptance baseline",
+  "question": "Can locating flexible data-center loads near constrained renewable generation reduce curtailment without shifting water, reliability, rate, or land burdens onto host communities?",
+  "clockNote": "Freshness is evaluated against the frozen verifier clock in thresholds.json.",
+  "sources": [
+    {
+      "id": "grid-curtailment-data",
+      "file": "grid-curtailment-data.json",
+      "mediaType": "application/json",
+      "category": "utility_grid",
+      "sourceFamily": "western-interchange-reliability-authority",
+      "publishedDate": "2026-01-28",
+      "role": "confirming_observation",
+      "url": "https://sources.p8.invalid/explore/grid-curtailment-data.json",
+      "bytes": 744,
+      "rawDigest": "sha256:0b3ab12c5b6b99b28337065d2d67af154e5c1d8d0335365eda2d86499360b73a"
+    },
+    {
+      "id": "flexible-load-pilot-study",
+      "file": "flexible-load-pilot-study.html",
+      "mediaType": "text/html",
+      "category": "peer_reviewed_technical",
+      "sourceFamily": "journal-of-power-systems-integration",
+      "publishedDate": "2025-08-19",
+      "role": "confirming_observation",
+      "url": "https://sources.p8.invalid/explore/flexible-load-pilot-study.html",
+      "bytes": 1178,
+      "rawDigest": "sha256:c0b5bca0b27c5ec9e44ec24bf0c57b66dc0e19192913eea17c24968e7e982cca"
+    },
+    {
+      "id": "water-tradeoff-study",
+      "file": "water-tradeoff-study.html",
+      "mediaType": "text/html",
+      "category": "peer_reviewed_technical",
+      "sourceFamily": "arid-lands-research-bulletin",
+      "publishedDate": "2025-10-05",
+      "role": "disconfirming_observation",
+      "url": "https://sources.p8.invalid/explore/water-tradeoff-study.html",
+      "bytes": 1128,
+      "rawDigest": "sha256:d5a6c3bb14b6f9bd66edc7bd5fc7564446189f1207cfee39785c57146ad174ee"
+    },
+    {
+      "id": "rate-allocation-analysis",
+      "file": "rate-allocation-analysis.txt",
+      "mediaType": "text/plain",
+      "category": "primary_government_regulatory",
+      "sourceFamily": "utility-consumer-advocate",
+      "publishedDate": "2026-03-12",
+      "role": "disconfirming_observation",
+      "url": "https://sources.p8.invalid/explore/rate-allocation-analysis.txt",
+      "bytes": 890,
+      "rawDigest": "sha256:a50c2ccba66e4d9fed505368fbe401a5cc4c8e65c745eb90cac25c39dd5bc16f"
+    },
+    {
+      "id": "reliability-interconnect-report",
+      "file": "reliability-interconnect-report.html",
+      "mediaType": "text/html",
+      "category": "utility_grid",
+      "sourceFamily": "western-interchange-reliability-authority",
+      "publishedDate": "2026-02-20",
+      "role": "mechanism_evidence",
+      "url": "https://sources.p8.invalid/explore/reliability-interconnect-report.html",
+      "bytes": 1173,
+      "rawDigest": "sha256:c0a66bccda4ebacb00e7a2825db08a82593fe6cd3a8c8d5683efdb0bc643a5b9"
+    },
+    {
+      "id": "prior-art-demand-response",
+      "file": "prior-art-demand-response.html",
+      "mediaType": "text/html",
+      "category": "peer_reviewed_technical",
+      "sourceFamily": "energy-policy-review",
+      "publishedDate": "2024-11-30",
+      "role": "prior_art_challenge",
+      "url": "https://sources.p8.invalid/explore/prior-art-demand-response.html",
+      "bytes": 1184,
+      "rawDigest": "sha256:100a16214870cc6081813e361c70e3ad336a8ad20bdb04b7ad304f7b8583bb84"
+    },
+    {
+      "id": "counterexample-region-case",
+      "file": "counterexample-region-case.html",
+      "mediaType": "text/html",
+      "category": "critical_analysis",
+      "sourceFamily": "plains-energy-journal",
+      "publishedDate": "2026-04-08",
+      "role": "counterexample",
+      "url": "https://sources.p8.invalid/explore/counterexample-region-case.html",
+      "bytes": 1055,
+      "rawDigest": "sha256:f4f2d94efc1e7cbcc73d3254020bca19484ffe0d1137292e87f3ba22d2a05ab8"
+    },
+    {
+      "id": "community-land-statement",
+      "file": "community-land-statement.txt",
+      "mediaType": "text/plain",
+      "category": "community_local_environmental_justice",
+      "sourceFamily": "cedar-basin-rural-alliance",
+      "publishedDate": "2026-03-25",
+      "role": "burden_perspective",
+      "url": "https://sources.p8.invalid/explore/community-land-statement.txt",
+      "bytes": 850,
+      "rawDigest": "sha256:cbee8633d2851993deaa59006e789e7955f1c1e0229055ae139bc36d7cef8fd8"
+    }
+  ],
+  "manifestDigest": "sha256:4cdeb382b0651ea802534eceef767be3efcd784d8445c3a62e1224a64128a445"
+}

@@ -1,0 +1,334 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p8.v1",
+  "executionReceipt": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "P8ExecutionReceipt",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "receiptVersion",
+      "runId",
+      "programId",
+      "briefDigest",
+      "charterDigest",
+      "mode",
+      "preset",
+      "startedAtUtc",
+      "finishedAtUtc",
+      "stopReason",
+      "partial",
+      "providers",
+      "budgets",
+      "cycles",
+      "effects",
+      "artifacts",
+      "failures",
+      "limitations"
+    ],
+    "properties": {
+      "receiptVersion": { "const": "1.0.0" },
+      "runId": { "type": "string", "minLength": 1 },
+      "programId": { "type": "string", "minLength": 1 },
+      "briefDigest": { "$ref": "#/$defs/digest" },
+      "charterDigest": { "$ref": "#/$defs/digest" },
+      "mode": { "enum": ["report", "explore"] },
+      "preset": { "enum": ["quick", "standard", "comprehensive"] },
+      "startedAtUtc": { "type": "string", "format": "date-time" },
+      "finishedAtUtc": { "type": "string", "format": "date-time" },
+      "stopReason": {
+        "enum": [
+          "sufficiency_met",
+          "coverage_complete",
+          "novelty_saturation",
+          "max_cycles",
+          "budget_currency",
+          "budget_tokens",
+          "budget_time",
+          "budget_requests",
+          "budget_bytes",
+          "cancelled",
+          "provider_unavailable"
+        ]
+      },
+      "partial": { "type": "boolean" },
+      "providers": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["search", "model"],
+        "properties": {
+          "search": { "$ref": "#/$defs/providerIdentity" },
+          "model": { "$ref": "#/$defs/providerIdentity" }
+        }
+      },
+      "budgets": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reserved", "settled", "released"],
+        "properties": {
+          "reserved": { "$ref": "#/$defs/budgetVector" },
+          "settled": { "$ref": "#/$defs/budgetVector" },
+          "released": { "$ref": "#/$defs/budgetVector" }
+        }
+      },
+      "cycles": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cycleId",
+            "decision",
+            "rationaleCode",
+            "coverageSnapshotDigest"
+          ],
+          "properties": {
+            "cycleId": { "type": "string" },
+            "decision": { "enum": ["continue", "stop"] },
+            "rationaleCode": { "type": "string" },
+            "followUpFromGapIds": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "coverageSnapshotDigest": { "$ref": "#/$defs/digest" }
+          }
+        }
+      },
+      "effects": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "searchCount",
+          "retrievalCount",
+          "parseCount",
+          "modelCount",
+          "duplicateReplays"
+        ],
+        "properties": {
+          "searchCount": { "type": "integer", "minimum": 0 },
+          "retrievalCount": { "type": "integer", "minimum": 0 },
+          "parseCount": { "type": "integer", "minimum": 0 },
+          "modelCount": { "type": "integer", "minimum": 0 },
+          "duplicateReplays": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "artifacts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reportManifestDigest",
+          "reportMdDigest",
+          "reportHtmlDigest",
+          "sourcesJsonDigest"
+        ],
+        "properties": {
+          "reportManifestDigest": { "$ref": "#/$defs/digest" },
+          "reportMdDigest": { "$ref": "#/$defs/digest" },
+          "reportHtmlDigest": { "$ref": "#/$defs/digest" },
+          "sourcesJsonDigest": { "$ref": "#/$defs/digest" },
+          "publicationReceiptId": { "type": "string" }
+        }
+      },
+      "failures": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "reasonCode"],
+          "properties": {
+            "kind": { "type": "string" },
+            "reasonCode": { "type": "string" },
+            "effectId": { "type": "string" }
+          }
+        }
+      },
+      "limitations": { "type": "array", "items": { "type": "string" } }
+    },
+    "$defs": {
+      "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+      "providerIdentity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["adapterId", "adapterVersion", "profile"],
+        "properties": {
+          "adapterId": { "type": "string" },
+          "adapterVersion": { "type": "string" },
+          "profile": { "enum": ["fixture", "live", "local"] },
+          "model": { "type": "string" },
+          "endpointHost": { "type": "string" }
+        }
+      },
+      "budgetVector": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["usd", "tokens", "wallTimeSeconds", "requests", "bytes"],
+        "properties": {
+          "usd": { "type": "number", "minimum": 0 },
+          "tokens": { "type": "integer", "minimum": 0 },
+          "wallTimeSeconds": { "type": "number", "minimum": 0 },
+          "requests": { "type": "integer", "minimum": 0 },
+          "bytes": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  },
+  "liveExhibitionReceipt": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "P8LiveExhibitionReceipt",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "receiptVersion",
+      "candidateSha",
+      "dateUtc",
+      "machineProfile",
+      "searchProvider",
+      "modelProvider",
+      "configurationDigest",
+      "promptDigests",
+      "queryEffectIds",
+      "sourceSnapshotDigests",
+      "reportManifestDigest",
+      "artifactDigests",
+      "elapsedSeconds",
+      "tokens",
+      "requests",
+      "bytes",
+      "currencyCostUsd",
+      "cycleDecisions",
+      "failures",
+      "limitations",
+      "verificationCommands"
+    ],
+    "properties": {
+      "receiptVersion": { "const": "1.0.0" },
+      "candidateSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+      "dateUtc": { "type": "string", "format": "date-time" },
+      "machineProfile": { "type": "string" },
+      "searchProvider": { "type": "string" },
+      "modelProvider": { "type": "string" },
+      "configurationDigest": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "promptDigests": {
+        "type": "array",
+        "items": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      },
+      "queryEffectIds": { "type": "array", "items": { "type": "string" } },
+      "sourceSnapshotDigests": {
+        "type": "array",
+        "items": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      },
+      "reportManifestDigest": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "artifactDigests": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "elapsedSeconds": { "type": "number", "minimum": 0 },
+      "tokens": { "type": "integer", "minimum": 0 },
+      "requests": { "type": "integer", "minimum": 0 },
+      "bytes": { "type": "integer", "minimum": 0 },
+      "currencyCostUsd": { "type": "number", "minimum": 0 },
+      "cycleDecisions": { "type": "array", "items": { "type": "object" } },
+      "failures": { "type": "array", "items": { "type": "object" } },
+      "limitations": { "type": "array", "items": { "type": "string" } },
+      "verificationCommands": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["command", "exitCode"],
+          "properties": {
+            "command": { "type": "string" },
+            "exitCode": { "type": "integer" },
+            "summary": { "type": "string" }
+          }
+        }
+      },
+      "screenshots": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Presentation evidence only; never acceptance evidence."
+      }
+    }
+  },
+  "releaseReceipt": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "P8ReleaseReceipt",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "receiptVersion",
+      "release",
+      "codeBearingSha",
+      "planPrs",
+      "codePrs",
+      "receiptPr",
+      "independentReviews",
+      "migrations",
+      "cleanCheckoutGates",
+      "mergedMainCiRun",
+      "goldenBundleDigests",
+      "liveExhibitionReceiptPath",
+      "annotatedTag"
+    ],
+    "properties": {
+      "receiptVersion": { "const": "1.0.0" },
+      "release": { "const": "v0.8.0-turnkey-research" },
+      "codeBearingSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+      "planPrs": { "type": "array", "items": { "type": "integer" } },
+      "codePrs": { "type": "array", "items": { "type": "integer" } },
+      "receiptPr": { "type": "integer" },
+      "independentReviews": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reviewer", "scope", "verdict"],
+          "properties": {
+            "reviewer": { "type": "string" },
+            "scope": { "type": "string" },
+            "verdict": { "enum": ["pass", "pass_with_notes", "blocking"] },
+            "findings": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "migrations": { "type": "array", "items": { "type": "integer" } },
+      "cleanCheckoutGates": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["command", "exitCode"],
+          "properties": {
+            "command": { "type": "string" },
+            "exitCode": { "type": "integer" }
+          }
+        }
+      },
+      "mergedMainCiRun": { "type": "string" },
+      "goldenBundleDigests": {
+        "type": "object",
+        "additionalProperties": { "type": "string" }
+      },
+      "liveExhibitionReceiptPath": { "type": "string" },
+      "annotatedTag": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "targetSha", "tagObjectSha"],
+        "properties": {
+          "name": { "const": "v0.8.0-turnkey-research" },
+          "targetSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "tagObjectSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+        }
+      }
+    }
+  }
+}

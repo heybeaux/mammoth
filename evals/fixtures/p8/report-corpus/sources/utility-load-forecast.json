@@ -1,0 +1,30 @@
+{
+  "publisher": "Interior Plains Power Cooperative (fixture utility)",
+  "document": "2026 Integrated Resource Plan — Load Forecast Extract",
+  "published": "2026-02-10",
+  "peakLoadForecastMW": {
+    "2024": 9140,
+    "2026": 10480,
+    "2028": 12210,
+    "2030": 13890
+  },
+  "dataCenterShareOfPeakLoadPercent": {
+    "2024": 8.2,
+    "2026": 12.7,
+    "2028": 17.9,
+    "2030": 21.4
+  },
+  "generationMix2025Percent": {
+    "gas": 41,
+    "coal": 17,
+    "wind": 24,
+    "solar": 9,
+    "hydro": 5,
+    "other": 4
+  },
+  "notes": [
+    "Committed data-center interconnection agreements total 2,310 MW through 2030.",
+    "The 2030 forecast assumes 55 percent of announced data-center projects reach commercial operation.",
+    "Winter reserve margin falls below the 15 percent planning target in 2029 without 900 MW of new dispatchable capacity."
+  ]
+}
