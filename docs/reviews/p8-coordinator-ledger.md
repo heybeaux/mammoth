@@ -52,22 +52,30 @@ Contracts allowed to change: none existing; introduces frozen p8.v1 acceptance
 Dependencies / integration predecessor: merged entry plan PR #50 (86fff91);
   successor: T1 contract-freeze gate and all T1-T8 lanes resync from T0 merge
 Exact verification commands: node /private/tmp/t0-audit/verify-digests.cjs
-  (independent digest recomputation: 28 source rawDigests, 2 corpus
-  manifestDigests, 7 verifier inputDigests, verifier manifestDigest — all OK);
+  (independent digest recomputation: 32 source rawDigests including hostile
+  fixture bytes, corpus and hostile manifestDigests, 8 verifier inputDigests,
+  verifier manifestDigest — all OK after review-fix regeneration);
   per-topic family-independence recount over admissible sources (all 10
-  mandatory topics >= 2 families); pnpm format:check; exact-head CI ladder
-  through pnpm verify:p7 on PR #51
+  mandatory topics >= 2 families); pnpm format:check (clean); pnpm lint and
+  pnpm typecheck (clean); exact-head CI ladder through pnpm verify:p7 on PR #51
 Handoff recipient: P8 coordinator (integration, review reconciliation, merge)
 Independent reviewer: independent non-author adversarial review against
-  P8_PLAN T0 contract (recorded in PR #51 thread) plus CodeRabbit automated
-  review (SUCCESS)
+  P8_PLAN T0 contract — verdict PASS with findings; 2 MAJOR + 6 MINOR/NIT
+  findings all resolved by strengthening frozen fixtures (committed hostile
+  bytes + digest-pinned generator parameters; irrelevant-source seeded
+  rejection; unified rejection-reason vocabulary; stopReason/artifact schema
+  completion; hostileFixtures wired into verifier inputs) — plus CodeRabbit
+  automated review (SUCCESS)
 Last registry proof: worker session ended after push (branch and PR are the
   durable handoff; no live registry entry claimed)
-Last artifact proof: commits 5d425d3, a7e2565 on origin/t0/acceptance-baseline;
-  PR #51 open against main
-Handoff / commit: PR #51 (t0/acceptance-baseline, head a7e2565)
+Last artifact proof: commits 5d425d3, a7e2565, a1544c6 (coordinator review-fix)
+  on origin/t0/acceptance-baseline; PR #51 open against main
+Handoff / commit: PR #51 (t0/acceptance-baseline, review-fix head a1544c6 plus
+  this ledger evidence commit)
 Integration: coordinator digest re-verification and topic-coverage audit passed
-  2026-07-14; merge pending exact-head CI green and independent review
+  2026-07-14; independent review findings resolved in a1544c6 and re-verified
+  2026-07-14 (format:check, lint, typecheck, full pnpm test all clean locally);
+  merge pending exact-head CI green on the final PR head
 Blockers / replacement audit: none; original worktree preserved and reused only
   by the coordinator for integration
 ```
