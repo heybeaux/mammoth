@@ -332,7 +332,7 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
           this.#options.inputCurrencyMicrosPerMillionTokens,
         outputCurrencyMicrosPerMillionTokens:
           this.#options.outputCurrencyMicrosPerMillionTokens,
-        wallClockMs: Math.max(0, this.#now() - dispatchStartedAt),
+        wallClockMs: Math.ceil(Math.max(0, this.#now() - dispatchStartedAt)),
       });
       if (
         envelope.usage.inputTokens > limits.inputTokens ||

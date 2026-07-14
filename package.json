@@ -36,6 +36,7 @@
     "verify:p4": "tsx scripts/verify-p4.ts",
     "verify:p5": "tsx scripts/verify-p5.ts",
     "verify:p6": "tsx scripts/verify-p6.ts",
+    "verify:p7": "tsx scripts/verify-p7.ts",
     "eval:offline": "tsx scripts/verify-phase-0.ts"
   },
   "devDependencies": {

@@ -38,6 +38,27 @@ importers:
 
   apps/cli:
     dependencies:
+      '@mammoth/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@mammoth/governance':
+        specifier: workspace:*
+        version: link:../../packages/governance
+      '@mammoth/openai-compatible-provider':
+        specifier: workspace:*
+        version: link:../../packages/openai-compatible-provider
+      '@mammoth/p7-application-service':
+        specifier: workspace:*
+        version: link:../../packages/p7-application-service
+      '@mammoth/persistence':
+        specifier: workspace:*
+        version: link:../../packages/persistence
+      '@mammoth/provider-port':
+        specifier: workspace:*
+        version: link:../../packages/provider-port
+      '@mammoth/retrieval':
+        specifier: workspace:*
+        version: link:../../packages/retrieval
       '@mammoth/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
@@ -60,6 +81,9 @@ importers:
       esbuild:
         specifier: ^0.28.1
         version: 0.28.1
+      tsx:
+        specifier: ^4.20.3
+        version: 4.20.3
       typescript:
         specifier: ^5.8.0
         version: 5.8.3

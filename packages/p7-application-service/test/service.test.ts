@@ -102,11 +102,12 @@ describe('P7 research application service', () => {
   it('binds resume and cancel to the authoritative revision', async () => {
     const fixture = new Fixture();
     const service = new P7ResearchApplicationService(fixture, fixture);
-    fixture.current = status('partial', 4);
+    fixture.current = status('running', 4);
     await expect(service.resume(fixture.current.runId)).resolves.toMatchObject({
       state: 'running',
       authoritativeRevision: 5,
     });
+    fixture.current = status('partial', 5);
     await expect(service.cancel(fixture.current.runId)).resolves.toMatchObject({
       state: 'cancelled',
       authoritativeRevision: 6,

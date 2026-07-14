@@ -80,7 +80,11 @@ export class P7ResearchApplicationService implements P7ResearchApplicationPort {
 
   async resume(runId: string): Promise<P7ResearchStatus> {
     const status = await this.authority.status(runId);
-    if (status.state !== 'partial' && status.state !== 'failed')
+    if (
+      status.state !== 'running' &&
+      status.state !== 'partial' &&
+      status.state !== 'failed'
+    )
       throw new Error(`P7 run in state ${status.state} is not resumable`);
     await this.orchestration.resume({
       runId,
