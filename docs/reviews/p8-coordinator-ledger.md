@@ -26,8 +26,10 @@ plan and T0 acceptance-baseline PR merge.
   `plan/turnkey-research-product` / `2e35802`
 - Owned paths: `P8_PLAN.md`, `AGENTS.md`, `LOOP.md`, `README.md`,
   `POST_MVP_ROADMAP.md`, and this ledger
-- Artifact proof: planning diff plus independent product and architecture reviews
-- State: entry-plan PR pending; implementation blocked through T0 baseline merge
+- Artifact proof: commit `84fbb47`; independent product and architecture reviews
+  both returned `PASS`
+- State: entry-plan PR #50 open with CI pending; implementation blocked through T0
+  baseline merge
 
 ## Assignment template
 
