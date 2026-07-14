@@ -126,13 +126,18 @@ export function chatResponse(
 
 export function buildModelWorkRequest(
   manifest: ProviderCapabilityManifest,
-  options: { readonly seed?: number } = {},
+  options: { readonly prompt?: string; readonly seed?: number } = {},
 ): {
   readonly modelWork: ModelWorkRequest;
   readonly canonicalRequestBytes: Uint8Array;
 } {
   const body = {
-    messages: [{ content: 'Return typed research proposals.', role: 'user' }],
+    messages: [
+      {
+        content: options.prompt ?? 'Return typed research proposals.',
+        role: 'user',
+      },
+    ],
     model: manifest.concreteModel,
     response_format: { type: 'json_object' },
     stream: false,

@@ -10,6 +10,7 @@ describe('provider destination policy', () => {
     expect(isLoopbackAddress('127.0.0.1')).toBe(true);
     expect(isLoopbackAddress('::1')).toBe(true);
     expect(isLoopbackAddress('::ffff:127.0.0.1')).toBe(true);
+    expect(isLoopbackAddress('0:0:0:0:0:ffff:7f00:1')).toBe(true);
     expect(isLoopbackAddress('10.0.0.1')).toBe(false);
   });
 
@@ -96,5 +97,19 @@ describe('provider destination policy', () => {
         () => Promise.resolve(['93.184.216.34']),
       ),
     ).rejects.toThrow('PROVIDER_SCHEME_NOT_ALLOWED');
+    await expect(
+      authorizeProviderDestination(
+        new URL('https://provider.example/v1/models'),
+        governed,
+        () => Promise.resolve([]),
+      ),
+    ).rejects.toThrow('PROVIDER_HOST_UNRESOLVED');
+    await expect(
+      authorizeProviderDestination(
+        new URL('https://provider.example/v1/models'),
+        governed,
+        () => Promise.resolve(['not-an-ip']),
+      ),
+    ).rejects.toThrow('PROVIDER_RESOLVER_RETURNED_INVALID_ADDRESS');
   });
 });

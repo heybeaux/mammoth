@@ -62,6 +62,11 @@ export class NodePinnedHttpTransport implements PinnedHttpTransport {
       };
       const requestImpl =
         input.url.protocol === 'https:' ? httpsRequest : httpRequest;
+      const headers = Object.fromEntries(
+        Object.entries(input.headers).filter(
+          ([name]) => name.toLowerCase() !== 'host',
+        ),
+      );
       const request = requestImpl(
         {
           protocol: input.url.protocol,
@@ -69,7 +74,7 @@ export class NodePinnedHttpTransport implements PinnedHttpTransport {
           port: input.url.port || undefined,
           method: input.method,
           path: `${input.url.pathname}${input.url.search}`,
-          headers: { host: input.url.host, ...input.headers },
+          headers: { ...headers, host: input.url.host },
           lookup,
           servername: input.url.hostname,
           agent: false,

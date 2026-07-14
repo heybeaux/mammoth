@@ -46,7 +46,10 @@ describe('node pinned HTTP transport', () => {
       ),
       approvedAddress: '127.0.0.1',
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        Host: 'attacker.invalid',
+      },
       body: new TextEncoder().encode('{"test":true}'),
       signal: new AbortController().signal,
       maximumResponseBytes: 1024,

@@ -1,11 +1,13 @@
 import {
   PROVIDER_CAPABILITY_MANIFEST_VERSION,
+  ModelWorkBudgetSchema,
   ModelWorkRequestSchema,
   ProviderCapabilityManifestSchema,
   ProviderErrorSchema,
   canonicalDigest,
   canonicalJson,
   providerCapabilityManifestDigest,
+  type ModelWorkBudget,
   type ModelWorkRequest,
   type ProviderCapabilityManifest,
   type ProviderError,
@@ -19,6 +21,7 @@ import type {
 import {
   authorizeProviderDestination,
   defaultHostResolver,
+  ProviderAuthorizationError,
   type HostResolver,
   type ProviderNetworkMode,
 } from './security.js';
@@ -46,6 +49,9 @@ export interface OpenAICompatibleProviderOptions {
   readonly maximumRedirects?: number;
   readonly inputCurrencyMicrosPerMillionTokens?: number;
   readonly outputCurrencyMicrosPerMillionTokens?: number;
+  readonly completedResultCapacity?: number;
+  readonly completedResultTtlMs?: number;
+  readonly monotonicNow?: () => number;
   readonly resolveHost?: HostResolver;
   readonly transport?: PinnedHttpTransport;
 }
@@ -65,18 +71,40 @@ interface NormalizedOptions {
   readonly maximumRedirects: number;
   readonly inputCurrencyMicrosPerMillionTokens: number;
   readonly outputCurrencyMicrosPerMillionTokens: number;
+  readonly completedResultCapacity: number;
+  readonly completedResultTtlMs: number;
+}
+
+interface CompletedDispatch {
+  readonly canonicalRequestDigest: string;
+  readonly result: ProviderDispatchResult;
+  readonly expiresAt: number;
+}
+
+interface InFlightDispatch {
+  readonly canonicalRequestDigest: string;
+  readonly execution: Promise<ProviderDispatchResult>;
 }
 
 export class OpenAICompatibleModelProvider implements ModelProviderPort {
   readonly #options: NormalizedOptions;
   readonly #resolveHost: HostResolver;
   readonly #transport: PinnedHttpTransport;
-  readonly #completed = new Map<string, ProviderDispatchResult>();
-  readonly #inFlight = new Map<string, Promise<ProviderDispatchResult>>();
+  readonly #monotonicNow: () => number;
+  readonly #completed = new Map<string, CompletedDispatch>();
+  readonly #inFlight = new Map<string, InFlightDispatch>();
 
   constructor(options: OpenAICompatibleProviderOptions) {
     const baseUrl = new URL(options.baseUrl);
-    const mode = options.mode ?? 'local';
+    const mode: unknown = options.mode ?? 'local';
+    if (mode !== 'local' && mode !== 'governed') {
+      throw new Error('provider mode must be local or governed');
+    }
+    const approvedOrigins = Object.freeze(
+      [...(options.approvedOrigins ?? [baseUrl.origin])].map(
+        normalizeApprovedOrigin,
+      ),
+    );
     const maximumRedirects =
       options.maximumRedirects ?? (mode === 'local' ? 0 : 3);
     if (mode === 'local' && maximumRedirects !== 0) {
@@ -93,7 +121,7 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
         'providerName',
       ),
       mode,
-      approvedOrigins: options.approvedOrigins ?? [baseUrl.origin],
+      approvedOrigins,
       ...(options.apiKeyEnvironmentVariable
         ? {
             apiKeyEnvironmentVariable: requireEnvironmentVariableName(
@@ -126,9 +154,18 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
         options.outputCurrencyMicrosPerMillionTokens ?? 0,
         'outputCurrencyMicrosPerMillionTokens',
       ),
+      completedResultCapacity: requirePositiveInteger(
+        options.completedResultCapacity ?? 256,
+        'completedResultCapacity',
+      ),
+      completedResultTtlMs: requirePositiveInteger(
+        options.completedResultTtlMs ?? 15 * 60_000,
+        'completedResultTtlMs',
+      ),
     };
     this.#resolveHost = options.resolveHost ?? defaultHostResolver;
     this.#transport = options.transport ?? new NodePinnedHttpTransport();
+    this.#monotonicNow = options.monotonicNow ?? (() => performance.now());
   }
 
   async discoverCapabilities(): Promise<ProviderCapabilityManifest> {
@@ -174,22 +211,61 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
     request: ProviderDispatchRequest,
   ): Promise<ProviderDispatchResult> {
     const parsed = ModelWorkRequestSchema.safeParse(request.modelWork);
-    if (!parsed.success) {
+    const parsedLimits = ModelWorkBudgetSchema.safeParse(request.limits);
+    if (!parsed.success || !parsedLimits.success) {
       return failure('schema_incompatible', 'model-work request is invalid');
     }
     const modelWork = parsed.data;
-    const existing = this.#completed.get(modelWork.effect.idempotencyKey);
-    if (existing) return cloneResult(existing);
+    let canonicalRequest: CanonicalRequest;
+    try {
+      canonicalRequest = parseCanonicalRequestIdentity(
+        request.canonicalRequestBytes,
+        modelWork.effect.canonicalRequestDigest,
+      );
+    } catch (error: unknown) {
+      if (error instanceof ProviderBoundaryError) {
+        return { ok: false, error: error.providerError };
+      }
+      return failure('schema_incompatible', 'provider request is invalid');
+    }
+    const key = modelWork.effect.idempotencyKey;
+    const requestDigest = modelWork.effect.canonicalRequestDigest;
+    const existing = this.#completedResult(key);
+    if (existing) {
+      if (existing.canonicalRequestDigest !== requestDigest) {
+        return failure(
+          'schema_incompatible',
+          'idempotency key was reused for a different request',
+        );
+      }
+      return cloneResult(existing.result);
+    }
     const inFlight = this.#inFlight.get(modelWork.effect.idempotencyKey);
-    if (inFlight) return cloneResult(await inFlight);
+    if (inFlight) {
+      if (inFlight.canonicalRequestDigest !== requestDigest) {
+        return failure(
+          'schema_incompatible',
+          'idempotency key was reused for a different request',
+        );
+      }
+      return cloneResult(await inFlight.execution);
+    }
 
-    const execution = this.#dispatchOnce(request, modelWork);
-    this.#inFlight.set(modelWork.effect.idempotencyKey, execution);
+    const execution = this.#dispatchOnce(
+      request,
+      modelWork,
+      parsedLimits.data,
+      canonicalRequest,
+    );
+    this.#inFlight.set(key, {
+      canonicalRequestDigest: requestDigest,
+      execution,
+    });
     try {
       return cloneResult(await execution);
     } finally {
-      if (this.#inFlight.get(modelWork.effect.idempotencyKey) === execution) {
-        this.#inFlight.delete(modelWork.effect.idempotencyKey);
+      if (this.#inFlight.get(key)?.execution === execution) {
+        this.#inFlight.delete(key);
       }
     }
   }
@@ -197,6 +273,8 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
   async #dispatchOnce(
     request: ProviderDispatchRequest,
     modelWork: ModelWorkRequest,
+    limits: ModelWorkBudget,
+    canonicalRequest: CanonicalRequest,
   ): Promise<ProviderDispatchResult> {
     if (request.abortSignal?.aborted) {
       return failure(
@@ -205,6 +283,7 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
       );
     }
 
+    let providerResponseReceived = false;
     try {
       const manifest = await this.#discoverCapabilities(request.abortSignal);
       if (
@@ -218,19 +297,18 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
           'provider identity changed after capability discovery',
         );
       }
-      const body = parseCanonicalChatRequest(
-        request.canonicalRequestBytes,
+      validateCanonicalChatRequest(
+        canonicalRequest.value,
         manifest.concreteModel,
-        modelWork.effect.canonicalRequestDigest,
       );
       const secret = this.#secret();
-      if (secret && body.decoded.includes(secret)) {
+      if (secret && containsSecret(canonicalRequest.value, secret)) {
         return failure(
           'secret_detected',
           'provider prompt contains configured secret',
         );
       }
-      const dispatchStartedAt = Date.now();
+      const dispatchStartedAt = this.#now();
       const response = await this.#request({
         method: 'POST',
         url: new URL(this.#options.chatCompletionsPath, this.#options.baseUrl),
@@ -242,6 +320,7 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
         body: request.canonicalRequestBytes,
         ...(request.abortSignal ? { signal: request.abortSignal } : {}),
       });
+      providerResponseReceived = true;
       if (response.status < 200 || response.status >= 300) {
         return failureForHttpStatus(response.status);
       }
@@ -253,31 +332,42 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
           this.#options.inputCurrencyMicrosPerMillionTokens,
         outputCurrencyMicrosPerMillionTokens:
           this.#options.outputCurrencyMicrosPerMillionTokens,
-        wallClockMs: Math.max(0, Date.now() - dispatchStartedAt),
+        wallClockMs: Math.max(0, this.#now() - dispatchStartedAt),
       });
       if (
-        envelope.usage.inputTokens > request.limits.inputTokens ||
-        envelope.usage.outputTokens > request.limits.outputTokens ||
-        envelope.usage.currencyMicros > request.limits.currencyMicros ||
-        envelope.usage.wallClockMs > request.limits.wallClockMs
+        envelope.usage.inputTokens > limits.inputTokens ||
+        envelope.usage.outputTokens > limits.outputTokens ||
+        envelope.usage.currencyMicros > limits.currencyMicros ||
+        envelope.usage.wallClockMs > limits.wallClockMs
       ) {
-        return failure(
+        const result = failure(
           'budget_exhausted',
           'provider usage exceeds reservation',
         );
+        this.#rememberCompleted(modelWork, result);
+        return cloneResult(result);
       }
       const result: ProviderDispatchResult = { ok: true, envelope };
-      this.#completed.set(modelWork.effect.idempotencyKey, cloneResult(result));
+      this.#rememberCompleted(modelWork, result);
       return cloneResult(result);
     } catch (error: unknown) {
-      if (error instanceof ProviderBoundaryError)
-        return { ok: false, error: error.providerError };
+      if (error instanceof ProviderBoundaryError) {
+        const result: ProviderDispatchResult = {
+          ok: false,
+          error: error.providerError,
+        };
+        if (providerResponseReceived)
+          this.#rememberCompleted(modelWork, result);
+        return cloneResult(result);
+      }
       if (error instanceof PinnedTransportError) {
         if (error.kind === 'response_too_large') {
-          return failure(
+          const result = failure(
             'oversized_output',
             'provider response exceeded limit',
           );
+          this.#rememberCompleted(modelWork, result);
+          return cloneResult(result);
         }
         return error.requestAccepted
           ? failure(
@@ -297,8 +387,9 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
     readonly idempotencyKey: string;
     readonly providerOperationId?: string;
   }): Promise<ProviderDispatchResult | undefined> {
-    const result = this.#completed.get(input.idempotencyKey);
-    if (!result) return Promise.resolve(undefined);
+    const completed = this.#completedResult(input.idempotencyKey);
+    if (!completed) return Promise.resolve(undefined);
+    const { result } = completed;
     if (
       result.ok &&
       input.providerOperationId &&
@@ -307,6 +398,44 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
       return Promise.resolve(undefined);
     }
     return Promise.resolve(cloneResult(result));
+  }
+
+  #completedResult(key: string): CompletedDispatch | undefined {
+    const completed = this.#completed.get(key);
+    if (!completed) return undefined;
+    if (completed.expiresAt <= this.#now()) {
+      this.#completed.delete(key);
+      return undefined;
+    }
+    this.#completed.delete(key);
+    this.#completed.set(key, completed);
+    return completed;
+  }
+
+  #rememberCompleted(
+    modelWork: ModelWorkRequest,
+    result: ProviderDispatchResult,
+  ): void {
+    const key = modelWork.effect.idempotencyKey;
+    this.#completed.delete(key);
+    this.#completed.set(key, {
+      canonicalRequestDigest: modelWork.effect.canonicalRequestDigest,
+      result: cloneResult(result),
+      expiresAt: this.#now() + this.#options.completedResultTtlMs,
+    });
+    while (this.#completed.size > this.#options.completedResultCapacity) {
+      const oldest = this.#completed.keys().next().value;
+      if (!oldest) break;
+      this.#completed.delete(oldest);
+    }
+  }
+
+  #now(): number {
+    const value = this.#monotonicNow();
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error('monotonic clock returned an invalid value');
+    }
+    return value;
   }
 
   async #request(input: {
@@ -320,35 +449,54 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
     const pinnedOrigin = input.url.origin;
     let method = input.method;
     let body = input.body;
-    for (let redirects = 0; ; redirects += 1) {
-      let approvedAddresses: readonly string[];
-      try {
-        approvedAddresses = await authorizeProviderDestination(
-          url,
-          {
-            mode: this.#options.mode,
-            approvedOrigins: this.#options.approvedOrigins,
-          },
-          this.#resolveHost,
-        );
-      } catch {
-        throw new ProviderBoundaryError(
-          failureError(
-            'policy_denied',
-            'provider destination is not authorized',
-          ),
-        );
-      }
-      const controller = new AbortController();
-      const timeout = setTimeout(() => {
-        controller.abort(new ProviderTimeout());
-      }, this.#options.timeoutMs);
-      const abort = () => {
-        controller.abort(new ProviderCancellation());
-      };
-      input.signal?.addEventListener('abort', abort, { once: true });
-      try {
-        if (input.signal?.aborted) abort();
+    let providerEffectAccepted = false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort(new ProviderTimeout());
+    }, this.#options.timeoutMs);
+    const abort = () => {
+      controller.abort(new ProviderCancellation());
+    };
+    input.signal?.addEventListener('abort', abort, { once: true });
+    try {
+      if (input.signal?.aborted) abort();
+      for (let redirects = 0; ; redirects += 1) {
+        let approvedAddresses: readonly string[];
+        try {
+          approvedAddresses = await raceWithAbort(
+            authorizeProviderDestination(
+              url,
+              {
+                mode: this.#options.mode,
+                approvedOrigins: this.#options.approvedOrigins,
+              },
+              this.#resolveHost,
+            ),
+            controller.signal,
+          );
+        } catch (error: unknown) {
+          if (controller.signal.aborted) throw error;
+          if (
+            error instanceof ProviderAuthorizationError &&
+            error.code === 'PROVIDER_HOST_UNRESOLVED'
+          ) {
+            throw new ProviderBoundaryError(
+              failureError(
+                'provider_unavailable',
+                'provider destination could not be resolved',
+              ),
+            );
+          }
+          if (error instanceof ProviderAuthorizationError) {
+            throw new ProviderBoundaryError(
+              failureError(
+                'policy_denied',
+                'provider destination is not authorized',
+              ),
+            );
+          }
+          throw error;
+        }
         const response = await this.#transport.request({
           url,
           approvedAddress: approvedAddresses[0] ?? '',
@@ -358,6 +506,7 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
           signal: controller.signal,
           maximumResponseBytes: this.#options.maximumResponseBytes,
         });
+        if (method === 'POST') providerEffectAccepted = true;
         if (!REDIRECT_STATUSES.has(response.status)) return response;
         if (redirects >= this.#options.maximumRedirects) {
           throw new ProviderBoundaryError(
@@ -386,25 +535,35 @@ export class OpenAICompatibleModelProvider implements ModelProviderPort {
           method = 'GET';
           body = undefined;
         }
-      } catch (error: unknown) {
-        if (controller.signal.reason instanceof ProviderTimeout) {
-          throw new ProviderBoundaryError(
-            failureError(
-              'timeout_before_acceptance',
-              'provider request timed out',
-            ),
-          );
-        }
-        if (controller.signal.reason instanceof ProviderCancellation) {
-          throw new ProviderBoundaryError(
-            failureError('late_response', 'provider request was cancelled'),
-          );
-        }
-        throw error;
-      } finally {
-        clearTimeout(timeout);
-        input.signal?.removeEventListener('abort', abort);
       }
+    } catch (error: unknown) {
+      if (controller.signal.reason instanceof ProviderTimeout) {
+        const acceptedNow =
+          providerEffectAccepted ||
+          (method === 'POST' &&
+            error instanceof PinnedTransportError &&
+            error.requestAccepted);
+        throw new ProviderBoundaryError(
+          acceptedNow
+            ? failureError(
+                'ambiguous_delivery',
+                'provider timed out after request acceptance',
+              )
+            : failureError(
+                'timeout_before_acceptance',
+                'provider request timed out before acceptance',
+              ),
+        );
+      }
+      if (controller.signal.reason instanceof ProviderCancellation) {
+        throw new ProviderBoundaryError(
+          failureError('late_response', 'provider request was cancelled'),
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      input.signal?.removeEventListener('abort', abort);
     }
   }
 
@@ -484,11 +643,15 @@ function parseCapabilityResponse(
   return { concreteModel, checkpoint, contextWindowTokens };
 }
 
-function parseCanonicalChatRequest(
+interface CanonicalRequest {
+  readonly decoded: string;
+  readonly value: unknown;
+}
+
+function parseCanonicalRequestIdentity(
   bytes: Uint8Array,
-  concreteModel: string,
   expectedDigest: string,
-): { readonly decoded: string } {
+): CanonicalRequest {
   let decoded: string;
   try {
     decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
@@ -505,7 +668,7 @@ function parseCanonicalChatRequest(
     value = JSON.parse(decoded) as unknown;
   } catch {
     throw new ProviderBoundaryError(
-      failureError('malformed_output', 'provider request is not valid JSON'),
+      failureError('schema_incompatible', 'provider request is not valid JSON'),
     );
   }
   if (decoded !== canonicalJson(value)) {
@@ -524,6 +687,13 @@ function parseCanonicalChatRequest(
       ),
     );
   }
+  return { decoded, value };
+}
+
+function validateCanonicalChatRequest(
+  value: unknown,
+  concreteModel: string,
+): void {
   const record = requireExactRecord(
     value,
     ['model', 'messages', 'stream', 'response_format', 'temperature', 'seed'],
@@ -601,7 +771,6 @@ function parseCanonicalChatRequest(
     }
     requireNonempty(parsed.content, 'provider message content');
   }
-  return { decoded };
 }
 
 function parseChatCompletionResponse(
@@ -822,6 +991,59 @@ function normalizePath(value: string): string {
     throw new Error('provider path must be absolute and origin-relative');
   }
   return value;
+}
+
+function normalizeApprovedOrigin(value: string): string {
+  const url = new URL(requireNonempty(value, 'approved provider origin'));
+  if (
+    !['http:', 'https:'].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    value !== url.origin
+  ) {
+    throw new Error('approved provider origin must be an exact HTTP(S) origin');
+  }
+  return url.origin;
+}
+
+function containsSecret(value: unknown, secret: string): boolean {
+  if (typeof value === 'string') return value.includes(secret);
+  if (Array.isArray(value)) {
+    return value.some((entry) => containsSecret(entry, secret));
+  }
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value as Record<string, unknown>).some(
+    ([key, entry]) => key.includes(secret) || containsSecret(entry, secret),
+  );
+}
+
+function raceWithAbort<T>(
+  operation: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  if (signal.aborted) return Promise.reject(asError(signal.reason));
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => {
+      reject(asError(signal.reason));
+    };
+    signal.addEventListener('abort', abort, { once: true });
+    operation.then(
+      (value) => {
+        signal.removeEventListener('abort', abort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', abort);
+        reject(asError(error));
+      },
+    );
+  });
+}
+
+function asError(value: unknown): Error {
+  return value instanceof Error
+    ? value
+    : new Error('provider operation failed');
 }
 
 function normalizeCheckpoint(value: string): string {

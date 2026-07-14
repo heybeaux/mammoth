@@ -11,7 +11,11 @@ export interface DestinationPolicy {
 
 const forbidden = new BlockList();
 const publicIpv6 = new BlockList();
+const allIpv4 = new BlockList();
+const loopbackIpv4 = new BlockList();
 publicIpv6.addSubnet('2000::', 3, 'ipv6');
+allIpv4.addSubnet('0.0.0.0', 0, 'ipv4');
+loopbackIpv4.addSubnet('127.0.0.0', 8, 'ipv4');
 for (const [network, prefix] of [
   ['0.0.0.0', 8],
   ['10.0.0.0', 8],
@@ -52,22 +56,46 @@ export const defaultHostResolver: HostResolver = async (hostname) => {
   );
 };
 
+export type ProviderAuthorizationErrorCode =
+  | 'PROVIDER_SCHEME_NOT_ALLOWED'
+  | 'PROVIDER_URL_CREDENTIALS_NOT_ALLOWED'
+  | 'PROVIDER_ORIGIN_NOT_APPROVED'
+  | 'PROVIDER_HOST_UNRESOLVED'
+  | 'PROVIDER_RESOLVER_RETURNED_INVALID_ADDRESS'
+  | 'PROVIDER_LOCAL_MODE_REQUIRES_LOOPBACK'
+  | 'PROVIDER_ADDRESS_NOT_ALLOWED';
+
+export class ProviderAuthorizationError extends Error {
+  constructor(
+    readonly code: ProviderAuthorizationErrorCode,
+    readonly subject: string,
+  ) {
+    super(`${code}:${subject}`);
+    this.name = 'ProviderAuthorizationError';
+  }
+}
+
 export function isLoopbackAddress(address: string): boolean {
-  const mapped = mappedIpv4(address);
-  if (mapped) return isLoopbackAddress(mapped);
-  if (isIP(address) === 4) return address.startsWith('127.');
-  return isIP(address) === 6 && address.toLowerCase() === '::1';
+  const family = isIP(address);
+  if (family === 4) return loopbackIpv4.check(address, 'ipv4');
+  if (family === 6)
+    return (
+      address.toLowerCase() === '::1' || loopbackIpv4.check(address, 'ipv6')
+    );
+  return false;
 }
 
 export function isForbiddenProviderAddress(address: string): boolean {
-  const mapped = mappedIpv4(address);
-  if (mapped) return isForbiddenProviderAddress(mapped);
   const family = isIP(address);
   if (family === 4) return forbidden.check(address, 'ipv4');
-  if (family === 6)
+  if (family === 6) {
+    if (allIpv4.check(address, 'ipv6')) {
+      return forbidden.check(address, 'ipv6');
+    }
     return (
       !publicIpv6.check(address, 'ipv6') || forbidden.check(address, 'ipv6')
     );
+  }
   return true;
 }
 
@@ -77,53 +105,60 @@ export async function authorizeProviderDestination(
   resolveHost: HostResolver,
 ): Promise<readonly string[]> {
   if (!['http:', 'https:'].includes(url.protocol)) {
-    throw new Error(`PROVIDER_SCHEME_NOT_ALLOWED:${url.protocol}`);
+    throw new ProviderAuthorizationError(
+      'PROVIDER_SCHEME_NOT_ALLOWED',
+      url.protocol,
+    );
   }
   if (url.username || url.password) {
-    throw new Error('PROVIDER_URL_CREDENTIALS_NOT_ALLOWED');
+    throw new ProviderAuthorizationError(
+      'PROVIDER_URL_CREDENTIALS_NOT_ALLOWED',
+      url.origin,
+    );
   }
   if (
     policy.mode === 'governed' &&
     !policy.approvedOrigins.includes(url.origin)
   ) {
-    throw new Error(`PROVIDER_ORIGIN_NOT_APPROVED:${url.origin}`);
+    throw new ProviderAuthorizationError(
+      'PROVIDER_ORIGIN_NOT_APPROVED',
+      url.origin,
+    );
   }
-  const addresses = [...new Set(await resolveHost(url.hostname))].sort();
+  let resolved: readonly string[];
+  try {
+    resolved = await resolveHost(url.hostname);
+  } catch {
+    throw new ProviderAuthorizationError(
+      'PROVIDER_HOST_UNRESOLVED',
+      url.hostname,
+    );
+  }
+  const addresses = [...new Set(resolved)].sort();
   if (addresses.length === 0) {
-    throw new Error(`PROVIDER_HOST_UNRESOLVED:${url.hostname}`);
+    throw new ProviderAuthorizationError(
+      'PROVIDER_HOST_UNRESOLVED',
+      url.hostname,
+    );
   }
   if (addresses.some((address) => isIP(address) === 0)) {
-    throw new Error(
-      `PROVIDER_RESOLVER_RETURNED_INVALID_ADDRESS:${url.hostname}`,
+    throw new ProviderAuthorizationError(
+      'PROVIDER_RESOLVER_RETURNED_INVALID_ADDRESS',
+      url.hostname,
     );
   }
   if (policy.mode === 'local') {
     if (!addresses.every(isLoopbackAddress)) {
-      throw new Error(`PROVIDER_LOCAL_MODE_REQUIRES_LOOPBACK:${url.hostname}`);
+      throw new ProviderAuthorizationError(
+        'PROVIDER_LOCAL_MODE_REQUIRES_LOOPBACK',
+        url.hostname,
+      );
     }
   } else if (addresses.some(isForbiddenProviderAddress)) {
-    throw new Error(`PROVIDER_ADDRESS_NOT_ALLOWED:${url.hostname}`);
+    throw new ProviderAuthorizationError(
+      'PROVIDER_ADDRESS_NOT_ALLOWED',
+      url.hostname,
+    );
   }
   return addresses;
-}
-
-function mappedIpv4(address: string): string | undefined {
-  const normalized = address.toLowerCase();
-  if (!normalized.startsWith('::ffff:')) return undefined;
-  const suffix = normalized.slice('::ffff:'.length);
-  if (isIP(suffix) === 4) return suffix;
-  const words = suffix.split(':');
-  if (words.length !== 2) return undefined;
-  const high = Number.parseInt(words[0] ?? '', 16);
-  const low = Number.parseInt(words[1] ?? '', 16);
-  if (
-    !Number.isInteger(high) ||
-    !Number.isInteger(low) ||
-    high < 0 ||
-    high > 0xffff ||
-    low < 0 ||
-    low > 0xffff
-  )
-    return undefined;
-  return `${String(high >>> 8)}.${String(high & 0xff)}.${String(low >>> 8)}.${String(low & 0xff)}`;
 }

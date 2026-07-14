@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ProviderErrorCode } from '@mammoth/domain';
 import { verifyProviderPortConformance } from '@mammoth/provider-port';
 import {
   OpenAICompatibleModelProvider,
@@ -24,6 +25,10 @@ function provider(
     readonly approvedOrigins?: readonly string[];
     readonly resolveHost?: (hostname: string) => Promise<readonly string[]>;
     readonly maximumRedirects?: number;
+    readonly timeoutMs?: number;
+    readonly completedResultCapacity?: number;
+    readonly completedResultTtlMs?: number;
+    readonly monotonicNow?: () => number;
   } = {},
 ) {
   return new OpenAICompatibleModelProvider({
@@ -42,10 +47,44 @@ function provider(
     ...(options.maximumRedirects !== undefined
       ? { maximumRedirects: options.maximumRedirects }
       : {}),
+    ...(options.timeoutMs !== undefined
+      ? { timeoutMs: options.timeoutMs }
+      : {}),
+    ...(options.completedResultCapacity !== undefined
+      ? { completedResultCapacity: options.completedResultCapacity }
+      : {}),
+    ...(options.completedResultTtlMs !== undefined
+      ? { completedResultTtlMs: options.completedResultTtlMs }
+      : {}),
+    ...(options.monotonicNow ? { monotonicNow: options.monotonicNow } : {}),
   });
 }
 
 describe('OpenAI-compatible provider adapter', () => {
+  it('rejects invalid modes and snapshots approved origins', async () => {
+    expect(
+      () =>
+        new OpenAICompatibleModelProvider({
+          baseUrl: 'http://provider.local:11434',
+          configuredModel: 'fixture:latest',
+          mode: 'invalid' as never,
+        }),
+    ).toThrow('provider mode must be local or governed');
+
+    const approvedOrigins = ['http://provider.local:11434'];
+    const transport = new FixtureTransport();
+    transport.responses.push(capabilityResponse());
+    const adapter = provider(transport, {
+      mode: 'governed',
+      approvedOrigins,
+      resolveHost: () => Promise.resolve(['93.184.216.34']),
+    });
+    approvedOrigins[0] = 'http://attacker.invalid';
+    await expect(adapter.discoverCapabilities()).resolves.toMatchObject({
+      concreteModel: 'fixture:latest',
+    });
+  });
+
   it('pins discovered model identity, injects secrets only in headers, deduplicates, and reconciles', async () => {
     const transport = new FixtureTransport();
     transport.responses.push(
@@ -144,6 +183,98 @@ describe('OpenAI-compatible provider adapter', () => {
     ).toHaveLength(1);
   });
 
+  it('validates limits and canonical bytes before cache lookup or network effects', async () => {
+    const transport = new FixtureTransport();
+    transport.responses.push(
+      capabilityResponse(),
+      capabilityResponse(),
+      chatResponse(),
+    );
+    const adapter = provider(transport);
+    const manifest = await adapter.discoverCapabilities();
+    const request = buildModelWorkRequest(manifest);
+    const invalidLimits = await adapter.dispatch({
+      ...request,
+      limits: { ...request.modelWork.budget, inputTokens: Number.NaN },
+    });
+    expect(invalidLimits.ok).toBe(false);
+    if (invalidLimits.ok) throw new Error('expected invalid limits');
+    expect(invalidLimits.error.code).toBe('schema_incompatible');
+    expect(transport.requests).toHaveLength(1);
+
+    const first = await adapter.dispatch({
+      ...request,
+      limits: request.modelWork.budget,
+    });
+    expect(first.ok).toBe(true);
+    const reusedKey = await adapter.dispatch({
+      ...request,
+      canonicalRequestBytes: new TextEncoder().encode('{}'),
+      limits: request.modelWork.budget,
+    });
+    expect(reusedKey.ok).toBe(false);
+    if (reusedKey.ok) throw new Error('expected request identity rejection');
+    expect(reusedKey.error.code).toBe('schema_incompatible');
+    expect(
+      transport.requests.filter((entry) => entry.method === 'POST'),
+    ).toHaveLength(1);
+  });
+
+  it('retains accepted budget failures once and bounds reconciliation by capacity and TTL', async () => {
+    let now = 100;
+    const transport = new FixtureTransport();
+    transport.responses.push(
+      capabilityResponse(),
+      capabilityResponse(),
+      chatResponse(),
+      capabilityResponse(),
+      chatResponse({ id: 'operation-2' }),
+    );
+    const adapter = provider(transport, {
+      completedResultCapacity: 1,
+      completedResultTtlMs: 10,
+      monotonicNow: () => now,
+    });
+    const manifest = await adapter.discoverCapabilities();
+    const firstRequest = buildModelWorkRequest(manifest);
+    const first = await adapter.dispatch({
+      ...firstRequest,
+      limits: { ...firstRequest.modelWork.budget, inputTokens: 1 },
+    });
+    expect(first.ok).toBe(false);
+    if (first.ok) throw new Error('expected budget exhaustion');
+    expect(first.error.code).toBe('budget_exhausted');
+    await expect(
+      adapter.dispatch({
+        ...firstRequest,
+        limits: firstRequest.modelWork.budget,
+      }),
+    ).resolves.toEqual(first);
+    expect(
+      transport.requests.filter((entry) => entry.method === 'POST'),
+    ).toHaveLength(1);
+
+    const secondRequest = buildModelWorkRequest(manifest, {
+      prompt: 'Return a second typed proposal.',
+    });
+    const second = await adapter.dispatch({
+      ...secondRequest,
+      limits: secondRequest.modelWork.budget,
+    });
+    expect(second.ok).toBe(true);
+    await expect(
+      adapter.reconcile({
+        idempotencyKey: firstRequest.modelWork.effect.idempotencyKey,
+      }),
+    ).resolves.toBeUndefined();
+    now = 111;
+    await expect(
+      adapter.reconcile({
+        idempotencyKey: secondRequest.modelWork.effect.idempotencyKey,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
   it('propagates cancellation while capability discovery is in flight', async () => {
     let requestCount = 0;
     let notifyStarted: () => void = () => undefined;
@@ -183,6 +314,89 @@ describe('OpenAI-compatible provider adapter', () => {
     expect(result.error.code).toBe('late_response');
   });
 
+  it('applies cancellation while DNS authorization is in flight', async () => {
+    let resolution = 0;
+    let notifyStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve;
+    });
+    const transport = new FixtureTransport();
+    transport.responses.push(capabilityResponse());
+    const adapter = provider(transport, {
+      resolveHost: () => {
+        resolution += 1;
+        if (resolution === 1) return Promise.resolve(['127.0.0.1']);
+        notifyStarted();
+        return new Promise<readonly string[]>(() => undefined);
+      },
+    });
+    const manifest = await adapter.discoverCapabilities();
+    const request = buildModelWorkRequest(manifest);
+    const controller = new AbortController();
+    const pending = adapter.dispatch({
+      ...request,
+      limits: request.modelWork.budget,
+      abortSignal: controller.signal,
+    });
+    await started;
+    controller.abort();
+    const result = await pending;
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected DNS cancellation');
+    expect(result.error.code).toBe('late_response');
+    expect(transport.requests).toHaveLength(1);
+  });
+
+  it('classifies post-acceptance timeout as ambiguous delivery', async () => {
+    let requestCount = 0;
+    const transport: PinnedHttpTransport = {
+      request(input) {
+        requestCount += 1;
+        if (requestCount <= 2) return Promise.resolve(capabilityResponse());
+        return new Promise((_resolve, reject) => {
+          input.signal.addEventListener(
+            'abort',
+            () => {
+              reject(new PinnedTransportError('timed out', true));
+            },
+            { once: true },
+          );
+        });
+      },
+    };
+    const adapter = provider(transport, { timeoutMs: 10 });
+    const manifest = await adapter.discoverCapabilities();
+    const request = buildModelWorkRequest(manifest);
+    const result = await adapter.dispatch({
+      ...request,
+      limits: request.modelWork.budget,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected ambiguous timeout');
+    expect(result.error.code).toBe('ambiguous_delivery');
+  });
+
+  it('treats unresolved discovery as transient provider unavailability', async () => {
+    let resolution = 0;
+    const transport = new FixtureTransport();
+    transport.responses.push(capabilityResponse());
+    const adapter = provider(transport, {
+      resolveHost: () => {
+        resolution += 1;
+        return Promise.resolve(resolution === 1 ? ['127.0.0.1'] : []);
+      },
+    });
+    const manifest = await adapter.discoverCapabilities();
+    const request = buildModelWorkRequest(manifest);
+    const result = await adapter.dispatch({
+      ...request,
+      limits: request.modelWork.budget,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected provider unavailability');
+    expect(result.error.code).toBe('provider_unavailable');
+  });
+
   it('fails closed when alias or checkpoint identity drifts after discovery', async () => {
     const transport = new FixtureTransport();
     transport.responses.push(
@@ -207,12 +421,15 @@ describe('OpenAI-compatible provider adapter', () => {
   it('rejects secrets in canonical prompt bytes before the provider call', async () => {
     const transport = new FixtureTransport();
     transport.responses.push(capabilityResponse(), capabilityResponse());
+    const secret = 'fixture"secret\\with\nnewline';
     const adapter = provider(transport, {
-      environment: { MAMMOTH_PROVIDER_KEY: 'Return typed research proposals.' },
+      environment: { MAMMOTH_PROVIDER_KEY: secret },
       apiKeyEnvironmentVariable: 'MAMMOTH_PROVIDER_KEY',
     });
     const manifest = await adapter.discoverCapabilities();
-    const request = buildModelWorkRequest(manifest);
+    const request = buildModelWorkRequest(manifest, {
+      prompt: `Never include ${secret} in a prompt.`,
+    });
     const result = await adapter.dispatch({
       ...request,
       limits: request.modelWork.budget,
@@ -301,7 +518,7 @@ describe('OpenAI-compatible provider adapter', () => {
   it('classifies HTTP, malformed usage, ambiguous transport, and reservation failures', async () => {
     const cases: {
       readonly response: ReturnType<typeof jsonResponse> | Error;
-      readonly code: string;
+      readonly code: ProviderErrorCode;
     }[] = [
       { response: jsonResponse({}, { status: 429 }), code: 'rate_limited' },
       {
