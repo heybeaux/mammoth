@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "single-local-provider-exhibition",
+  "ok": true,
+  "runAt": "2026-07-14T08:09:49.490Z",
+  "baseRevision": "bfe041e6c9fa91909c5d01bd272b68d50b96d818",
+  "runtime": {
+    "node": "v22.22.2",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "endpoint": {
+    "origin": "http://127.0.0.1:11434",
+    "classification": "local-loopback"
+  },
+  "manifest": {
+    "schemaVersion": "1.0.0",
+    "provider": "ollama",
+    "concreteModel": "llama3.2:3b",
+    "checkpoint": "sha256:a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72",
+    "modalities": ["text"],
+    "contextWindowTokens": 4096,
+    "supportsJsonOutput": true,
+    "supportsSeed": false,
+    "manifestDigest": "sha256:6855032baf1882faff617f4b32e7f93d3452ede1636bd022b1ac84cd59c88a6d"
+  },
+  "identities": {
+    "modelWork": "sha256:1048832778389eb4524f409c15de92034ad09f8a73058d4e453ed32b6354751d",
+    "providerAttempt": "sha256:696b99273874c4e83c5b581c7434aed7a08077435d3a823d4016d3c43402d160",
+    "providerEffect": "sha256:4be36ed5ad129c7b832dcf8eefb96b5ae745be0b04a3fbdc49dd5f99cc8556fa",
+    "capabilityManifest": "sha256:6855032baf1882faff617f4b32e7f93d3452ede1636bd022b1ac84cd59c88a6d",
+    "modelProfileVersion": "profile-version-1",
+    "modelProfileVersionDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "promptTemplate": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policy": "sha256:66ba835add9ad9bc5c867b4cf0de66e72adc4134029025a466db8e2101411898",
+    "toolContract": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "outputSchema": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "requestDigest": "sha256:c3bc86a4235547588b40a3fb80c4559f3405961d6ac71ba7fecc59913700f6cc",
+  "providerOperationId": "chatcmpl-228",
+  "usage": {
+    "inputTokens": 30,
+    "outputTokens": 78,
+    "totalTokens": 108,
+    "currencyMicros": 0,
+    "wallClockMs": 1205,
+    "toolCalls": 0
+  },
+  "finishReason": "stop",
+  "responseDigest": "sha256:e59a1a39593700fef317d5dc3f30f26f15ba991cc1f866ce4e11f625d9ef1e93",
+  "resultDigest": "sha256:8edd53c26bdf6690e3e49320b2aa164c9f2e6962dc8b96ecfa8468bb346cf062",
+  "returnedModel": "llama3.2:3b",
+  "returnedCheckpoint": "sha256:a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72",
+  "temperature": 0,
+  "seed": "unsupported",
+  "timeoutMs": 120000,
+  "retries": 0,
+  "reconciliationMatched": true,
+  "typedOutputAccepted": false,
+  "limitations": [
+    "Single local exhibition; no quality or reproducibility claim.",
+    "Raw response remained in process memory; authoritative CAS retention belongs to T3.",
+    "Fixture model-profile and research identity chain; live topology composition belongs to T4.",
+    "The response was valid OpenAI-compatible JSON, but its message content did not satisfy the frozen typed-output schema."
+  ]
+}
