@@ -35,6 +35,7 @@ import {
   PostgresModelLineageRepository,
   PostgresResearchCellRepository,
 } from '../src/research-cells.js';
+import { PostgresTopologyRepository } from '../src/p6-topology.js';
 
 type Row = Record<string, unknown>;
 
@@ -253,6 +254,88 @@ describe('research-cell migration', () => {
     expect(foundationMigrations[6]?.sql).toContain(
       'P6 topology cancellation amount exceeds reservation ceiling',
     );
+    expect(foundationMigrations[6]?.sql).toContain(
+      'P6 topology authority rows are immutable',
+    );
+    expect(foundationMigrations[6]?.sql).toContain(
+      'P6 topology authority rows cannot be deleted',
+    );
+    expect(foundationMigrations[6]?.sql).toContain(
+      'mammoth_p6_topology_budget_settlements_update_guard',
+    );
+    expect(foundationMigrations[6]?.sql).toContain(
+      'mammoth_p6_topology_cancellation_receipts_delete_guard',
+    );
+  });
+
+  it('fails P6 budget settlement when no reservation transition occurs', async () => {
+    const database = new RecordingDatabase();
+    database.handler = (sql) => {
+      if (sql.includes('insert into mammoth_p6_topology_budget_settlements'))
+        return result({
+          id: 'settlement-a',
+          stable_identity: 'settlement:stable',
+          reservation_id: 'reservation-a',
+          amount: { costUsd: 1, tokens: 1, durationMs: 1 },
+          settled_at: '2026-07-14T00:00:00.000Z',
+          receipt_id: 'receipt-settlement',
+        });
+      if (sql.includes('update mammoth_p6_topology_budget_reservations'))
+        return empty(0);
+      return empty(1);
+    };
+    const repo = new PostgresTopologyRepository(database, { transaction });
+
+    await expect(
+      repo.settleBudget({
+        id: 'settlement-a',
+        stableIdentity: 'settlement:stable',
+        reservationId: 'reservation-a',
+        amount: { costUsd: 1, tokens: 1, durationMs: 1 },
+        settledAt: '2026-07-14T00:00:00.000Z',
+        receiptId: 'receipt-settlement',
+      }),
+    ).rejects.toMatchObject({
+      code: 'invalid_migration_set',
+      retryable: false,
+    });
+  });
+
+  it('rejects P6 duplicate settlement stable identity with different payload', async () => {
+    const database = new RecordingDatabase();
+    database.handler = (sql) => {
+      if (sql.includes('insert into mammoth_p6_topology_budget_settlements'))
+        return empty(0);
+      if (
+        sql.includes(
+          'select * from mammoth_p6_topology_budget_settlements where stable_identity',
+        )
+      )
+        return result({
+          id: 'settlement-a',
+          stable_identity: 'settlement:stable',
+          reservation_id: 'reservation-a',
+          amount: { costUsd: 2, tokens: 1, durationMs: 1 },
+          settled_at: '2026-07-14T00:00:00.000Z',
+          receipt_id: 'receipt-settlement',
+        });
+      return empty(1);
+    };
+    const repo = new PostgresTopologyRepository(database, { transaction });
+
+    await expect(
+      repo.settleBudget({
+        id: 'settlement-a',
+        stableIdentity: 'settlement:stable',
+        reservationId: 'reservation-a',
+        amount: { costUsd: 1, tokens: 1, durationMs: 1 },
+        settledAt: '2026-07-14T00:00:00.000Z',
+        receiptId: 'receipt-settlement',
+      }),
+    ).rejects.toMatchObject({
+      code: 'invalid_migration_set',
+      retryable: false,
+    });
   });
 
   it('installs P6 research-topology schema on an empty database and is repeatable after restart', async () => {

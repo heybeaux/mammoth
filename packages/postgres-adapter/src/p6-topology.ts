@@ -198,11 +198,12 @@ export class PostgresTopologyRepository implements TopologyRepository {
   ): Promise<TopologyBudgetSettlementRecord> {
     const record = TopologyBudgetSettlementRecordSchema.parse(input);
     await this.database.transaction(this.options.transaction, async (tx) => {
-      await tx.query(
+      const inserted = await tx.query(
         `insert into mammoth_p6_topology_budget_settlements
           (id, stable_identity, reservation_id, amount, settled_at, receipt_id)
          values ($1,$2,$3,$4::jsonb,$5::timestamptz,$6)
-         on conflict (stable_identity) do nothing`,
+         on conflict (stable_identity) do nothing
+         returning *`,
         [
           record.id,
           record.stableIdentity,
@@ -212,12 +213,27 @@ export class PostgresTopologyRepository implements TopologyRepository {
           record.receiptId,
         ],
       );
-      await tx.query(
+      if (inserted.rowCount === 0) {
+        await assertExistingStable(
+          tx,
+          'mammoth_p6_topology_budget_settlements',
+          record,
+          toTopologySettlement,
+        );
+        return;
+      }
+      const updated = await tx.query(
         `update mammoth_p6_topology_budget_reservations
             set state = 'settled', revision = revision + 1, updated_at = $2::timestamptz
           where id = $1 and state = 'reserved'`,
         [record.reservationId, record.settledAt],
       );
+      if (updated.rowCount !== 1)
+        throw new PostgresAdapterError(
+          'invalid_migration_set',
+          'P6 topology settlement did not close exactly one reservation',
+          { retryable: false },
+        );
     });
     return record;
   }
@@ -227,11 +243,12 @@ export class PostgresTopologyRepository implements TopologyRepository {
   ): Promise<TopologyBudgetReleaseRecord> {
     const record = TopologyBudgetReleaseRecordSchema.parse(input);
     await this.database.transaction(this.options.transaction, async (tx) => {
-      await tx.query(
+      const inserted = await tx.query(
         `insert into mammoth_p6_topology_budget_releases
           (id, stable_identity, reservation_id, released_at, receipt_id)
          values ($1,$2,$3,$4::timestamptz,$5)
-         on conflict (stable_identity) do nothing`,
+         on conflict (stable_identity) do nothing
+         returning *`,
         [
           record.id,
           record.stableIdentity,
@@ -240,12 +257,27 @@ export class PostgresTopologyRepository implements TopologyRepository {
           record.receiptId,
         ],
       );
-      await tx.query(
+      if (inserted.rowCount === 0) {
+        await assertExistingStable(
+          tx,
+          'mammoth_p6_topology_budget_releases',
+          record,
+          toTopologyRelease,
+        );
+        return;
+      }
+      const updated = await tx.query(
         `update mammoth_p6_topology_budget_reservations
             set state = 'released', revision = revision + 1, updated_at = $2::timestamptz
           where id = $1 and state = 'reserved'`,
         [record.reservationId, record.releasedAt],
       );
+      if (updated.rowCount !== 1)
+        throw new PostgresAdapterError(
+          'invalid_migration_set',
+          'P6 topology release did not close exactly one reservation',
+          { retryable: false },
+        );
     });
     return record;
   }
@@ -255,12 +287,13 @@ export class PostgresTopologyRepository implements TopologyRepository {
   ): Promise<TopologyCancellationReceiptRecord> {
     const record = TopologyCancellationReceiptRecordSchema.parse(input);
     await this.database.transaction(this.options.transaction, async (tx) => {
-      await tx.query(
+      const inserted = await tx.query(
         `insert into mammoth_p6_topology_cancellation_receipts
           (id, stable_identity, topology_id, cell_id, attempt_id, reservation_id, program_id,
            reason, consumed, released, partial_result_digest, cancelled_at)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12::timestamptz)
-         on conflict (stable_identity) do nothing`,
+         on conflict (stable_identity) do nothing
+         returning *`,
         [
           record.id,
           record.stableIdentity,
@@ -276,13 +309,28 @@ export class PostgresTopologyRepository implements TopologyRepository {
           record.cancelledAt,
         ],
       );
+      if (inserted.rowCount === 0) {
+        await assertExistingStable(
+          tx,
+          'mammoth_p6_topology_cancellation_receipts',
+          record,
+          toTopologyCancellation,
+        );
+        return;
+      }
       if (record.reservationId) {
-        await tx.query(
+        const updated = await tx.query(
           `update mammoth_p6_topology_budget_reservations
               set state = 'cancelled', revision = revision + 1, updated_at = $2::timestamptz
             where id = $1 and state = 'reserved'`,
           [record.reservationId, record.cancelledAt],
         );
+        if (updated.rowCount !== 1)
+          throw new PostgresAdapterError(
+            'invalid_migration_set',
+            'P6 topology cancellation did not close exactly one reservation',
+            { retryable: false },
+          );
       }
     });
     return record;
@@ -443,6 +491,27 @@ export class PostgresTopologyRepository implements TopologyRepository {
         );
     });
   }
+}
+
+async function assertExistingStable<T>(
+  database: PostgresConnection,
+  table: string,
+  expected: T & { readonly stableIdentity: string },
+  mapRow: (row: Record<string, unknown>) => T,
+): Promise<void> {
+  const existing = await database.query(
+    `select * from ${table} where stable_identity = $1`,
+    [expected.stableIdentity],
+  );
+  if (
+    !existing.rows[0] ||
+    canonicalDigest(mapRow(existing.rows[0])) !== canonicalDigest(expected)
+  )
+    throw new PostgresAdapterError(
+      'invalid_migration_set',
+      'topology stable identity reused with different payload',
+      { retryable: false },
+    );
 }
 
 function jsonArray(value: unknown): readonly string[] {

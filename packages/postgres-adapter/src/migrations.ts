@@ -1629,6 +1629,87 @@ $$;
 create trigger mammoth_p6_topology_cancellation_receipt_guard
   before insert on mammoth_p6_topology_cancellation_receipts
   for each row execute function mammoth_p6_guard_cancellation_receipt();
+
+create function mammoth_p6_forbid_authority_update()
+returns trigger
+language plpgsql
+as $$
+begin
+  raise exception 'P6 topology authority rows are immutable';
+end;
+$$;
+
+create function mammoth_p6_forbid_authority_delete()
+returns trigger
+language plpgsql
+as $$
+begin
+  raise exception 'P6 topology authority rows cannot be deleted';
+end;
+$$;
+
+create trigger mammoth_p6_topology_plans_update_guard
+  before update on mammoth_p6_topology_plans
+  for each row execute function mammoth_p6_forbid_authority_update();
+create trigger mammoth_p6_topology_plans_delete_guard
+  before delete on mammoth_p6_topology_plans
+  for each row execute function mammoth_p6_forbid_authority_delete();
+
+create trigger mammoth_p6_topology_cells_update_guard
+  before update on mammoth_p6_topology_cells
+  for each row execute function mammoth_p6_forbid_authority_update();
+create trigger mammoth_p6_topology_cells_delete_guard
+  before delete on mammoth_p6_topology_cells
+  for each row execute function mammoth_p6_forbid_authority_delete();
+
+create trigger mammoth_p6_topology_dependencies_update_guard
+  before update on mammoth_p6_topology_dependencies
+  for each row execute function mammoth_p6_forbid_authority_update();
+create trigger mammoth_p6_topology_dependencies_delete_guard
+  before delete on mammoth_p6_topology_dependencies
+  for each row execute function mammoth_p6_forbid_authority_delete();
+
+create trigger mammoth_p6_topology_attempts_update_guard
+  before update on mammoth_p6_topology_attempts
+  for each row execute function mammoth_p6_forbid_authority_update();
+create trigger mammoth_p6_topology_attempts_delete_guard
+  before delete on mammoth_p6_topology_attempts
+  for each row execute function mammoth_p6_forbid_authority_delete();
+
+create trigger mammoth_p6_topology_budget_settlements_update_guard
+  before update on mammoth_p6_topology_budget_settlements
+  for each row execute function mammoth_p6_forbid_authority_update();
+create trigger mammoth_p6_topology_budget_settlements_delete_guard
+  before delete on mammoth_p6_topology_budget_settlements
+  for each row execute function mammoth_p6_forbid_authority_delete();
+
+create trigger mammoth_p6_topology_budget_releases_update_guard
+  before update on mammoth_p6_topology_budget_releases
+  for each row execute function mammoth_p6_forbid_authority_update();
+create trigger mammoth_p6_topology_budget_releases_delete_guard
+  before delete on mammoth_p6_topology_budget_releases
+  for each row execute function mammoth_p6_forbid_authority_delete();
+
+create trigger mammoth_p6_topology_cancellation_receipts_update_guard
+  before update on mammoth_p6_topology_cancellation_receipts
+  for each row execute function mammoth_p6_forbid_authority_update();
+create trigger mammoth_p6_topology_cancellation_receipts_delete_guard
+  before delete on mammoth_p6_topology_cancellation_receipts
+  for each row execute function mammoth_p6_forbid_authority_delete();
+
+create trigger mammoth_p6_topology_scheduler_snapshots_update_guard
+  before update on mammoth_p6_topology_scheduler_snapshots
+  for each row execute function mammoth_p6_forbid_authority_update();
+create trigger mammoth_p6_topology_scheduler_snapshots_delete_guard
+  before delete on mammoth_p6_topology_scheduler_snapshots
+  for each row execute function mammoth_p6_forbid_authority_delete();
+
+create trigger mammoth_p6_topology_receipts_update_guard
+  before update on mammoth_p6_topology_receipts
+  for each row execute function mammoth_p6_forbid_authority_update();
+create trigger mammoth_p6_topology_receipts_delete_guard
+  before delete on mammoth_p6_topology_receipts
+  for each row execute function mammoth_p6_forbid_authority_delete();
 `.trim(),
   }),
 ]);

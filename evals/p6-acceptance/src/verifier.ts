@@ -176,8 +176,8 @@ export const P6_GATES: readonly P6GateSpec[] = [
   {
     id: 'temporal-execution-recovery',
     description: 'Lane B parent/child Temporal execution, recovery, and replay',
-    requiredPath: 'packages/temporal-adapter/test/p6-workflow-shell.test.ts',
-    command: ['pnpm', '--filter', '@mammoth/temporal-adapter', 'test'],
+    requiredPath: 'packages/temporal-adapter/test/p6-live-workflow.test.ts',
+    command: ['pnpm', '--filter', '@mammoth/temporal-adapter', 'test:p6-live'],
   },
   {
     id: 'synthesis-provenance',
@@ -190,6 +190,131 @@ export const P6_GATES: readonly P6GateSpec[] = [
     description: 'Lane C read-only fail-closed P6 topology projection',
     requiredPath: 'packages/observatory-projection/package.json',
     command: ['pnpm', '--filter', '@mammoth/observatory-projection', 'test'],
+  },
+];
+
+export const P6_EXECUTABLE_CASE_PROOFS: readonly {
+  readonly caseId: (typeof REQUIRED_P6_CASES)[number];
+  readonly path: string;
+  readonly snippets: readonly string[];
+}[] = [
+  {
+    caseId: 'topology-cycle',
+    path: 'packages/domain/test/topology.test.ts',
+    snippets: ['cycle', 'cyclic_dependency'],
+  },
+  {
+    caseId: 'topology-missing-dependency-node',
+    path: 'packages/domain/test/topology.test.ts',
+    snippets: ['missing_dependency', "nodeId: 'missing'"],
+  },
+  {
+    caseId: 'topology-unknown-template-version',
+    path: 'packages/domain/test/topology.test.ts',
+    snippets: ['unknown-template', 'unknown_template'],
+  },
+  {
+    caseId: 'topology-unbounded-concurrency-or-budget',
+    path: 'packages/domain/test/topology.test.ts',
+    snippets: ['maxConcurrentCells', 'budgetCeiling'],
+  },
+  {
+    caseId: 'topology-duplicate-stable-node-identities',
+    path: 'packages/domain/test/topology.test.ts',
+    snippets: ['duplicate', 'duplicate_node'],
+  },
+  {
+    caseId: 'criterion-drift-parent-child',
+    path: 'packages/domain/test/topology.test.ts',
+    snippets: ['criterion', 'branch'],
+  },
+  {
+    caseId: 'landscape-output-missing-claim-or-evidence-ids',
+    path: 'packages/domain/test/topology.test.ts',
+    snippets: ['landscape', 'invalid_dependency_artifact'],
+  },
+  {
+    caseId: 'divergence-agreement-over-unsupported-claims',
+    path: 'packages/report-compiler/test/p6-synthesis.test.ts',
+    snippets: ['UNADMITTED_CLAIM', 'claim-unadmitted'],
+  },
+  {
+    caseId: 'correlated-consensus-presented-as-independent-support',
+    path: 'packages/report-compiler/test/p6-synthesis.test.ts',
+    snippets: ['correlated', 'nonAuthoritative: true'],
+  },
+  {
+    caseId: 'valid-dissent-retained-through-synthesis',
+    path: 'packages/report-compiler/test/p6-synthesis.test.ts',
+    snippets: ['preservedDissentIds', 'dissent-minority'],
+  },
+  {
+    caseId: 'adversarial-dissent-with-admissible-contradictory-evidence',
+    path: 'packages/report-compiler/test/p6-synthesis.test.ts',
+    snippets: ['unresolvedIssueIds', 'issue-boundary'],
+  },
+  {
+    caseId: 'prior-art-novelty-statuses-without-universal-novelty',
+    path: 'packages/domain/src/topology.ts',
+    snippets: ['prior_art', 'Novelty Challenger'],
+  },
+  {
+    caseId: 'falsification-preserves-counterexamples-and-invalid-critiques',
+    path: 'packages/domain/src/topology.ts',
+    snippets: ['falsification', 'Boundary-Condition Analyst'],
+  },
+  {
+    caseId: 'experiment-hidden-holdout-invalid-failed-cancelled-valid',
+    path: 'packages/report-compiler/src/p6-synthesis.ts',
+    snippets: ['hidden_holdout_leakage', 'invalid_environment_digest'],
+  },
+  {
+    caseId: 'evidence-aware-synthesis-invalid-inputs-and-admitted-only',
+    path: 'packages/report-compiler/test/p6-synthesis.test.ts',
+    snippets: ['MISSING_EVIDENCE', 'INVALID_POLICY_VERDICT'],
+  },
+  {
+    caseId: 'scheduler-idle-blocked-concurrency-budget-distinct',
+    path: 'packages/domain/test/topology.test.ts',
+    snippets: ['budget_starved', 'blocked_dependencies'],
+  },
+  {
+    caseId: 'duplicate-topology-child-budget-effect-cancellation-receipts',
+    path: 'packages/postgres-adapter/test/research-cells.test.ts',
+    snippets: ['duplicate settlement stable identity', 'different payload'],
+  },
+  {
+    caseId: 'budget-starvation-before-dispatch-and-mid-topology',
+    path: 'packages/domain/test/topology.test.ts',
+    snippets: ['budget_starved', 'idle_complete'],
+  },
+  {
+    caseId: 'cancellation-before-during-after-child-synthesis-settlement',
+    path: 'packages/temporal-adapter/test/p6-live-workflow.test.ts',
+    snippets: ['after_child_before_synthesis', 'during_synthesis'],
+  },
+  {
+    caseId: 'worker-activity-client-service-death-parent-child-boundaries',
+    path: 'packages/temporal-adapter/test/p6-live-workflow.test.ts',
+    snippets: ['worker replacement', 'client handle loss'],
+  },
+  {
+    caseId: 'continue-as-new-and-replay-supported-p6-versions',
+    path: 'packages/temporal-adapter/test/p6-live-workflow.test.ts',
+    snippets: ['continue-as-new', 'runReplayHistory'],
+  },
+  {
+    caseId: 'migration-fencing-digest-broken-future-projection-write-digest',
+    path: 'packages/postgres-adapter/src/migrations.ts',
+    snippets: [
+      'P6 topology authority rows are immutable',
+      'P6 topology cancellation amount exceeds reservation ceiling',
+    ],
+  },
+  {
+    caseId: 'clean-multi-cell-acceptance-run-manifest-shape',
+    path: 'evals/fixtures/p6/adversarial-manifest.json',
+    snippets: ['clean-multi-cell-acceptance-run-manifest-shape'],
   },
 ];
 
@@ -255,6 +380,7 @@ export async function verifyP6(
   assertUniqueGateIds(gates);
   assertFixtureExecutionGates(gates);
   await verifyP6FixtureManifest(repository);
+  await verifyExecutableCaseProofs(repository);
   const results: P6GateResult[] = [];
   for (const gate of gates) {
     const absolutePath = resolve(repository, gate.requiredPath);
@@ -302,6 +428,24 @@ export async function verifyP6(
     fixtureManifest: P6_FIXTURE_MANIFEST,
     gates: results,
   };
+}
+
+async function verifyExecutableCaseProofs(repository: string): Promise<void> {
+  const covered = new Set(
+    P6_EXECUTABLE_CASE_PROOFS.map(({ caseId }) => caseId),
+  );
+  const missing = REQUIRED_P6_CASES.filter((caseId) => !covered.has(caseId));
+  if (missing.length > 0)
+    throw new Error(`P6_EXECUTABLE_CASE_PROOF_MISSING:${missing.join(',')}`);
+  for (const proof of P6_EXECUTABLE_CASE_PROOFS) {
+    const source = await readFile(resolve(repository, proof.path), 'utf8');
+    for (const snippet of proof.snippets) {
+      if (!source.includes(snippet))
+        throw new Error(
+          `P6_EXECUTABLE_CASE_PROOF_DRIFT:${proof.caseId}:${proof.path}:${snippet}`,
+        );
+    }
+  }
 }
 
 function assertUniqueGateIds(gates: readonly P6GateSpec[]): void {

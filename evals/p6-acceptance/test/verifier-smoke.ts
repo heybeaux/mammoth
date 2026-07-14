@@ -42,7 +42,7 @@ async function runsExecutableGates(): Promise<void> {
     'pnpm --filter @mammoth/persistence test',
     'pnpm --filter @mammoth/postgres-adapter test',
     'pnpm --filter @mammoth/production-profile test',
-    'pnpm --filter @mammoth/temporal-adapter test',
+    'pnpm --filter @mammoth/temporal-adapter test:p6-live',
     'pnpm --filter @mammoth/report-compiler test',
     'pnpm --filter @mammoth/observatory-projection test',
   ]);

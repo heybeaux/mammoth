@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 export type P6CellBoundary =
   | 'budget_reserved'
   | 'cell_dispatched'
@@ -9,6 +7,8 @@ export type P6CellBoundary =
 export type P6TopologyCancellationPoint =
   | 'before_dispatch'
   | 'during_cell'
+  | 'after_child_before_synthesis'
+  | 'during_synthesis'
   | 'during_settlement';
 
 export interface P6TopologyIdentity {
@@ -94,7 +94,17 @@ export interface P6TopologyActivities {
 export function deriveP6TopologyWorkflowId(
   identity: P6TopologyIdentity,
 ): string {
-  return `mammoth:p6:topology:${canonicalDigest(identity)}`;
+  return [
+    'mammoth',
+    'p6',
+    'topology',
+    encode(identity.topologyId),
+    encode(identity.programId),
+    encode(identity.criterionId),
+    encode(String(identity.criterionVersion)),
+    encode(identity.criterionDigest),
+    encode(identity.inputDigest),
+  ].join(':');
 }
 
 export function deriveP6ChildWorkflowId(input: {
@@ -104,7 +114,16 @@ export function deriveP6ChildWorkflowId(input: {
   readonly workflowMajor: 1;
   readonly runPartition: string;
 }): string {
-  return `mammoth:p6:cell:${canonicalDigest(input)}`;
+  return [
+    'mammoth',
+    'p6',
+    'cell',
+    encode(input.topologyId),
+    encode(input.cellId),
+    encode(input.attemptId),
+    encode(String(input.workflowMajor)),
+    encode(input.runPartition),
+  ].join(':');
 }
 
 export function deriveP6ActivityId(input: {
@@ -114,23 +133,18 @@ export function deriveP6ActivityId(input: {
   readonly attemptId: string;
   readonly operationKind: 'durable-boundary' | 'cancel';
 }): string {
-  return canonicalDigest(input);
+  return [
+    'mammoth',
+    'p6',
+    'activity',
+    encode(input.workflowId),
+    encode(input.cellId),
+    encode(input.boundary),
+    encode(input.attemptId),
+    encode(input.operationKind),
+  ].join(':');
 }
 
-function canonicalDigest(value: unknown): string {
-  return `sha256:${createHash('sha256')
-    .update(JSON.stringify(sortJson(value)), 'utf8')
-    .digest('hex')}`;
-}
-
-function sortJson(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortJson);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, nested]) => [key, sortJson(nested)]),
-    );
-  }
-  return value;
+function encode(value: string): string {
+  return encodeURIComponent(value);
 }

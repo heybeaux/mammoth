@@ -20,10 +20,12 @@ export const P6_CONTINUE_AS_NEW_MAX_COMPLETED_CELLS = 2;
 
 const cancellationBeforeBoundary: Record<
   P6TopologyCancellationPoint,
-  P6CellBoundary
+  P6CellBoundary | 'synthesis'
 > = {
   before_dispatch: 'cell_dispatched',
   during_cell: 'cell_completed',
+  after_child_before_synthesis: 'synthesis',
+  during_synthesis: 'synthesis',
   during_settlement: 'budget_settled',
 };
 
@@ -113,6 +115,37 @@ export async function executeP6TopologyShell(
   }
 
   const complete = completedCellIds.length === input.cells.length;
+  if (
+    complete &&
+    (input.cancelAt === 'after_child_before_synthesis' ||
+      input.cancelAt === 'during_synthesis')
+  ) {
+    const receipt = await activities.recordTopologyCancellation({
+      topology: input.identity,
+      parentWorkflowId: workflowId,
+      cancellationPoint: input.cancelAt,
+      completedCellIds,
+      receiptIds,
+      attemptId: input.attemptId,
+      activityId: deriveP6ActivityId({
+        workflowId,
+        cellId: 'synthesis',
+        boundary: input.cancelAt,
+        attemptId: input.attemptId,
+        operationKind: 'cancel',
+      }),
+    });
+    return {
+      status: 'cancelled',
+      workflowId,
+      completedCellIds,
+      childWorkflowIds,
+      receiptIds: appendUnique(receiptIds, receipt.receiptId),
+      partial: true,
+      cancellationPoint: input.cancelAt,
+      carryRequired,
+    };
+  }
   return {
     status: complete ? 'completed' : 'cancelled',
     workflowId,

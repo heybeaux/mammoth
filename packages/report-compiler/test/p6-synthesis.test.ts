@@ -125,6 +125,7 @@ describe('P6 evidence-aware synthesis manifest validation', () => {
         expect.arrayContaining([
           'CRITERION_DRIFT',
           'INVALID_POLICY_VERDICT',
+          'MISSING_EVIDENCE',
           'INVALID_EXPERIMENT_RECEIPT',
         ]),
       );
