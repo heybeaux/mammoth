@@ -142,7 +142,7 @@ export async function verifyP8(root: string): Promise<P8VerifierResult> {
     });
     const rejectsExploreMode = await rejectsP8Ask(root, {
       question:
-        'Locating flexible data-center loads near constrained renewable generation can reduce curtailment without shifting water, reliability, rate, or land burdens onto host communities.',
+        'What impacts do data centers have on the communities and environment around them?',
       depth: 'standard',
       budgetUsd: 12,
       mode: 'explore',

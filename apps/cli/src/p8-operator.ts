@@ -22,7 +22,17 @@ export async function executeP8ResearchCli(
     if (command === 'ask') {
       const parsed = parseAsk(tail);
       const summary = await runP8TurnkeyResearch(parsed);
-      await rememberRun(summary.runId, summary.outputDirectory);
+      try {
+        await rememberRun(summary.runId, summary.outputDirectory);
+      } catch (error) {
+        io.stderr(
+          JSON.stringify({
+            warning: 'p8_run_index_write_failed',
+            retryable: false,
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      }
       io.stdout(JSON.stringify(summary));
       return 0;
     }
