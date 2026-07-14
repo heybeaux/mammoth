@@ -20,6 +20,10 @@ const GENERATED_AT = '2026-07-01T00:00:00.000Z';
 const POLICY_ID = 'p8.v1-evidence-admission-policy';
 const PARSER_ID = 'p8-fixture-parser';
 const PARSER_VERSION = '1.0.0';
+const REPORT_GOLDEN_QUESTION =
+  'What impacts do data centers have on the communities and environment around them?';
+const EXPLORE_MODE_NOT_SHIPPED =
+  'P8 explore mode is frozen in T0 fixtures but not implemented by the current offline runtime.';
 
 interface SourceRecord {
   readonly id: string;
@@ -96,6 +100,7 @@ export interface P8RunSummary {
 export async function runP8TurnkeyResearch(
   input: P8ResearchAskInput,
 ): Promise<P8RunSummary> {
+  validateSupportedOfflineAsk(input);
   const repoRoot = resolve(input.fixturesRoot ?? process.cwd());
   const outputDirectory = resolve(input.outputDirectory);
   const thresholds = await readJson<Thresholds>(
@@ -208,6 +213,24 @@ export async function runP8TurnkeyResearch(
     receiptDigest: canonicalDigest(executionReceipt),
     requiredFiles: expected.reportMode.reportBundle.requiredFiles,
   };
+}
+
+function validateSupportedOfflineAsk(input: P8ResearchAskInput): void {
+  if ((input.mode ?? 'report') === 'explore') {
+    throw new Error(EXPLORE_MODE_NOT_SHIPPED);
+  }
+  if (
+    normalizeQuestion(input.question) !==
+    normalizeQuestion(REPORT_GOLDEN_QUESTION)
+  ) {
+    throw new Error(
+      `P8 offline runtime only supports the frozen data-center golden question; received: ${input.question}`,
+    );
+  }
+}
+
+function normalizeQuestion(value: string): string {
+  return value.trim().replace(/\s+/gu, ' ').toLowerCase();
 }
 
 export async function inspectP8Bundle(
@@ -444,7 +467,7 @@ function makeReportBlocks(
           snapshotDigests: [],
           sourceLineageIds: [],
         },
-        ...factualSentences.slice(0, 3),
+        ...factualSentences.slice(0, 2),
       ],
     },
     {
@@ -473,19 +496,19 @@ function makeReportBlocks(
       id: 'environmental_effects',
       kind: 'section',
       title: 'Environmental effects',
-      sentences: factualSentences.slice(3, 6),
+      sentences: factualSentences.slice(2, 5),
     },
     {
       id: 'community_economic_effects',
       kind: 'section',
       title: 'Community and economic effects',
-      sentences: factualSentences.slice(6, 8),
+      sentences: factualSentences.slice(6, 7),
     },
     {
       id: 'distributional_environmental_justice',
       kind: 'section',
       title: 'Distributional and environmental-justice analysis',
-      sentences: factualSentences.slice(7, 9),
+      sentences: factualSentences.slice(7, 8),
     },
     {
       id: 'benefits_counterarguments',

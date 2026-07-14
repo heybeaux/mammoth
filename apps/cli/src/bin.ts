@@ -53,6 +53,7 @@ function isP8BundleCommand(args: readonly string[]): boolean {
   }
   const subject = args[2];
   if (!subject || subject.startsWith('-')) return false;
+  if (subject.startsWith('p8-run:')) return true;
   return existsSync(
     join(resolve(process.cwd(), subject), 'report-manifest.json'),
   );
