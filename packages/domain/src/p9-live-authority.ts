@@ -328,10 +328,15 @@ export const P9EffectReceiptSchema = z
         message: 'observed settlement requires an observed usage record',
       });
     }
-    if (receipt.costState !== 'observed' && receipt.usageSource !== 'absent') {
+    if (
+      receipt.costState !== 'observed' &&
+      (receipt.usageSource !== 'absent' || receipt.observedUsage !== null)
+    ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['usageSource'],
+        path: [
+          receipt.usageSource !== 'absent' ? 'usageSource' : 'observedUsage',
+        ],
         message:
           'unknown or lost settlement must not claim a usage observation',
       });

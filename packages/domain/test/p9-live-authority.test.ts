@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canonicalDigest,
+  P9EffectReceiptSchema,
   P9LiveAuthorityReceiptSchema,
   P9ProviderProfileCatalogSchema,
 } from '../src/index.js';
@@ -131,6 +132,46 @@ function authorityReceipt(overrides: Record<string, unknown> = {}) {
 }
 
 describe('P9 live authority contracts', () => {
+  it('rejects unknown or lost effect receipts that claim an observed usage record', () => {
+    for (const costState of ['unknown', 'settlement_lost'] as const) {
+      const identity = {
+        schemaVersion: '1.0.0' as const,
+        contractFamily: 'p9.v1' as const,
+        receiptId: `receipt:${costState}`,
+        effectId: `effect:${costState}`,
+        idempotencyKey: `idem:${costState}`,
+        effectKind: 'model' as const,
+        provider: 'openrouter',
+        catalogEntryId: 'model-proposer-live',
+        catalogDigest: digest('catalog'),
+        usageSource: 'absent' as const,
+        observedUsage: {
+          requests: 1,
+          inputTokens: 100,
+          outputTokens: 10,
+          bytes: 1_000,
+          durationMs: 100,
+        },
+        costState,
+        charged: {
+          currencyUsd: 1,
+          requests: 1,
+          inputTokens: 1_000,
+          outputTokens: 100,
+          bytes: 10_000,
+          durationMs: 30_000,
+        },
+        settledAt: '2026-07-15T17:00:01.000Z',
+      };
+      expect(() =>
+        P9EffectReceiptSchema.parse({
+          ...identity,
+          receiptDigest: canonicalDigest(identity),
+        }),
+      ).toThrow(/must not claim a usage observation/u);
+    }
+  });
+
   it('accepts immutable provider and single-execution authority contracts', () => {
     expect(P9ProviderProfileCatalogSchema.parse(profileCatalog())).toEqual(
       profileCatalog(),

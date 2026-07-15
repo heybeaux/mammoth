@@ -2945,6 +2945,7 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
     durationMs: 10,
   };
   const search: P9LiveSearchAdapter = {
+    destinationOrigin: 'https://api.search.brave.com',
     search: (query) =>
       Promise.resolve({
         candidates: query.includes('JustVugg')

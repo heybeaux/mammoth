@@ -276,6 +276,7 @@ const thresholds: PlanCoverageThresholds = {
 
 function makeSearch(counter: { calls: number }): P9LiveSearchAdapter {
   return {
+    destinationOrigin: 'https://api.search.brave.com',
     search: (query) => {
       counter.calls += 1;
       return Promise.resolve({
@@ -550,6 +551,44 @@ describe('P9 live application', () => {
         trustedIssuerId: run.authorizationReceipt.issuerId,
       }),
     ).toThrow(/does not match journaled reservation/u);
+
+    const observedEffect = run.effectReceipts.find(
+      (receipt) => receipt.costState === 'observed',
+    );
+    if (!observedEffect?.observedUsage) {
+      throw new Error('missing observed effect receipt to forge');
+    }
+    const observedUsage = observedEffect.observedUsage;
+    const { receiptDigest: _observedDigest, ...observedIdentity } =
+      observedEffect;
+    expect(_observedDigest).toMatch(/^sha256:/u);
+    const contradictoryIdentity = {
+      ...observedIdentity,
+      observedUsage: {
+        ...observedUsage,
+        bytes: observedUsage.bytes + 1,
+      },
+    };
+    const contradictoryReceipts = run.effectReceipts.map((receipt) =>
+      receipt.effectId === observedEffect.effectId
+        ? {
+            ...contradictoryIdentity,
+            receiptDigest: canonicalDigest(contradictoryIdentity),
+          }
+        : receipt,
+    );
+    const contradictoryArtifacts = resealP9LiveArtifacts({
+      ...liveArtifacts,
+      'live-effect-receipts.jsonl': `${contradictoryReceipts
+        .map((value) => JSON.stringify(value))
+        .join('\n')}\n`,
+    });
+    expect(() =>
+      verifyP9LiveBundle(contradictoryArtifacts, {
+        expectedAuthorityDigest: run.authorizationReceipt.receiptDigest,
+        trustedIssuerId: run.authorizationReceipt.issuerId,
+      }),
+    ).toThrow(/does not match journaled reservation/u);
   });
 
   it('treats environment-style flags as non-authority: a missing receipt blocks before any effect', async () => {
@@ -675,9 +714,25 @@ describe('P9 live application', () => {
     expect(searchCounter.calls).toBe(0);
   });
 
+  it('rejects a search adapter whose concrete destination differs from the authorized profile before effects', async () => {
+    const searchCounter = { calls: 0 };
+    const search: P9LiveSearchAdapter = {
+      destinationOrigin: 'https://unauthorized-search.example',
+      search: () => {
+        searchCounter.calls += 1;
+        return Promise.resolve({ candidates: [], usage: null });
+      },
+    };
+    await expect(
+      runP9LiveApplication(makeInput({ search })),
+    ).rejects.toMatchObject({ code: 'search_transport_destination_mismatch' });
+    expect(searchCounter.calls).toBe(0);
+  });
+
   it('skips retrieval candidates outside the scoped source-origin authorization before retrieval transport', async () => {
     const journal = new MemoryP9DurableJournalStore();
     const search: P9LiveSearchAdapter = {
+      destinationOrigin: 'https://api.search.brave.com',
       search: () =>
         Promise.resolve({
           candidates: [
@@ -800,6 +855,7 @@ describe('P9 live application', () => {
   it('settles an effect without trustworthy observed usage at the full reserved ceiling', async () => {
     const journal = new MemoryP9DurableJournalStore();
     const search: P9LiveSearchAdapter = {
+      destinationOrigin: 'https://api.search.brave.com',
       search: () => Promise.resolve({ candidates: [], usage: null }),
     };
     const modelCounter = { calls: 0 };
