@@ -1554,7 +1554,7 @@ export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
       this.input.sleep ??
       ((milliseconds: number) =>
         new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
-    const minimumIntervalMs = this.input.minimumIntervalMs ?? 1_100;
+    const minimumIntervalMs = this.input.minimumIntervalMs ?? 2_000;
     if (!Number.isFinite(minimumIntervalMs) || minimumIntervalMs < 0) {
       throw new Error(
         'Brave adapter minimum request interval must be a finite non-negative number',
@@ -1580,9 +1580,25 @@ export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
       redirect: 'error',
       signal: AbortSignal.timeout(10_000),
     });
+    const remaining = response.headers
+      .get('x-ratelimit-remaining')
+      ?.split(',')
+      .map((value) => Number(value.trim()));
+    const resets = response.headers
+      .get('x-ratelimit-reset')
+      ?.split(',')
+      .map((value) => Number(value.trim()));
+    if (remaining?.[0] === 0 && Number.isFinite(resets?.[0])) {
+      this.#nextRequestAtMs = Math.max(
+        this.#nextRequestAtMs,
+        monotonicNow() + (resets?.[0] ?? 0) * 1_000 + 250,
+      );
+    }
     if (!response.ok) {
+      const reset = response.headers.get('x-ratelimit-reset');
+      const safeReset = reset?.match(/^[0-9, ]{1,80}$/u)?.[0];
       throw new Error(
-        `Brave search failed with HTTP ${String(response.status)}`,
+        `Brave search failed with HTTP ${String(response.status)}${safeReset ? `; rate limit reset ${safeReset} seconds` : ''}`,
       );
     }
     const rawBody = await response.text();
