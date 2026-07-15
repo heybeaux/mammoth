@@ -25,7 +25,7 @@ import {
 const now = () => new Date('2026-07-15T18:00:00.000Z');
 
 const SOURCE_BODY =
-  'Colibri caches mmap-backed experts on Apple silicon. The router reuses cached experts between decode steps.';
+  'Colibri caches mmap-backed experts on Apple silicon. The router reuses cached experts between decode steps. A bounded benchmark should measure the effect.';
 const QUOTE = 'The router reuses cached experts between decode steps.';
 const CANDIDATE_ID = 'cand-colibri-readme';
 

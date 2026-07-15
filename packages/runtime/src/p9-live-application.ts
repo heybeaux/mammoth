@@ -70,6 +70,7 @@ import {
   priceObservedUsage,
   type P9LiveEffectObservation,
 } from './p9-live-executor.js';
+import { boundedSentenceContext } from './p9-bounded-context.js';
 
 export const P9_LIVE_EXHIBITION_QUESTION =
   'Using the current upstream repository and primary technical sources, which bounded change to JustVugg/colibri should be tested first on a 128 GB Apple-silicon machine, and what experiment would distinguish a real improvement from measurement noise?';
@@ -1473,28 +1474,6 @@ function ceiling(input: Partial<EffectRequestCeiling>): EffectRequestCeiling {
     parserClass: null,
     ...input,
   };
-}
-
-function boundedSentenceContext(
-  body: string,
-  startOffset: number,
-  endOffset: number,
-): string {
-  const priorBoundary = Math.max(
-    body.lastIndexOf('.', Math.max(0, startOffset - 1)),
-    body.lastIndexOf('!', Math.max(0, startOffset - 1)),
-    body.lastIndexOf('?', Math.max(0, startOffset - 1)),
-    body.lastIndexOf('\n', Math.max(0, startOffset - 1)),
-  );
-  const following = [
-    body.indexOf('.', endOffset),
-    body.indexOf('!', endOffset),
-    body.indexOf('?', endOffset),
-    body.indexOf('\n', endOffset),
-  ].filter((index) => index >= 0);
-  const contextEnd =
-    following.length === 0 ? body.length : Math.min(...following) + 1;
-  return body.slice(priorBoundary + 1, contextEnd).trim();
 }
 
 const RETRIEVAL_FAILURES = {
