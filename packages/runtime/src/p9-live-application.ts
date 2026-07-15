@@ -3,16 +3,22 @@ import {
   ParserReceiptSchema,
   P9ClaimProposalSchema,
   P9EntailmentVerdictSchema,
-  type DomainPolicyPack,
+  ProviderPriceCatalogSchema,
   ResearchPlanProposalSchema,
+  type DomainPolicyPack,
   type EffectRequestCeiling,
-  type P9BudgetVector,
   type P9ClaimAdmission,
   type P9ClaimProposal,
+  type P9EffectReceipt,
   type P9EntailmentVerdict,
+  P9LiveAuthorityReceiptSchema,
+  P9ProviderProfileCatalogSchema,
+  type P9LiveAuthorityReceipt,
+  type P9ProviderProfileCatalog,
+  type P9ProviderProfile,
   type P9ModelWorkRef,
+  type P9ObservedUsage,
   type ParserReceipt,
-  type ProviderPriceCatalog,
   type ResearchPlan,
   type ResearchPlanProposal,
   type RetrievalAttempt,
@@ -20,10 +26,14 @@ import {
 import { evaluateP9ClaimAdmission } from '@mammoth/evidence';
 import {
   acceptResearchPlan,
-  P9BudgetAuthority,
+  assertP9LiveAuthorityLineage,
+  GovernanceError,
+  P9DurableBudgetAuthority,
   P9_DOMAIN_POLICY_PACKS,
-  priceCatalogDigest,
+  type P9BudgetAuthority,
+  type P9BudgetReservation,
   type P9ClaimEvidenceBinding,
+  type P9DurableJournalStore,
   type P9StopCriterionFinding,
   type PlanCoverageThresholds,
 } from '@mammoth/governance';
@@ -35,6 +45,7 @@ import {
   makeUnknownRightsStatus,
   ParserPolicyError,
   retrieveSource,
+  type ParsedArtifact,
   type RetrievedSource,
 } from '@mammoth/retrieval';
 import { z } from 'zod';
@@ -44,9 +55,16 @@ import {
   type P9GenericResearchRun,
   type P9ObservedSourceSnapshot,
 } from './p9-generic-research.js';
+import {
+  P9LiveEffectExecutor,
+  type P9LiveEffectObservation,
+} from './p9-live-executor.js';
 
 export const P9_LIVE_EXHIBITION_QUESTION =
   'Using the current upstream repository and primary technical sources, which bounded change to JustVugg/colibri should be tested first on a 128 GB Apple-silicon machine, and what experiment would distinguish a real improvement from measurement noise?';
+export const P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST = canonicalDigest(
+  'p9-live-source-classification/v1',
+);
 
 const USER_AGENT = 'mammoth-research/0.9';
 const ROBOTS_POLICY_ID = 'p9-live-robots-not-checked/v1';
@@ -61,8 +79,13 @@ export interface P9LiveCandidate {
   readonly sourceFamilyId: string;
 }
 
+export interface P9LiveSearchOutcome {
+  readonly candidates: readonly P9LiveCandidate[];
+  readonly usage: P9ObservedUsage | null;
+}
+
 export interface P9LiveSearchAdapter {
-  readonly search: (query: string) => Promise<readonly P9LiveCandidate[]>;
+  readonly search: (query: string) => Promise<P9LiveSearchOutcome>;
 }
 
 export interface P9LiveClaimSeed {
@@ -77,23 +100,28 @@ export interface P9LiveClaimSeed {
   readonly contradictionIds: readonly string[];
 }
 
+export interface P9LiveModelOutcome<T> {
+  readonly value: T;
+  readonly usage: P9ObservedUsage | null;
+}
+
+export interface P9LiveEvaluatorFinding {
+  readonly claimId: string;
+  readonly verdict: 'entailed' | 'contradicted' | 'insufficient';
+  readonly semanticDeltas?: readonly string[] | undefined;
+  readonly reasonCodes?: readonly string[] | undefined;
+}
+
 export interface P9LiveModelAdapter {
   readonly proposeClaims: (input: {
     readonly plan: ResearchPlan;
     readonly snapshots: readonly P9ObservedSourceSnapshot[];
-  }) => Promise<readonly P9LiveClaimSeed[]>;
+  }) => Promise<P9LiveModelOutcome<readonly P9LiveClaimSeed[]>>;
   readonly evaluateClaims: (input: {
     readonly plan: ResearchPlan;
     readonly claims: readonly P9LiveClaimSeed[];
     readonly snapshots: readonly P9ObservedSourceSnapshot[];
-  }) => Promise<
-    readonly {
-      readonly claimId: string;
-      readonly verdict: 'entailed' | 'contradicted' | 'insufficient';
-      readonly semanticDeltas?: readonly string[];
-      readonly reasonCodes?: readonly string[];
-    }[]
-  >;
+  }) => Promise<P9LiveModelOutcome<readonly P9LiveEvaluatorFinding[]>>;
   readonly proposerProfile: P9LiveModelProfile;
   readonly evaluatorProfile: P9LiveModelProfile;
 }
@@ -107,6 +135,13 @@ export interface P9LiveModelProfile {
 export interface P9LiveApplicationInput {
   readonly executionId: string;
   readonly budgetUsd: number;
+  readonly authorizationReceipt: unknown;
+  readonly catalog: unknown;
+  readonly providerProfileCatalog: unknown;
+  readonly expectedAuthorityDigest: string;
+  readonly trustedIssuerId: string;
+  readonly sourceClassificationPolicyDigest?: string;
+  readonly journal: P9DurableJournalStore;
   readonly search: P9LiveSearchAdapter;
   readonly model: P9LiveModelAdapter;
   readonly now?: () => Date;
@@ -118,18 +153,33 @@ export interface P9LiveApplicationInput {
 
 export interface P9LiveApplicationRun extends P9GenericResearchRun {
   readonly exactBundleVerified: boolean;
+  readonly authorizationReceipt: P9LiveAuthorityReceipt;
+  readonly providerProfileCatalog: P9ProviderProfileCatalog;
+  readonly effectReceipts: readonly P9EffectReceipt[];
+  readonly recoveredReservations: readonly P9BudgetReservation[];
 }
 
+/**
+ * Executes the frozen P9 live exhibition question with real injected effect
+ * adapters. Every outbound search, retrieval, parser, and model effect is
+ * mechanically preceded by a durable journaled reservation bound to an
+ * immutable scoped human authorization receipt and an immutable digest-bound
+ * price catalog; settlement uses observed usage or conservatively charges the
+ * reserved ceiling. Restarting against the same journal cannot repeat an
+ * already-settled effect or spend the same remainder twice.
+ */
 export async function runP9LiveApplication(
   input: P9LiveApplicationInput,
 ): Promise<P9LiveApplicationRun> {
-  throw new Error(
-    'P9 live executor unavailable: durable pre-transport budget persistence, observed effect receipts, and scoped authority lineage are required before effects',
-  );
-  return runDisabledP9LiveApplication(input);
+  input.journal.acquireExclusive();
+  try {
+    return await runP9LiveApplicationExclusive(input);
+  } finally {
+    input.journal.releaseExclusive();
+  }
 }
 
-async function runDisabledP9LiveApplication(
+async function runP9LiveApplicationExclusive(
   input: P9LiveApplicationInput,
 ): Promise<P9LiveApplicationRun> {
   if (input.budgetUsd <= 0 || input.budgetUsd > 5) {
@@ -143,79 +193,162 @@ async function runDisabledP9LiveApplication(
   ) {
     throw new Error('P9 live proposer and evaluator profile families differ');
   }
+  const catalog = ProviderPriceCatalogSchema.parse(input.catalog);
+  const providerProfileCatalog = P9ProviderProfileCatalogSchema.parse(
+    input.providerProfileCatalog,
+  );
+  const authorityReceiptResult = P9LiveAuthorityReceiptSchema.safeParse(
+    input.authorizationReceipt,
+  );
+  if (!authorityReceiptResult.success) {
+    throw new GovernanceError(
+      'authorization_receipt_invalid',
+      'scoped human authorization receipt is missing, malformed, or digest-broken',
+    );
+  }
+  const authorityReceipt = authorityReceiptResult.data;
+  if (input.budgetUsd !== authorityReceipt.budgetLimit.currencyUsd) {
+    throw new GovernanceError(
+      'authorization_budget_exceeded',
+      'P9 live requested budget must match the scoped authority budget',
+    );
+  }
   const now = input.now ?? (() => new Date());
   const timestamp = () => now().toISOString();
+  const actor = `p9-live:${input.executionId}`;
   const planBundle = buildAcceptedP9LivePlan({
     budgetUsd: input.budgetUsd,
-    now: timestamp(),
+    now: authorityReceipt.authorizedAt,
     proposerProfile: input.model.proposerProfile,
   });
-  const authority = new P9BudgetAuthority(
+  const lineage = (() => {
+    try {
+      return assertP9LiveAuthorityLineage({
+        receipt: authorityReceipt,
+        profileCatalog: providerProfileCatalog,
+        priceCatalog: catalog,
+        plan: planBundle.plan,
+        acceptanceReceipt: planBundle.acceptanceReceipt,
+        expectedAuthorityDigest: input.expectedAuthorityDigest,
+        trustedIssuerId: input.trustedIssuerId,
+        executionId: input.executionId,
+        question: P9_LIVE_EXHIBITION_QUESTION,
+        sourceClassificationPolicyDigest:
+          input.sourceClassificationPolicyDigest ??
+          P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
+        now: timestamp(),
+      });
+    } catch (error) {
+      throw error instanceof GovernanceError
+        ? error
+        : new Error(`P9 live authority lineage invalid: ${String(error)}`);
+    }
+  })();
+  assertModelProfileIdentity(
+    input.model.proposerProfile,
+    lineage.proposerProfile,
+    'proposer',
+  );
+  assertModelProfileIdentity(
+    input.model.evaluatorProfile,
+    lineage.evaluatorProfile,
+    'evaluator',
+  );
+  const searchProfile = requiredLiveRoleProfile(lineage.profiles, 'search');
+  const retrievalProfile = requiredLiveRoleProfile(
+    lineage.profiles,
+    'retrieval',
+  );
+  const parserProfile = requiredLiveRoleProfile(lineage.profiles, 'parser');
+  assertCatalogEntryAuthorized(searchProfile, 'brave-search');
+  assertCatalogEntryAuthorized(retrievalProfile, 'public-retrieval');
+  assertCatalogEntryAuthorized(parserProfile, 'bounded-parser');
+  assertCatalogEntryAuthorized(lineage.proposerProfile, 'model-proposer-live');
+  assertCatalogEntryAuthorized(
+    lineage.evaluatorProfile,
+    'model-evaluator-live',
+  );
+  const authority = P9DurableBudgetAuthority.open(
     {
       accountId: `p9-live:${input.executionId}`,
       programId: input.executionId,
-      catalog: buildP9LiveCatalog(),
-      limit: {
-        currencyUsd: input.budgetUsd,
-        requests: 200,
-        inputTokens: 500_000,
-        outputTokens: 100_000,
-        bytes: 25_000_000,
-        durationMs: 3_600_000,
-      },
+      catalog,
+      limit: authorityReceipt.budgetLimit,
+      authorizationReceipt: authorityReceipt,
+      store: input.journal,
+      actorId: actor,
     },
     timestamp,
   );
-  const actor = `p9-live:${input.executionId}`;
-  const reserveEffect = (effect: {
-    readonly id: string;
-    readonly catalogEntryId: string;
-    readonly ceiling: EffectRequestCeiling;
-  }) =>
-    authority.reserve({
-      reservationId: effect.id,
-      workItemId: `work:${effect.id}`,
-      effectId: `effect:${effect.id}`,
-      idempotencyKey: `idem:${input.executionId}:${effect.id}`,
-      catalogEntryId: effect.catalogEntryId,
-      ceiling: effect.ceiling,
-      actorId: actor,
-    });
-  const settleKnown = (id: string, actual: Partial<P9BudgetVector>): void => {
-    authority.settle(id, {
-      costState: 'known',
-      actual: budgetVector(actual),
-      actorId: actor,
-    });
+  const executor = new P9LiveEffectExecutor(
+    authority,
+    catalog,
+    input.executionId,
+    actor,
+    timestamp,
+  );
+  const recoveredReservations = authority.recoverInterrupted(actor);
+  executor.recordRecovered(recoveredReservations);
+  const measure = <T>(
+    run: () => Promise<{
+      value: T;
+      usage: Omit<P9ObservedUsage, 'durationMs'>;
+    }>,
+  ): (() => Promise<P9LiveEffectObservation<T>>) => {
+    return async () => {
+      const startedAt = now().getTime();
+      const outcome = await run();
+      return {
+        value: outcome.value,
+        usage: {
+          ...outcome.usage,
+          durationMs: Math.max(0, now().getTime() - startedAt),
+        },
+        usageSource: 'measured_transport',
+      };
+    };
   };
 
   const candidatesById = new Map<string, P9LiveCandidate>();
-  for (const query of planBundle.plan.searchQueries) {
-    const reservation = reserveEffect({
+  const candidateLimit = Math.min(
+    input.maxCandidates ?? retrievalProfile.requestCeiling.requests,
+    retrievalProfile.requestCeiling.requests,
+  );
+  for (const query of planBundle.plan.searchQueries.slice(
+    0,
+    searchProfile.requestCeiling.requests,
+  )) {
+    const result = await executor.execute<readonly P9LiveCandidate[]>({
       id: `search:${query.queryId}`,
       catalogEntryId: 'brave-search',
-      ceiling: ceiling({ durationMs: 10_000 }),
+      ceiling: ceiling({ bytes: 2_000_000, durationMs: 30_000 }),
+      transport: async () => {
+        const startedAt = now().getTime();
+        const outcome = await input.search.search(query.query);
+        return {
+          value: outcome.candidates,
+          usage: outcome.usage
+            ? {
+                ...outcome.usage,
+                durationMs: Math.max(0, now().getTime() - startedAt),
+              }
+            : null,
+          usageSource: 'measured_transport',
+        };
+      },
     });
-    authority.markTransportStarted(reservation.id, actor);
-    let results: readonly P9LiveCandidate[];
-    try {
-      results = await input.search.search(query.query);
-      settleKnown(reservation.id, { currencyUsd: 0.01, requests: 1 });
-    } catch (error) {
-      authority.cancel(
-        reservation.id,
-        actor,
-        `search terminal failure: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      throw error;
+    if (result.status === 'failed') {
+      throw result.error instanceof Error
+        ? result.error
+        : new Error(String(result.error));
     }
-    for (const candidate of results) {
+    for (const candidate of result.value) {
       if (!candidatesById.has(candidate.candidateId)) {
         candidatesById.set(candidate.candidateId, candidate);
       }
-      if (candidatesById.size >= (input.maxCandidates ?? 8)) break;
+      if (candidatesById.size >= candidateLimit) break;
     }
-    if (candidatesById.size >= (input.maxCandidates ?? 8)) break;
+    if (candidatesById.size >= candidateLimit) break;
   }
 
   const retrieve = input.retrieve ?? retrieveSource;
@@ -224,29 +357,23 @@ async function runDisabledP9LiveApplication(
   const parserReceipts: ParserReceipt[] = [];
   const snapshots: P9ObservedSourceSnapshot[] = [];
   for (const candidate of candidatesById.values()) {
-    const retrievalReservation = reserveEffect({
+    const retrievalResult = await executor.execute<RetrievedSource>({
       id: `retrieval:${candidate.candidateId}`,
       catalogEntryId: 'public-retrieval',
-      ceiling: ceiling({ bytes: 2_000_000, durationMs: 20_000 }),
+      ceiling: ceiling({ bytes: 2_000_000, durationMs: 60_000 }),
+      transport: measure(async () => {
+        const retrieved = await retrieve(
+          { url: candidate.url, headers: { 'user-agent': USER_AGENT } },
+          { now, policyId: 'p9-public-network/v1' },
+        );
+        return {
+          value: retrieved,
+          usage: usageOf({ requests: 1, bytes: retrieved.bytes.byteLength }),
+        };
+      }),
     });
-    authority.markTransportStarted(retrievalReservation.id, actor);
-    let retrieved: RetrievedSource;
-    try {
-      retrieved = await retrieve(
-        { url: candidate.url, headers: { 'user-agent': USER_AGENT } },
-        { now, policyId: 'p9-public-network/v1' },
-      );
-      settleKnown(retrievalReservation.id, {
-        currencyUsd: 0.002,
-        requests: 1,
-        bytes: retrieved.bytes.byteLength,
-      });
-    } catch (error) {
-      authority.cancel(
-        retrievalReservation.id,
-        actor,
-        `retrieval terminal failure: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    if (retrievalResult.status === 'failed') {
+      const error = retrievalResult.error;
       const failure =
         error instanceof AcquisitionFailure
           ? error.code === 'ACQUISITION_TIMEOUT'
@@ -257,11 +384,11 @@ async function runDisabledP9LiveApplication(
         buildTruthfulRetrievalAttempt({
           attemptId: `attempt:${candidate.candidateId}`,
           candidateId: candidate.candidateId,
-          effectId: retrievalReservation.bound.effectId,
+          effectId: retrievalResult.reservation.bound.effectId,
           requestedUrl: candidate.url,
           status:
             failure.code === 'source_timeout' ? 'timed_out' : 'unavailable',
-          startedAt: retrievalReservation.createdAt,
+          startedAt: retrievalResult.reservation.createdAt,
           finishedAt: timestamp(),
           robotsDecision: makeNotCheckedRobotsDecision({
             requestedUrl: candidate.url,
@@ -279,45 +406,48 @@ async function runDisabledP9LiveApplication(
       );
       continue;
     }
+    const retrieved = retrievalResult.value;
 
-    const parserReservation = reserveEffect({
+    const parserResult = await executor.execute<ParsedArtifact>({
       id: `parser:${candidate.candidateId}`,
       catalogEntryId: 'bounded-parser',
       ceiling: ceiling({
         bytes: retrieved.bytes.byteLength,
-        durationMs: 10_000,
+        durationMs: 30_000,
         parserClass: 'text/plain',
       }),
+      transport: measure(() => {
+        const parsed = parserRegistry.parse(
+          retrieved.bytes,
+          retrieved.mediaType,
+          {
+            sourceUrl: retrieved.finalUrl,
+            now,
+            policyId: 'p9-media-support/v1',
+            decisionId: `media:${candidate.candidateId}`,
+            receiptId: `parser:${candidate.candidateId}`,
+          },
+        );
+        return Promise.resolve({
+          value: parsed,
+          usage: usageOf({ requests: 1, bytes: retrieved.bytes.byteLength }),
+        });
+      }),
     });
-    authority.markTransportStarted(parserReservation.id, actor);
-    try {
-      const parsed = parserRegistry.parse(
-        retrieved.bytes,
-        retrieved.mediaType,
-        {
-          sourceUrl: retrieved.finalUrl,
-          now,
-          policyId: 'p9-media-support/v1',
-          decisionId: `media:${candidate.candidateId}`,
-          receiptId: `parser:${candidate.candidateId}`,
-        },
+    if (parserResult.status === 'ok') {
+      const receipt = ParserReceiptSchema.parse(
+        parserResult.value.parserReceipt,
       );
-      const receipt = ParserReceiptSchema.parse(parsed.parserReceipt);
       parserReceipts.push(receipt);
-      settleKnown(parserReservation.id, {
-        currencyUsd: 0.001,
-        requests: 1,
-        bytes: retrieved.bytes.byteLength,
-      });
       attempts.push(
         buildTruthfulRetrievalAttempt({
           attemptId: `attempt:${candidate.candidateId}`,
           candidateId: candidate.candidateId,
-          effectId: retrievalReservation.bound.effectId,
+          effectId: retrievalResult.reservation.bound.effectId,
           requestedUrl: candidate.url,
           finalUrl: retrieved.finalUrl,
           status: 'admitted',
-          startedAt: retrievalReservation.createdAt,
+          startedAt: retrievalResult.reservation.createdAt,
           finishedAt: timestamp(),
           retrievedAt: retrieved.retrievedAt,
           robotsDecision: makeNotCheckedRobotsDecision({
@@ -336,16 +466,12 @@ async function runDisabledP9LiveApplication(
       );
       snapshots.push({
         candidateId: candidate.candidateId,
-        body: parsed.text,
+        body: parserResult.value.text,
         sourceClass: candidate.sourceClass,
         sourceFamilyId: candidate.sourceFamilyId,
       });
-    } catch (error) {
-      authority.cancel(
-        parserReservation.id,
-        actor,
-        `parser terminal failure: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } else {
+      const error = parserResult.error;
       if (error instanceof ParserPolicyError && error.receipt) {
         parserReceipts.push(ParserReceiptSchema.parse(error.receipt));
       }
@@ -353,11 +479,11 @@ async function runDisabledP9LiveApplication(
         buildTruthfulRetrievalAttempt({
           attemptId: `attempt:${candidate.candidateId}`,
           candidateId: candidate.candidateId,
-          effectId: retrievalReservation.bound.effectId,
+          effectId: retrievalResult.reservation.bound.effectId,
           requestedUrl: candidate.url,
           finalUrl: retrieved.finalUrl,
           status: 'parser_failed',
-          startedAt: retrievalReservation.createdAt,
+          startedAt: retrievalResult.reservation.createdAt,
           finishedAt: timestamp(),
           retrievedAt: retrieved.retrievedAt,
           robotsDecision: makeNotCheckedRobotsDecision({
@@ -378,70 +504,51 @@ async function runDisabledP9LiveApplication(
     }
   }
 
-  const proposerReservation = reserveEffect({
+  const proposerResult = await executor.execute<readonly P9LiveClaimSeed[]>({
     id: 'model:proposer',
     catalogEntryId: 'model-proposer-live',
     ceiling: ceiling({
       inputTokens: 120_000,
       outputTokens: 24_000,
-      durationMs: 90_000,
+      bytes: 2_000_000,
+      durationMs: 120_000,
     }),
+    transport: modelTransport(now, () =>
+      input.model.proposeClaims({ plan: planBundle.plan, snapshots }),
+    ),
   });
-  authority.markTransportStarted(proposerReservation.id, actor);
-  let seeds: readonly P9LiveClaimSeed[];
-  try {
-    seeds = await input.model.proposeClaims({
-      plan: planBundle.plan,
-      snapshots,
-    });
-    settleKnown(proposerReservation.id, {
-      currencyUsd: 0.45,
-      requests: 1,
-      inputTokens: 12_000,
-      outputTokens: 2_000,
-    });
-  } catch (error) {
-    authority.cancel(
-      proposerReservation.id,
-      actor,
-      `proposer terminal failure: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    throw error;
+  if (proposerResult.status === 'failed') {
+    throw proposerResult.error instanceof Error
+      ? proposerResult.error
+      : new Error(String(proposerResult.error));
   }
+  const seeds = proposerResult.value;
 
-  const evaluatorReservation = reserveEffect({
+  const evaluatorResult = await executor.execute<
+    readonly P9LiveEvaluatorFinding[]
+  >({
     id: 'model:evaluator',
     catalogEntryId: 'model-evaluator-live',
     ceiling: ceiling({
       inputTokens: 120_000,
       outputTokens: 24_000,
-      durationMs: 90_000,
+      bytes: 2_000_000,
+      durationMs: 120_000,
     }),
+    transport: modelTransport(now, () =>
+      input.model.evaluateClaims({
+        plan: planBundle.plan,
+        claims: seeds,
+        snapshots,
+      }),
+    ),
   });
-  authority.markTransportStarted(evaluatorReservation.id, actor);
-  let evaluatorResults: Awaited<
-    ReturnType<P9LiveModelAdapter['evaluateClaims']>
-  >;
-  try {
-    evaluatorResults = await input.model.evaluateClaims({
-      plan: planBundle.plan,
-      claims: seeds,
-      snapshots,
-    });
-    settleKnown(evaluatorReservation.id, {
-      currencyUsd: 0.45,
-      requests: 1,
-      inputTokens: 12_000,
-      outputTokens: 2_000,
-    });
-  } catch (error) {
-    authority.cancel(
-      evaluatorReservation.id,
-      actor,
-      `evaluator terminal failure: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    throw error;
+  if (evaluatorResult.status === 'failed') {
+    throw evaluatorResult.error instanceof Error
+      ? evaluatorResult.error
+      : new Error(String(evaluatorResult.error));
   }
+  const evaluatorResults = evaluatorResult.value;
 
   const evaluatorByClaimId = new Map(
     evaluatorResults.map((result) => [result.claimId, result]),
@@ -572,7 +679,92 @@ async function runDisabledP9LiveApplication(
     ),
   });
   verifyP9ExactBundle(run.artifacts);
-  return { ...run, exactBundleVerified: true };
+  return {
+    ...run,
+    exactBundleVerified: true,
+    authorizationReceipt: authority.authorizationReceipt,
+    providerProfileCatalog,
+    effectReceipts: executor.effectReceipts,
+    recoveredReservations,
+  };
+}
+
+function assertModelProfileIdentity(
+  runtime: P9LiveModelProfile,
+  authorized: P9ProviderProfile,
+  role: 'proposer' | 'evaluator',
+): void {
+  if (
+    runtime.profileVersionId !== authorized.profileId ||
+    runtime.profileFamilyId !== authorized.profileFamilyId ||
+    runtime.modelId !== authorized.modelId
+  ) {
+    throw new GovernanceError(
+      `live_${role}_profile_identity_mismatch`,
+      `runtime ${role} model identity does not match the authorized immutable provider profile`,
+    );
+  }
+}
+
+function requiredLiveRoleProfile(
+  profiles: readonly P9ProviderProfile[],
+  role: 'search' | 'retrieval' | 'parser',
+): P9ProviderProfile {
+  const matches = profiles.filter((profile) => profile.role === role);
+  if (matches.length !== 1 || !matches[0]) {
+    throw new GovernanceError(
+      `live_${role}_profile_ambiguous`,
+      `live execution requires exactly one authorized ${role} profile`,
+    );
+  }
+  return matches[0];
+}
+
+function assertCatalogEntryAuthorized(
+  profile: P9ProviderProfile,
+  catalogEntryId: string,
+): void {
+  if (!profile.catalogEntryIds.includes(catalogEntryId)) {
+    throw new GovernanceError(
+      'live_effect_catalog_entry_unauthorized',
+      `provider profile ${profile.profileId} does not authorize ${catalogEntryId}`,
+    );
+  }
+}
+
+function usageOf(
+  input: Partial<Omit<P9ObservedUsage, 'durationMs'>>,
+): Omit<P9ObservedUsage, 'durationMs'> {
+  return {
+    requests: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    bytes: 0,
+    ...input,
+  };
+}
+
+function modelTransport<T>(
+  now: () => Date,
+  run: () => Promise<P9LiveModelOutcome<T>>,
+): () => Promise<P9LiveEffectObservation<T>> {
+  return async () => {
+    const startedAt = now().getTime();
+    const outcome = await run();
+    return {
+      value: outcome.value,
+      usage: outcome.usage
+        ? {
+            ...outcome.usage,
+            durationMs: Math.max(
+              outcome.usage.durationMs,
+              Math.max(0, now().getTime() - startedAt),
+            ),
+          }
+        : null,
+      usageSource: 'provider_reported',
+    };
+  };
 }
 
 export function buildAcceptedP9LivePlan(input: {
@@ -934,74 +1126,6 @@ function stopCriterionFindings(
   });
 }
 
-function buildP9LiveCatalog(): ProviderPriceCatalog {
-  const entries = [
-    {
-      id: 'brave-search',
-      provider: 'brave-search',
-      effectKind: 'search' as const,
-      parserClass: null,
-      flatCostUsd: 0.01,
-      costPerRequestUsd: 0,
-      costPerInputTokenUsd: 0,
-      costPerOutputTokenUsd: 0,
-      costPerByteUsd: 0,
-    },
-    {
-      id: 'public-retrieval',
-      provider: 'p9-pinned-retrieval',
-      effectKind: 'retrieval' as const,
-      parserClass: null,
-      flatCostUsd: 0.002,
-      costPerRequestUsd: 0,
-      costPerInputTokenUsd: 0,
-      costPerOutputTokenUsd: 0,
-      costPerByteUsd: 1e-9,
-    },
-    {
-      id: 'bounded-parser',
-      provider: 'p9-bounded-parser',
-      effectKind: 'parser' as const,
-      parserClass: 'text/plain',
-      flatCostUsd: 0.001,
-      costPerRequestUsd: 0,
-      costPerInputTokenUsd: 0,
-      costPerOutputTokenUsd: 0,
-      costPerByteUsd: 0,
-    },
-    {
-      id: 'model-proposer-live',
-      provider: 'openai-compatible-proposer',
-      effectKind: 'model' as const,
-      parserClass: null,
-      flatCostUsd: 0.45,
-      costPerRequestUsd: 0,
-      costPerInputTokenUsd: 0,
-      costPerOutputTokenUsd: 0,
-      costPerByteUsd: 0,
-    },
-    {
-      id: 'model-evaluator-live',
-      provider: 'openai-compatible-evaluator',
-      effectKind: 'model' as const,
-      parserClass: null,
-      flatCostUsd: 0.45,
-      costPerRequestUsd: 0,
-      costPerInputTokenUsd: 0,
-      costPerOutputTokenUsd: 0,
-      costPerByteUsd: 0,
-    },
-  ];
-  const identity = {
-    schemaVersion: '1.0.0' as const,
-    contractFamily: 'p9.v1' as const,
-    catalogId: 'p9-live-conservative-catalog',
-    version: '1.0.0',
-    entries,
-  };
-  return { ...identity, catalogDigest: priceCatalogDigest(identity) };
-}
-
 function modelWorkRef(input: {
   readonly role: P9ModelWorkRef['role'];
   readonly claimId: string;
@@ -1031,18 +1155,6 @@ function ceiling(input: Partial<EffectRequestCeiling>): EffectRequestCeiling {
     durationMs: 1,
     attempts: 1,
     parserClass: null,
-    ...input,
-  };
-}
-
-function budgetVector(input: Partial<P9BudgetVector>): P9BudgetVector {
-  return {
-    currencyUsd: 0,
-    requests: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    bytes: 0,
-    durationMs: 0,
     ...input,
   };
 }
@@ -1090,26 +1202,52 @@ const RETRIEVAL_FAILURES = {
   },
 } as const;
 
-export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
-  constructor(private readonly apiKey: string) {}
+export interface BraveP9LiveSearchAdapterInput {
+  readonly apiKeyEnvironmentVariable: string;
+  readonly environment?: Readonly<Record<string, string | undefined>>;
+  readonly fetchImpl?: typeof fetch;
+  readonly now?: () => Date;
+}
 
-  async search(query: string): Promise<readonly P9LiveCandidate[]> {
+export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
+  constructor(private readonly input: BraveP9LiveSearchAdapterInput) {
+    if (!input.apiKeyEnvironmentVariable.trim()) {
+      throw new Error(
+        'Brave adapter requires an API key environment variable name',
+      );
+    }
+  }
+
+  async search(query: string): Promise<P9LiveSearchOutcome> {
+    const environment = this.input.environment ?? process.env;
+    const apiKey = environment[this.input.apiKeyEnvironmentVariable];
+    if (!apiKey?.trim()) {
+      throw new Error(
+        `Brave search credential environment variable ${this.input.apiKeyEnvironmentVariable} is empty`,
+      );
+    }
+    const now = this.input.now ?? (() => new Date());
+    const fetchImpl = this.input.fetchImpl ?? fetch;
     const url = new URL('https://api.search.brave.com/res/v1/web/search');
     url.searchParams.set('q', query);
     url.searchParams.set('count', '5');
-    const response = await fetch(url, {
+    const startedAt = now().getTime();
+    const response = await fetchImpl(url, {
       headers: {
         accept: 'application/json',
-        'x-subscription-token': this.apiKey,
+        'x-subscription-token': apiKey,
       },
+      redirect: 'error',
+      signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) {
       throw new Error(
         `Brave search failed with HTTP ${String(response.status)}`,
       );
     }
-    const parsed = BraveSearchResponseSchema.parse(await response.json());
-    return parsed.web.results.map((result, index) => {
+    const rawBody = await response.text();
+    const parsed = BraveSearchResponseSchema.parse(JSON.parse(rawBody));
+    const candidates = parsed.web.results.map((result, index) => {
       const sourceClass = inferSourceClass(result.url);
       return {
         candidateId: `brave:${canonicalDigest(result.url).slice(7, 19)}:${String(index)}`,
@@ -1119,6 +1257,16 @@ export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
         sourceFamilyId: new URL(result.url).hostname.replace(/^www\./u, ''),
       };
     });
+    return {
+      candidates,
+      usage: {
+        requests: 1,
+        inputTokens: 0,
+        outputTokens: 0,
+        bytes: Buffer.byteLength(rawBody, 'utf8'),
+        durationMs: Math.max(0, now().getTime() - startedAt),
+      },
+    };
   }
 }
 

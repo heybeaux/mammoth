@@ -51,11 +51,17 @@ import {
 } from '../packages/retrieval/src/index.js';
 import {
   P9_LIVE_EXHIBITION_QUESTION,
+  P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
   buildAcceptedP9LivePlan,
+  runP9LiveApplication,
   P9GenericResearchError,
   runP9PlanDrivenResearch,
   verifyP9ExactBundle,
+  type P9LiveClaimSeed,
+  type P9LiveModelAdapter,
+  type P9LiveSearchAdapter,
 } from '../packages/runtime/src/index.js';
+import { MemoryP9DurableJournalStore } from '../packages/governance/src/index.js';
 
 const root = resolve(import.meta.dirname, '..');
 const fixtureRoot = join(root, 'evals/fixtures/p9');
@@ -69,6 +75,23 @@ async function json(path: string): Promise<Record<string, unknown>> {
 
 function invariant(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`P9_BASELINE_INVALID: ${message}`);
+}
+
+async function expectRejects(
+  run: () => Promise<unknown>,
+  code: string,
+  message: string,
+): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    invariant(
+      error instanceof GovernanceError && error.code === code,
+      `${message}: expected ${code}`,
+    );
+    return;
+  }
+  invariant(false, `${message}: expected rejection`);
 }
 
 function resealP9Artifacts(artifacts: Record<string, string>): void {
@@ -2625,13 +2648,457 @@ function verifyT6LiveAuthorityGate(): void {
   );
 }
 
+async function verifyT6DurableLiveExecutor(): Promise<void> {
+  const catalogIdentity = {
+    schemaVersion: '1.0.0' as const,
+    contractFamily: 'p9.v1' as const,
+    catalogId: 'verify-p9-live-catalog',
+    version: '1',
+    entries: [
+      {
+        id: 'brave-search',
+        provider: 'brave/web-search',
+        effectKind: 'search' as const,
+        parserClass: null,
+        flatCostUsd: 0,
+        costPerRequestUsd: 0.001,
+        costPerInputTokenUsd: 0,
+        costPerOutputTokenUsd: 0,
+        costPerByteUsd: 0.0000000001,
+      },
+      {
+        id: 'public-retrieval',
+        provider: 'public-web',
+        effectKind: 'retrieval' as const,
+        parserClass: null,
+        flatCostUsd: 0,
+        costPerRequestUsd: 0.001,
+        costPerInputTokenUsd: 0,
+        costPerOutputTokenUsd: 0,
+        costPerByteUsd: 0.0000000001,
+      },
+      {
+        id: 'bounded-parser',
+        provider: 'local-parser',
+        effectKind: 'parser' as const,
+        parserClass: 'text/plain',
+        flatCostUsd: 0,
+        costPerRequestUsd: 0.001,
+        costPerInputTokenUsd: 0,
+        costPerOutputTokenUsd: 0,
+        costPerByteUsd: 0.0000000001,
+      },
+      {
+        id: 'model-proposer-live',
+        provider: 'verify/proposer',
+        effectKind: 'model' as const,
+        parserClass: null,
+        flatCostUsd: 0,
+        costPerRequestUsd: 0.001,
+        costPerInputTokenUsd: 0.000000001,
+        costPerOutputTokenUsd: 0.000000001,
+        costPerByteUsd: 0,
+      },
+      {
+        id: 'model-evaluator-live',
+        provider: 'verify/evaluator',
+        effectKind: 'model' as const,
+        parserClass: null,
+        flatCostUsd: 0,
+        costPerRequestUsd: 0.001,
+        costPerInputTokenUsd: 0.000000001,
+        costPerOutputTokenUsd: 0.000000001,
+        costPerByteUsd: 0,
+      },
+    ],
+  };
+  const catalog = {
+    ...catalogIdentity,
+    catalogDigest: canonicalDigest(catalogIdentity),
+  };
+  const proposerProfile = {
+    profileVersionId: 'verify-proposer',
+    profileFamilyId: 'verify-proposer-family',
+    modelId: 'verify/proposer',
+  };
+  const evaluatorProfile = {
+    profileVersionId: 'verify-evaluator',
+    profileFamilyId: 'verify-evaluator-family',
+    modelId: 'verify/evaluator',
+  };
+  const requestCeiling = (
+    requests: number,
+    bytes: number,
+    durationMs: number,
+    inputTokens = 0,
+    outputTokens = 0,
+    parserClass: string | null = null,
+  ) => ({
+    requests,
+    inputTokens,
+    outputTokens,
+    bytes,
+    durationMs,
+    attempts: 1,
+    parserClass,
+  });
+  const profile = (
+    profileId: string,
+    profileFamilyId: string,
+    provider: string,
+    role:
+      | 'search'
+      | 'retrieval'
+      | 'parser'
+      | 'model_proposer'
+      | 'model_evaluator',
+    catalogEntryId: string,
+    ceiling: ReturnType<typeof requestCeiling>,
+    modelId: string | null = null,
+  ) => ({
+    profileId,
+    profileFamilyId,
+    provider,
+    role,
+    effectKind:
+      role === 'model_proposer' || role === 'model_evaluator'
+        ? ('model' as const)
+        : role,
+    modelId,
+    checkpoint: modelId ? `${modelId}:checkpoint` : null,
+    capabilityManifestDigest: modelId
+      ? canonicalDigest({ modelId, capability: 'verify:p9' })
+      : null,
+    promptTemplateDigest: modelId
+      ? canonicalDigest({ modelId, prompt: 'verify:p9' })
+      : null,
+    outputSchemaDigest: modelId
+      ? canonicalDigest({ modelId, output: 'verify:p9' })
+      : null,
+    configurationDigest: canonicalDigest({ profileId, provider, role }),
+    destinationOrigin:
+      role === 'search'
+        ? 'https://api.search.brave.com/'
+        : role === 'retrieval'
+          ? 'https://public-web.example/'
+          : role === 'parser'
+            ? 'https://local-parser.example/'
+            : 'https://provider.example/',
+    credentialEnvVar:
+      role === 'retrieval' || role === 'parser' ? null : 'VERIFY_SECRET',
+    billingAuthorized: true as const,
+    billingAccountId: `${provider}:billing`,
+    catalogEntryIds: [catalogEntryId],
+    requestCeiling: ceiling,
+  });
+  const profileCatalogIdentity = {
+    schemaVersion: '1.0.0' as const,
+    contractFamily: 'p9.v1' as const,
+    catalogId: 'verify-p9-live-profile-catalog',
+    version: '1',
+    profiles: [
+      profile(
+        'verify-search',
+        'verify-search-family',
+        'brave/web-search',
+        'search',
+        'brave-search',
+        requestCeiling(5, 10_000_000, 150_000),
+      ),
+      profile(
+        'verify-retrieval',
+        'verify-retrieval-family',
+        'public-web',
+        'retrieval',
+        'public-retrieval',
+        requestCeiling(8, 16_000_000, 480_000),
+      ),
+      profile(
+        'verify-parser',
+        'verify-parser-family',
+        'local-parser',
+        'parser',
+        'bounded-parser',
+        requestCeiling(8, 16_000_000, 240_000, 0, 0, 'text/plain'),
+      ),
+      profile(
+        'verify-proposer',
+        proposerProfile.profileFamilyId,
+        'verify/proposer',
+        'model_proposer',
+        'model-proposer-live',
+        requestCeiling(1, 2_000_000, 120_000, 120_000, 24_000),
+        proposerProfile.modelId,
+      ),
+      profile(
+        'verify-evaluator',
+        evaluatorProfile.profileFamilyId,
+        'verify/evaluator',
+        'model_evaluator',
+        'model-evaluator-live',
+        requestCeiling(1, 2_000_000, 120_000, 120_000, 24_000),
+        evaluatorProfile.modelId,
+      ),
+    ],
+  };
+  const providerProfileCatalog = {
+    ...profileCatalogIdentity,
+    catalogDigest: canonicalDigest(profileCatalogIdentity),
+  };
+  const planBundle = buildAcceptedP9LivePlan({
+    budgetUsd: 5,
+    now: '2026-07-15T18:00:00.000Z',
+    proposerProfile,
+  });
+  const planScope = {
+    proposalId: planBundle.plan.proposalId,
+    proposalDigest: planBundle.plan.proposalDigest,
+    planId: planBundle.plan.planId,
+    planDigest: planBundle.plan.planDigest,
+    acceptanceReceiptDigest: planBundle.acceptanceReceipt.receiptDigest,
+    question: planBundle.plan.question,
+    questionDigest: canonicalDigest(planBundle.plan.question),
+    domainPackId: planBundle.plan.domainPackId,
+    packDigest: planBundle.plan.packDigest,
+    budgetAllocation: planBundle.plan.budget,
+  };
+  const receiptIdentity = {
+    schemaVersion: '1.0.0' as const,
+    contractFamily: 'p9.v1' as const,
+    authorityId: 'verify-p9-live-human-authorization',
+    issuerId: 'trusted-verify-issuer',
+    decision: 'authorized' as const,
+    reason: 'verify the durable live executor with offline adapters',
+    executionId: 'verify-p9-live',
+    consumptionNonce: 'verify-p9-live-nonce-1234567890',
+    maximumExecutions: 1 as const,
+    planScope,
+    priceCatalogId: catalog.catalogId,
+    priceCatalogVersion: catalog.version,
+    priceCatalogDigest: catalog.catalogDigest,
+    providerProfileCatalogId: providerProfileCatalog.catalogId,
+    providerProfileCatalogVersion: providerProfileCatalog.version,
+    providerProfileCatalogDigest: providerProfileCatalog.catalogDigest,
+    sourceClassificationPolicyDigest:
+      P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
+    authorizedProfileIds: providerProfileCatalog.profiles.map(
+      (entry) => entry.profileId,
+    ),
+    proposerProfileId: 'verify-proposer',
+    evaluatorProfileId: 'verify-evaluator',
+    budgetLimit: {
+      currencyUsd: 5,
+      requests: 23,
+      inputTokens: 240_000,
+      outputTokens: 48_000,
+      bytes: 46_000_000,
+      durationMs: 1_110_000,
+    },
+    authorizedEffectKinds: ['search', 'retrieval', 'parser', 'model'] as const,
+    authorizedDestinationOrigins: [
+      ...new Set(
+        providerProfileCatalog.profiles.map((entry) => entry.destinationOrigin),
+      ),
+    ],
+    authorizedBillingAccountIds: [
+      ...new Set(
+        providerProfileCatalog.profiles.map((entry) => entry.billingAccountId),
+      ),
+    ],
+    actorId: 'beaux',
+    authorizedAt: '2026-07-15T18:00:00.000Z',
+    notBeforeAt: '2026-07-15T18:00:00.000Z',
+    expiresAt: '2026-07-16T18:00:00.000Z',
+  };
+  const withExecution = {
+    ...receiptIdentity,
+    executionDigest: canonicalDigest({
+      executionId: receiptIdentity.executionId,
+      planDigest: planScope.planDigest,
+      questionDigest: planScope.questionDigest,
+      consumptionNonce: receiptIdentity.consumptionNonce,
+    }),
+  };
+  const authorizationReceipt = {
+    ...withExecution,
+    receiptDigest: canonicalDigest(withExecution),
+  };
+  const journal = new MemoryP9DurableJournalStore();
+  const quote = 'The router reuses cached experts between decode steps.';
+  const body = `Colibri caches mmap-backed experts on Apple silicon. ${quote}`;
+  const candidateId = 'verify-colibri-source';
+  const usage = {
+    requests: 1,
+    inputTokens: 1000,
+    outputTokens: 100,
+    bytes: 1000,
+    durationMs: 10,
+  };
+  const searchUsage = {
+    requests: 1,
+    inputTokens: 0,
+    outputTokens: 0,
+    bytes: 1000,
+    durationMs: 10,
+  };
+  const search: P9LiveSearchAdapter = {
+    search: (query) =>
+      Promise.resolve({
+        candidates: query.includes('JustVugg')
+          ? [
+              {
+                candidateId,
+                url: 'https://github.com/JustVugg/colibri',
+                title: 'JustVugg/colibri',
+                sourceClass: 'repository_docs',
+                sourceFamilyId: 'github.com',
+              },
+            ]
+          : [],
+        usage: searchUsage,
+      }),
+  };
+  const seeds: readonly P9LiveClaimSeed[] = [
+    {
+      claimId: 'verify-claim-router-reuse',
+      candidateId,
+      quote,
+      statement:
+        'Upstream colibri documentation facts state the router reuses cached experts between decode steps.',
+      subquestionIds: ['sq-upstream'],
+      sectionId: 'upstream_colibri_facts',
+      claimGroupId: 'verify-group',
+      critical: false,
+      contradictionIds: [],
+    },
+  ];
+  const seed = seeds[0];
+  invariant(seed !== undefined, 'T6 verifier seed exists');
+  const model: P9LiveModelAdapter = {
+    proposerProfile,
+    evaluatorProfile,
+    proposeClaims: () => Promise.resolve({ value: seeds, usage }),
+    evaluateClaims: () =>
+      Promise.resolve({
+        value: seeds.map((entry) => ({
+          claimId: entry.claimId,
+          verdict: 'entailed' as const,
+        })),
+        usage,
+      }),
+  };
+  const run = await runP9LiveApplication({
+    executionId: 'verify-p9-live',
+    budgetUsd: 5,
+    authorizationReceipt,
+    catalog,
+    providerProfileCatalog,
+    expectedAuthorityDigest: authorizationReceipt.receiptDigest,
+    trustedIssuerId: authorizationReceipt.issuerId,
+    journal,
+    search,
+    model,
+    now: () => new Date('2026-07-15T18:00:00.000Z'),
+    retrieve: ((request) =>
+      Promise.resolve({
+        requestedUrl: request.url,
+        finalUrl: request.url,
+        redirectChain: [],
+        retrievedAt: '2026-07-15T18:00:00.000Z',
+        status: 200,
+        headers: { 'content-type': 'text/plain' },
+        mediaType: 'text/plain',
+        bytes: new TextEncoder().encode(body),
+        networkReceipts: [],
+      })) as typeof retrieveSource,
+    thresholds: {
+      minAdmittedClaims: 1,
+      minCriticalClaims: 0,
+      minIndependentFamiliesPerCriticalClaim: 1,
+      minMandatorySourceClassCoverageRatio: 0,
+    },
+  });
+  invariant(
+    run.exactBundleVerified &&
+      run.effectReceipts.length >= 5 &&
+      run.effectReceipts.every(
+        (effect) =>
+          effect.catalogDigest === catalog.catalogDigest &&
+          effect.costState === 'observed',
+      ),
+    'T6 live executor records observed digest-bound effect receipts',
+  );
+  const records = journal
+    .readLines()
+    .map((line) => JSON.parse(line) as unknown) as {
+    readonly sequence: number;
+    readonly entry: { readonly kind: string; readonly reservationId?: string };
+  }[];
+  const sequenceOf = (kind: string, id: string) =>
+    records.find(
+      (record) =>
+        record.entry.kind === kind && record.entry.reservationId === id,
+    )?.sequence;
+  for (const id of [
+    'search:q-colibri-repo',
+    `retrieval:${candidateId}`,
+    `parser:${candidateId}`,
+    'model:proposer',
+    'model:evaluator',
+  ]) {
+    const reserve = sequenceOf('reserve', id);
+    const start = sequenceOf('transport_started', id);
+    invariant(
+      reserve !== undefined && start !== undefined && reserve < start,
+      `T6 effect ${id} must be durably reserved before transport`,
+    );
+  }
+  await expectRejects(
+    () =>
+      runP9LiveApplication({
+        executionId: 'verify-p9-live',
+        budgetUsd: 5,
+        authorizationReceipt,
+        catalog,
+        providerProfileCatalog,
+        expectedAuthorityDigest: authorizationReceipt.receiptDigest,
+        trustedIssuerId: authorizationReceipt.issuerId,
+        journal,
+        search,
+        model,
+        now: () => new Date('2026-07-15T18:00:00.000Z'),
+      }),
+    'effect_already_terminal',
+    'T6 replay cannot duplicate already terminal effects',
+  );
+  await expectRejects(
+    () =>
+      runP9LiveApplication({
+        executionId: 'verify-p9-live-missing-auth',
+        budgetUsd: 5,
+        authorizationReceipt: undefined,
+        catalog,
+        providerProfileCatalog,
+        expectedAuthorityDigest: authorizationReceipt.receiptDigest,
+        trustedIssuerId: authorizationReceipt.issuerId,
+        journal: new MemoryP9DurableJournalStore(),
+        search,
+        model,
+        now: () => new Date('2026-07-15T18:00:00.000Z'),
+      }),
+    'authorization_receipt_invalid',
+    'T6 environment-only authority cannot start effects',
+  );
+}
+
 await verifyT1BudgetAndMetadata();
 await verifyT2AcquisitionAndParsers();
 verifyT3IndependentEntailment();
 await verifyT4QuestionDerivedPlanning();
 await verifyT5GenericExecution();
 verifyT6LiveAuthorityGate();
+await verifyT6DurableLiveExecutor();
 
 console.log(
-  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5 generic_execution=pass; T6 live_authority_gate=pass live_effects=not_run',
+  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5 generic_execution=pass; T6 live_authority_gate=pass live_executor=pass live_effects=offline_adapters_only',
 );

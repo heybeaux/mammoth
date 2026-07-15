@@ -12,6 +12,7 @@ import {
 } from './p9-planning.js';
 
 const DigestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
+const NonNegativeIntegerSchema = z.number().int().nonnegative();
 
 export const P9ProviderProfileRoleSchema = z.enum([
   'search',
@@ -266,3 +267,81 @@ export const P9LiveAuthorityReceiptSchema = z
 export type P9LiveAuthorityReceipt = z.infer<
   typeof P9LiveAuthorityReceiptSchema
 >;
+
+export const P9ObservedUsageSchema = z
+  .object({
+    requests: NonNegativeIntegerSchema,
+    inputTokens: NonNegativeIntegerSchema,
+    outputTokens: NonNegativeIntegerSchema,
+    bytes: NonNegativeIntegerSchema,
+    durationMs: NonNegativeIntegerSchema,
+  })
+  .strict();
+export type P9ObservedUsage = z.infer<typeof P9ObservedUsageSchema>;
+
+/**
+ * Immutable record of one settled live effect. `costState: 'observed'` means
+ * provider-reported usage was priced through the immutable catalog entry;
+ * `unknown`/`settlement_lost` means the reserved ceiling was charged because
+ * no trustworthy observation exists. Charged amounts are never invented.
+ */
+export const P9EffectReceiptSchema = z
+  .object({
+    schemaVersion: z.literal('1.0.0'),
+    contractFamily: z.literal(P9_CONTRACT_FAMILY),
+    receiptId: z.string().min(1),
+    effectId: z.string().min(1),
+    idempotencyKey: z.string().min(1),
+    effectKind: P9EffectKindSchema,
+    provider: z.string().min(1),
+    catalogEntryId: z.string().min(1),
+    catalogDigest: DigestSchema,
+    usageSource: z.enum(['provider_reported', 'measured_transport', 'absent']),
+    observedUsage: P9ObservedUsageSchema.nullable(),
+    costState: z.enum(['observed', 'unknown', 'settlement_lost']),
+    charged: P9BudgetVectorSchema,
+    settledAt: z.string().datetime(),
+    receiptDigest: DigestSchema,
+  })
+  .strict()
+  .superRefine((receipt, context) => {
+    if (receipt.costState === 'observed' && receipt.observedUsage === null) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['observedUsage'],
+        message: 'observed settlement requires an observed usage record',
+      });
+    }
+    if (receipt.costState !== 'observed' && receipt.usageSource !== 'absent') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['usageSource'],
+        message:
+          'unknown or lost settlement must not claim a usage observation',
+      });
+    }
+    const identity = {
+      schemaVersion: receipt.schemaVersion,
+      contractFamily: receipt.contractFamily,
+      receiptId: receipt.receiptId,
+      effectId: receipt.effectId,
+      idempotencyKey: receipt.idempotencyKey,
+      effectKind: receipt.effectKind,
+      provider: receipt.provider,
+      catalogEntryId: receipt.catalogEntryId,
+      catalogDigest: receipt.catalogDigest,
+      usageSource: receipt.usageSource,
+      observedUsage: receipt.observedUsage,
+      costState: receipt.costState,
+      charged: receipt.charged,
+      settledAt: receipt.settledAt,
+    };
+    if (receipt.receiptDigest !== canonicalDigest(identity)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['receiptDigest'],
+        message: 'effect receipt digest must bind the exact settled effect',
+      });
+    }
+  });
+export type P9EffectReceipt = z.infer<typeof P9EffectReceiptSchema>;

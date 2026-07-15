@@ -4,6 +4,7 @@ export * from './human-gates.js';
 export * from './local-store.js';
 export * from './model-egress.js';
 export * from './p9-budget-authority.js';
+export * from './p9-durable-budget-authority.js';
 export * from './p9-plan-coverage.js';
 export * from './p9-live-authority.js';
 export * from './p9-plan-authority.js';

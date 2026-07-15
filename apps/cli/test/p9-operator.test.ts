@@ -212,10 +212,9 @@ describe('P9 application CLI', () => {
       ),
     ).toBe(1);
     expect(outputIo.stderr.at(-1)).toContain('immutable_price_catalog_missing');
-    expect(outputIo.stderr.at(-1)).toContain('live_executor_unavailable');
   });
 
-  it('reports every live authority blocker with no executable callback surface', async () => {
+  it('reports every missing live authority prerequisite before any effect', async () => {
     const readiness = await inspectP9LiveReadiness({});
     expect(readiness.ready).toBe(false);
     expect(readiness.blockers).toContain(
@@ -225,8 +224,6 @@ describe('P9 application CLI', () => {
     expect(readiness.blockers).toContain(
       'immutable_provider_profile_catalog_missing',
     );
-    expect(readiness.blockers).toContain('live_executor_unavailable');
-
     const outputIo = io();
     expect(
       await executeP9ResearchCli(
