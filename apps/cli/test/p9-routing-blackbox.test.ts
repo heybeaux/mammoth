@@ -11,6 +11,40 @@ const execFileAsync = promisify(execFile);
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
 describe('research command routing black box', () => {
+  it('routes p9-live to the fail-closed P9 operator before any effect', async () => {
+    let failed = false;
+    try {
+      await execFileAsync(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          join(repoRoot, 'apps/cli/src/bin.ts'),
+          'research',
+          'p9-live',
+        ],
+        {
+          cwd: repoRoot,
+          timeout: 30_000,
+          env: {
+            ...process.env,
+            MAMMOTH_P9_LIVE_RESEARCH: 'authorized',
+            MAMMOTH_P9_SEARCH_API_KEY: 'must-not-be-used',
+            MAMMOTH_P9_SEARCH_BILLING_AUTHORIZATION: 'authorized',
+            MAMMOTH_P9_MODEL_BILLING_AUTHORIZATION: 'authorized',
+          },
+        },
+      );
+    } catch (error) {
+      const result = error as { code?: number; stderr?: string };
+      failed =
+        result.code === 3 &&
+        Boolean(result.stderr?.includes('live_executor_unavailable')) &&
+        Boolean(result.stderr?.includes('blocked_before_effects'));
+    }
+    expect(failed).toBe(true);
+  });
+
   it('keeps a P8 bundle with execution-receipt.json on the P8 inspect path', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mammoth-p8-routing-'));
     const outputDirectory = join(root, 'bundle');

@@ -123,6 +123,15 @@ export interface P9LiveApplicationRun extends P9GenericResearchRun {
 export async function runP9LiveApplication(
   input: P9LiveApplicationInput,
 ): Promise<P9LiveApplicationRun> {
+  throw new Error(
+    'P9 live executor unavailable: durable pre-transport budget persistence, observed effect receipts, and scoped authority lineage are required before effects',
+  );
+  return runDisabledP9LiveApplication(input);
+}
+
+async function runDisabledP9LiveApplication(
+  input: P9LiveApplicationInput,
+): Promise<P9LiveApplicationRun> {
   if (input.budgetUsd <= 0 || input.budgetUsd > 5) {
     throw new Error(
       'P9 live budget must be positive and no greater than 5 USD',

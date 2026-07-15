@@ -132,6 +132,18 @@ export async function executeP9ResearchCli(
   const env = dependencies.env ?? process.env;
   const now = dependencies.now ?? (() => new Date().toISOString());
   try {
+    if (command === 'p9-live') {
+      const readiness = await inspectP9LiveReadiness(env);
+      io.stderr(
+        JSON.stringify({
+          command: 'p9-live',
+          phase: 'p9',
+          status: 'blocked_before_effects',
+          ...readiness,
+        }),
+      );
+      return 3;
+    }
     if (command === 'doctor') {
       assertOptions(tail, [], ['--p9']);
       const readiness = await inspectP9LiveReadiness(env);

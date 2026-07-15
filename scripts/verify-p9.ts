@@ -2083,6 +2083,36 @@ async function verifyT5GenericExecution(): Promise<void> {
     forgedAcceptancePolicyRejected,
     'T5 exact-bundle verifier rejects a fully resealed forged acceptance policy across plan, receipt, and downstream digests',
   );
+
+  const forgedBudget = { ...run.artifacts } as Record<string, string>;
+  const forgedBudgetLedger = JSON.parse(
+    forgedBudget['budget-ledger.json'] ?? '{}',
+  ) as { snapshot?: Record<string, unknown>; summary?: unknown };
+  invariant(
+    forgedBudgetLedger.snapshot !== undefined,
+    'T5 budget attack fixture contains a serialized authority snapshot',
+  );
+  if (forgedBudgetLedger.snapshot) {
+    forgedBudgetLedger.snapshot.programId = 'forged-execution';
+  }
+  forgedBudget['budget-ledger.json'] = JSON.stringify(
+    forgedBudgetLedger,
+    null,
+    2,
+  );
+  resealP9Artifacts(forgedBudget);
+  let forgedBudgetRejected = false;
+  try {
+    verifyP9ExactBundle(forgedBudget);
+  } catch (error) {
+    forgedBudgetRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    forgedBudgetRejected,
+    'T5 exact-bundle verifier rejects a fully resealed budget ledger attributed to another execution',
+  );
   const reportFixture = await json('non-data-center-report.json');
   const requiredSections = new Set(
     (reportFixture.requiredSections as readonly string[]).map(String),
@@ -2372,7 +2402,7 @@ function verifyT6LiveAuthorityGate(): void {
     'T6 authority gate does not treat P8 live flags as P9 authorization',
   );
 
-  const ready = evaluateP9LiveAuthority({
+  const configuredButUnauthorized = evaluateP9LiveAuthority({
     MAMMOTH_P9_LIVE_RESEARCH: 'authorized',
     MAMMOTH_SEARCH_BRAVE_API_KEY: 'fixture-search-secret',
     MAMMOTH_P9_LIVE_BILLING_AUTHORIZATION: 'authorized',
@@ -2384,8 +2414,12 @@ function verifyT6LiveAuthorityGate(): void {
     MAMMOTH_P9_PROVIDER_API_KEY: 'fixture-provider-secret',
   });
   invariant(
-    ready.status === 'ready' && ready.safeForEffects,
-    'T6 authority gate recognizes complete explicit P9 live authority',
+    configuredButUnauthorized.status === 'blocked_live_exhibition' &&
+      !configuredButUnauthorized.safeForEffects &&
+      configuredButUnauthorized.liveAuthorization.includes(
+        'immutable scoped human authorization receipt is missing',
+      ),
+    'T6 authority gate refuses environment-only self-authorization',
   );
 
   const acceptedLivePlan = buildAcceptedP9LivePlan({
@@ -2418,5 +2452,5 @@ await verifyT5GenericExecution();
 verifyT6LiveAuthorityGate();
 
 console.log(
-  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5 generic_execution=pass; T6 live_authority_gate=pass blocked_pending_authorization',
+  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5 generic_execution=pass; T6 live_authority_gate=pass live_effects=not_run',
 );

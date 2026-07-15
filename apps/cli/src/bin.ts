@@ -49,6 +49,7 @@ if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
 
 function isP9Command(args: readonly string[]): boolean {
   const command = args[1];
+  if (command === 'p9-live') return true;
   if (
     command === 'plan' ||
     command === 'preview' ||

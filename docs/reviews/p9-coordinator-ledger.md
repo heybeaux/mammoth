@@ -15,16 +15,16 @@ Never use a branch, worktree, or accepted spawn as proof that work is active.
 
 ## Ownership
 
-| Assignment | State           | Owner/runtime             | Worktree / branch                                                                     | Base      | Record                     | Next                               |
-| ---------- | --------------- | ------------------------- | ------------------------------------------------------------------------------------- | --------- | -------------------------- | ---------------------------------- |
-| `P9-PLAN`  | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                                  | `1de5b37` | [P9-PLAN](#p9-plan-record) | complete                           |
-| `P9-T0`    | merged          | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`                   | `2aeb3db` | [P9-T0](#p9-t0-record)     | complete                           |
-| `P9-T1`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9` | [P9-T1](#p9-t1-record)     | complete                           |
-| `P9-T2`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8` | [P9-T2](#p9-t2-record)     | complete                           |
-| `P9-T3`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38` | [P9-T3](#p9-t3-record)     | complete                           |
-| `P9-T4`    | merged          | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f` | [P9-T4](#p9-t4-record)     | complete                           |
-| `P9-T5`    | merged/verified | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t5-generic-retry` / `feat/p9-t5-generic-execution-retry`     | `ff03482` | [P9-T5](#p9-t5-record)     | complete                           |
-| `P9-T6`    | active          | Scout / primary session   | `/private/tmp/mammoth-p9-t6-live-exhibition` / `feat/p9-t6-live-exhibition`           | `c12c112` | [P9-T6](#p9-t6-record)     | live operator, exhibition, release |
+| Assignment | State           | Owner/runtime             | Worktree / branch                                                                     | Base      | Record                     | Next                             |
+| ---------- | --------------- | ------------------------- | ------------------------------------------------------------------------------------- | --------- | -------------------------- | -------------------------------- |
+| `P9-PLAN`  | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                                  | `1de5b37` | [P9-PLAN](#p9-plan-record) | complete                         |
+| `P9-T0`    | merged          | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`                   | `2aeb3db` | [P9-T0](#p9-t0-record)     | complete                         |
+| `P9-T1`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9` | [P9-T1](#p9-t1-record)     | complete                         |
+| `P9-T2`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8` | [P9-T2](#p9-t2-record)     | complete                         |
+| `P9-T3`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38` | [P9-T3](#p9-t3-record)     | complete                         |
+| `P9-T4`    | merged          | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f` | [P9-T4](#p9-t4-record)     | complete                         |
+| `P9-T5`    | merged/verified | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t5-generic-retry` / `feat/p9-t5-generic-execution-retry`     | `ff03482` | [P9-T5](#p9-t5-record)     | complete                         |
+| `P9-T6`    | remediation     | Scout / primary session   | `/private/tmp/mammoth-p9-t6-reconcile` / `fix/p9-t6-reconcile-pr75`                   | `7349a30` | [P9-T6](#p9-t6-record)     | disable unsafe live path; harden |
 
 ## Required state fields for implementation lanes
 
@@ -384,15 +384,14 @@ handoff, integration commit, blockers, and replacement audit.
   `c12c11250bfe1369bfc9dfd4ff5f9b0435c9272a`.
 - Dependencies: T5 PR #70, T6 authority audit PR #72, and exact-bundle
   provenance PR #73 are merged. PR #73 exact-head CI passed at `20abf52`.
-- Authority: Beaux explicitly authorized the P9 live exhibition on 2026-07-15,
-  using the existing Brave and model-provider credentials with a hard maximum
-  spend of US$5. P8 flags alone remain insufficient; the P9 environment contract
-  must be present and pass before effects.
+- Authority: no immutable, scoped human authorization receipt has been observed.
+  P8 flags, environment self-assertions, and repository prose are insufficient.
 - Owned paths: P9 live authority/CLI/runtime/tests, T6 verifier and receipt,
   coordinator ledger, exact live bundle, and release evidence.
 - Prohibited paths: arbitrary code execution against the target repository,
   future P11/P12 solver work, unrelated changes, and any spend above US$5.
-- Current state: producing. No P9 live search or provider effect has run yet.
+- Current state: remediation. No P9 live search or provider effect has run. PR
+  #75 merged with unresolved critical review findings and is not T6 completion.
   Local implementation now includes a pure observed-bundle compiler, a narrow
   P9 live application, a controlled `research p9-live` CLI path guarded by
   `evaluateP9LiveAuthority`, distinct profile-family rejection, and injected
@@ -410,10 +409,10 @@ handoff, integration commit, blockers, and replacement audit.
   build. Follow-up provider-boundary refactor focused checks: OpenAI-compatible
   provider test PASS (18), runtime live-application test PASS (5), CLI authority
   test PASS (6), and `pnpm typecheck` PASS.
-- Next predicate: commit/push the code-bearing live operator PR, obtain
-  independent code/security/epistemic review and exact-head CI, merge, verify
-  fresh main CI, then and only then run one authorized live exhibition within the
-  US$5 cap.
+- Next predicate: merge the fail-closed reconciliation, then implement durable
+  pre-transport budget persistence, observed usage/cost receipts, immutable
+  price/profile/authority lineage, fail-closed source classification, and
+  adversarial replay before seeking separate authority for any live effect.
 
 ## Release evidence
 

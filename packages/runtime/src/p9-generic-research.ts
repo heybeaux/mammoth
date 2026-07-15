@@ -1012,7 +1012,6 @@ export function runP9PlanDrivenResearch(
   const claimsById = new Map(
     corpus.claims.map((claim) => [claim.claimId, claim]),
   );
-
   const relevantAdmitted = admitted.filter((binding) =>
     isClaimRelevantToPlan(binding, plan),
   );
@@ -1038,20 +1037,6 @@ export function runP9PlanDrivenResearch(
         text: binding.proposal.statement,
         claimIds: [binding.proposal.proposalId],
       });
-    }
-    if (outline.sectionId === 'references_provenance') {
-      for (const binding of relevantAdmitted) {
-        const attempt = attemptBySource.get(
-          claimsById.get(binding.proposal.proposalId)?.candidateId ?? '',
-        );
-        if (!attempt) continue;
-        sentences.push({
-          sentenceId: `s:references:${binding.proposal.proposalId}`,
-          kind: 'factual',
-          text: `Claim ${binding.proposal.proposalId} is grounded in ${attempt.requestedUrl} (${binding.evidence.sourceClass}, family ${binding.evidence.sourceFamilyId}).`,
-          claimIds: [binding.proposal.proposalId],
-        });
-      }
     }
     sections.push({
       sectionId: outline.sectionId,
@@ -1456,6 +1441,9 @@ export function compileP9ObservedResearchBundle(
   const verdictById = new Map(
     verdicts.map((verdict) => [verdict.verdictId, verdict]),
   );
+  const proposalById = new Map(
+    proposals.map((proposal) => [proposal.proposalId, proposal]),
+  );
   const admissionByProposalId = new Map(
     admissions.map((admission) => [admission.proposalId, admission]),
   );
@@ -1475,10 +1463,13 @@ export function compileP9ObservedResearchBundle(
     );
   }
   for (const binding of bindings) {
+    const observedProposal = proposalById.get(binding.proposal.proposalId);
     const matchingAdmission = admissionByProposalId.get(
       binding.proposal.proposalId,
     );
     if (
+      !observedProposal ||
+      observedProposal.proposalDigest !== binding.proposal.proposalDigest ||
       !matchingAdmission ||
       matchingAdmission.admissionDigest !== binding.admission.admissionDigest
     ) {
@@ -1527,6 +1518,33 @@ export function compileP9ObservedResearchBundle(
         `binding for ${binding.proposal.proposalId} does not replay against observed entailment inputs`,
       );
     }
+    const recomputedAdmission = evaluateP9ClaimAdmission({
+      proposal: observedProposal,
+      verdict,
+      decidedAt: matchingAdmission.decidedAt,
+    });
+    if (
+      canonicalDigest(recomputedAdmission) !==
+        canonicalDigest(matchingAdmission) ||
+      canonicalDigest(matchingAdmission) !== canonicalDigest(binding.admission)
+    ) {
+      throw new P9GenericResearchError(
+        'observed_admission_mismatch',
+        `binding for ${binding.proposal.proposalId} does not replay through the admission policy`,
+      );
+    }
+  }
+
+  const acceptedSectionIds = new Set(
+    plan.reportOutline.sections.map((section) => section.sectionId),
+  );
+  for (const binding of bindings) {
+    if (!acceptedSectionIds.has(binding.evidence.reportSectionId)) {
+      throw new P9GenericResearchError(
+        'observed_report_section_invalid',
+        `binding for ${binding.proposal.proposalId} targets a section outside the accepted plan`,
+      );
+    }
   }
 
   const admitted = bindings.filter(
@@ -1564,18 +1582,6 @@ export function compileP9ObservedResearchBundle(
         text: binding.proposal.statement,
         claimIds: [binding.proposal.proposalId],
       });
-    }
-    if (outline.sectionId === 'references_provenance') {
-      for (const binding of relevantAdmitted) {
-        const attempt = attemptById.get(binding.evidence.attemptId);
-        if (!attempt) continue;
-        sentences.push({
-          sentenceId: `s:references:${binding.proposal.proposalId}`,
-          kind: 'factual',
-          text: `Claim ${binding.proposal.proposalId} is grounded in ${attempt.requestedUrl} (${binding.evidence.sourceClass}, family ${binding.evidence.sourceFamilyId}).`,
-          claimIds: [binding.proposal.proposalId],
-        });
-      }
     }
     sections.push({
       sectionId: outline.sectionId,
@@ -1674,8 +1680,28 @@ export function compileP9ObservedResearchBundle(
     manifestDigest: canonicalDigest(manifestIdentity),
   });
   const report = renderP9Report(manifest, assessment);
+  let validatedBudgetSnapshot: P9BudgetAuthoritySnapshot;
+  try {
+    validatedBudgetSnapshot = P9BudgetAuthority.restore(
+      input.budgetSnapshot,
+    ).snapshot();
+  } catch (error) {
+    throw new P9GenericResearchError(
+      'observed_budget_invalid',
+      `observed budget snapshot is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (
+    validatedBudgetSnapshot.programId !== executionId ||
+    validatedBudgetSnapshot.limit.currencyUsd !== plan.budget.currencyUsd
+  ) {
+    throw new P9GenericResearchError(
+      'observed_budget_mismatch',
+      'observed budget snapshot must match the execution and accepted plan budget',
+    );
+  }
   const budgetSummary = summarizeBudget(
-    input.budgetSnapshot,
+    validatedBudgetSnapshot,
     plan.budget.currencyUsd,
   );
   const typedResidue = {
@@ -1739,7 +1765,7 @@ export function compileP9ObservedResearchBundle(
     'plan-acceptance-receipt.json': JSON.stringify(acceptanceReceipt, null, 2),
     'retrieval-attempts.jsonl': toJsonLines(attempts),
     'budget-ledger.json': JSON.stringify(
-      { snapshot: input.budgetSnapshot, summary: budgetSummary },
+      { snapshot: validatedBudgetSnapshot, summary: budgetSummary },
       null,
       2,
     ),
@@ -1979,6 +2005,37 @@ export function verifyP9ExactBundle(
       assessment.assessmentDigest === manifest.coverageAssessmentDigest,
     'proposal, accepted plan, receipt, manifest, and coverage assessment do not share one plan chain',
   );
+  let budgetSnapshot: P9BudgetAuthoritySnapshot;
+  let serializedBudgetSummary: unknown;
+  try {
+    const ledger = z
+      .object({ snapshot: z.unknown(), summary: z.unknown() })
+      .strict()
+      .parse(JSON.parse(required('budget-ledger.json')));
+    budgetSnapshot = P9BudgetAuthority.restore(ledger.snapshot).snapshot();
+    serializedBudgetSummary = ledger.summary;
+  } catch (error) {
+    throw new P9GenericResearchError(
+      'exact_bundle_chain_invalid',
+      `budget ledger is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const replayedBudgetSummary = summarizeBudget(
+    budgetSnapshot,
+    plan.budget.currencyUsd,
+  );
+  assert(
+    budgetSnapshot.programId === receipt.executionId &&
+      budgetSnapshot.limit.currencyUsd === plan.budget.currencyUsd &&
+      budgetSnapshot.reservations.every(
+        (reservation) => reservation.state !== 'reserved',
+      ) &&
+      canonicalDigest(serializedBudgetSummary) ===
+        canonicalDigest(replayedBudgetSummary) &&
+      canonicalDigest(receipt.budget) ===
+        canonicalDigest(replayedBudgetSummary),
+    'budget ledger does not replay against the execution, accepted plan, terminal reservations, and receipt',
+  );
   assert(
     required('report.md') === renderP9Report(manifest, assessment),
     'rendered report bytes do not match the verified manifest',
@@ -2206,19 +2263,10 @@ export function verifyP9ExactBundle(
       `citation ${citation.claimId} does not match its acquired source`,
     );
     const claimSentences = factualByClaim.get(citation.claimId) ?? [];
-    const provenanceText = `Claim ${citation.claimId} is grounded in ${citation.requestedUrl} (${citation.sourceClass}, family ${citation.sourceFamilyId}).`;
     assert(
-      claimSentences.length === 2 &&
-        claimSentences.some(
-          (sentence) => sentence.text === proposal.statement,
-        ) &&
-        claimSentences.some((sentence) => sentence.text === provenanceText) &&
-        claimSentences.every(
-          (sentence) =>
-            sentence.text === proposal.statement ||
-            sentence.text === provenanceText,
-        ),
-      `citation ${citation.claimId} does not bind deterministic proposal and provenance prose`,
+      claimSentences.length === 1 &&
+        claimSentences[0]?.text === proposal.statement,
+      `citation ${citation.claimId} does not bind exactly one admitted proposal sentence`,
     );
 
     const snapshotName = `source-snapshots/${citation.snapshotDigest.slice('sha256:'.length)}.txt`;
