@@ -218,10 +218,13 @@ describe('P9 application CLI', () => {
   it('reports every live authority blocker with no executable callback surface', async () => {
     const readiness = await inspectP9LiveReadiness({});
     expect(readiness.ready).toBe(false);
-    expect(readiness.blockers).toContain('live_authorization_missing');
+    expect(readiness.blockers).toContain(
+      'scoped_live_authority_receipt_missing',
+    );
     expect(readiness.blockers).toContain('immutable_price_catalog_missing');
-    expect(readiness.blockers).toContain('proposer_profile_missing');
-    expect(readiness.blockers).toContain('evaluator_profile_missing');
+    expect(readiness.blockers).toContain(
+      'immutable_provider_profile_catalog_missing',
+    );
     expect(readiness.blockers).toContain('live_executor_unavailable');
 
     const outputIo = io();
@@ -238,14 +241,18 @@ describe('P9 application CLI', () => {
     });
   });
 
-  it('rejects correlated proposer/evaluator profile families before readiness', async () => {
+  it('does not trust environment strings for proposer/evaluator lineage', async () => {
     const readiness = await inspectP9LiveReadiness({
       MAMMOTH_P9_PROPOSER_MODEL: 'proposer-model',
       MAMMOTH_P9_EVALUATOR_MODEL: 'evaluator-model',
       MAMMOTH_P9_PROPOSER_PROFILE_FAMILY: 'same-family',
       MAMMOTH_P9_EVALUATOR_PROFILE_FAMILY: 'same-family',
     });
-    expect(readiness.blockers).toContain('model_profile_families_not_distinct');
+    expect(readiness.blockers).toContain(
+      'immutable_provider_profile_catalog_missing',
+    );
+    expect(readiness.proposerProfileFamily).toBeNull();
+    expect(readiness.evaluatorProfileFamily).toBeNull();
   });
 
   it('cross-binds plan content, pack, policy, actor, and time before live readiness', async () => {

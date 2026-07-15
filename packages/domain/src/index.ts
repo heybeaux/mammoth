@@ -7,6 +7,7 @@ export * from './lineage.js';
 export * from './model-work.js';
 export * from './p9.js';
 export * from './p9-execution.js';
+export * from './p9-live-authority.js';
 export * from './p9-planning.js';
 export * from './p8.js';
 export * from './primitives.js';
