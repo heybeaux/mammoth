@@ -69,7 +69,8 @@ function receiptIdentity() {
 }
 
 function parseReceipt(
-  mutate: (identity: ReturnType<typeof receiptIdentity>) => void = () => {},
+  mutate: (identity: ReturnType<typeof receiptIdentity>) => void = () =>
+    undefined,
 ) {
   const identity = receiptIdentity();
   mutate(identity);
