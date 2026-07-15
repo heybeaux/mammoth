@@ -1,4 +1,5 @@
 import {
+  canonicalDigest,
   type P9LiveAuthorityReceipt,
   P9LiveAuthorityReceiptSchema,
   type P9ProviderProfile,
@@ -26,8 +27,13 @@ export function assertP9LiveAuthorityLineage(input: {
   readonly receipt: P9LiveAuthorityReceipt;
   readonly profileCatalog: P9ProviderProfileCatalog;
   readonly priceCatalog: ProviderPriceCatalog;
-  readonly plan?: ResearchPlan;
-  readonly acceptanceReceipt?: PlanAcceptanceReceipt;
+  readonly plan: ResearchPlan;
+  readonly acceptanceReceipt: PlanAcceptanceReceipt;
+  readonly expectedAuthorityDigest: string;
+  readonly trustedIssuerId: string;
+  readonly executionId: string;
+  readonly question: string;
+  readonly sourceClassificationPolicyDigest: string;
   readonly now: string;
 }): P9LiveAuthorityLineage {
   const receipt = parseOrThrow(
@@ -35,6 +41,27 @@ export function assertP9LiveAuthorityLineage(input: {
     input.receipt,
     'invalid_live_authority_receipt',
   );
+  if (receipt.receiptDigest !== input.expectedAuthorityDigest) {
+    fail('live_authority_trust_anchor_mismatch');
+  }
+  if (receipt.issuerId !== input.trustedIssuerId) {
+    fail('live_authority_untrusted_issuer');
+  }
+  if (receipt.executionId !== input.executionId) {
+    fail('live_authority_execution_mismatch');
+  }
+  if (
+    receipt.planScope.question !== input.question ||
+    receipt.planScope.questionDigest !== canonicalDigest(input.question)
+  ) {
+    fail('live_authority_question_mismatch');
+  }
+  if (
+    receipt.sourceClassificationPolicyDigest !==
+    input.sourceClassificationPolicyDigest
+  ) {
+    fail('live_authority_source_policy_mismatch');
+  }
   const profileCatalog = parseOrThrow(
     P9ProviderProfileCatalogSchema,
     input.profileCatalog,
@@ -46,7 +73,7 @@ export function assertP9LiveAuthorityLineage(input: {
     'invalid_price_catalog',
   );
   const now = Date.parse(input.now);
-  if (!Number.isFinite(now) || now < Date.parse(receipt.authorizedAt)) {
+  if (!Number.isFinite(now) || now < Date.parse(receipt.notBeforeAt)) {
     fail('live_authority_not_yet_valid');
   }
   if (now >= Date.parse(receipt.expiresAt)) fail('live_authority_expired');
@@ -65,20 +92,17 @@ export function assertP9LiveAuthorityLineage(input: {
   ) {
     fail('live_authority_profile_catalog_lineage_mismatch');
   }
-  if (input.plan) {
-    if (!input.acceptanceReceipt) fail('plan_acceptance_receipt_missing');
-    const plan = parseOrThrow(
-      ResearchPlanSchema,
-      input.plan,
-      'invalid_research_plan',
-    );
-    const acceptanceReceipt = parseOrThrow(
-      PlanAcceptanceReceiptSchema,
-      input.acceptanceReceipt,
-      'invalid_plan_acceptance_receipt',
-    );
-    assertPlanScope(receipt, plan, acceptanceReceipt);
-  }
+  const plan = parseOrThrow(
+    ResearchPlanSchema,
+    input.plan,
+    'invalid_research_plan',
+  );
+  const acceptanceReceipt = parseOrThrow(
+    PlanAcceptanceReceiptSchema,
+    input.acceptanceReceipt,
+    'invalid_plan_acceptance_receipt',
+  );
+  assertPlanScope(receipt, plan, acceptanceReceipt);
 
   const profileById = new Map(
     profileCatalog.profiles.map((profile) => [profile.profileId, profile]),
@@ -104,6 +128,12 @@ export function assertP9LiveAuthorityLineage(input: {
     }
     return profile;
   });
+  if (
+    new Set(receipt.authorizedProfileIds).size !==
+    profileCatalog.profiles.length
+  ) {
+    fail('provider_profile_catalog_not_fully_authorized');
+  }
   const proposerProfile = requiredProfile(
     profileById,
     receipt.proposerProfileId,
@@ -135,11 +165,44 @@ export function assertP9LiveAuthorityLineage(input: {
   for (const effectKind of receipt.authorizedEffectKinds) {
     if (!effectKinds.has(effectKind)) fail('authorized_effect_profile_missing');
   }
-  if (
-    input.plan &&
-    receipt.budgetLimit.currencyUsd > input.plan.budget.currencyUsd
-  ) {
+  if (effectKinds.size !== authorizedEffectKinds.size) {
+    fail('authorized_effect_kind_set_mismatch');
+  }
+  const destinations = new Set(
+    profiles.map((profile) => profile.destinationOrigin),
+  );
+  const billingAccounts = new Set(
+    profiles.map((profile) => profile.billingAccountId),
+  );
+  if (!sameSet(destinations, new Set(receipt.authorizedDestinationOrigins))) {
+    fail('authorized_destination_set_mismatch');
+  }
+  if (!sameSet(billingAccounts, new Set(receipt.authorizedBillingAccountIds))) {
+    fail('authorized_billing_account_set_mismatch');
+  }
+  if (receipt.budgetLimit.currencyUsd !== plan.budget.currencyUsd) {
     fail('live_authority_exceeds_accepted_plan_budget');
+  }
+  const aggregateCeiling = profiles.reduce(
+    (total, profile) => ({
+      requests: total.requests + profile.requestCeiling.requests,
+      inputTokens: total.inputTokens + profile.requestCeiling.inputTokens,
+      outputTokens: total.outputTokens + profile.requestCeiling.outputTokens,
+      bytes: total.bytes + profile.requestCeiling.bytes,
+      durationMs: total.durationMs + profile.requestCeiling.durationMs,
+    }),
+    { requests: 0, inputTokens: 0, outputTokens: 0, bytes: 0, durationMs: 0 },
+  );
+  for (const key of [
+    'requests',
+    'inputTokens',
+    'outputTokens',
+    'bytes',
+    'durationMs',
+  ] as const) {
+    if (receipt.budgetLimit[key] !== aggregateCeiling[key]) {
+      fail('live_authority_budget_vector_mismatch');
+    }
   }
   return {
     receipt,
@@ -164,7 +227,10 @@ function assertPlanScope(
     scope.planDigest !== plan.planDigest ||
     scope.acceptanceReceiptDigest !== acceptanceReceipt.receiptDigest ||
     scope.domainPackId !== plan.domainPackId ||
-    scope.packDigest !== plan.packDigest
+    scope.packDigest !== plan.packDigest ||
+    scope.question !== plan.question ||
+    scope.questionDigest !== canonicalDigest(plan.question) ||
+    canonicalDigest(scope.budgetAllocation) !== canonicalDigest(plan.budget)
   ) {
     fail('live_authority_plan_lineage_mismatch');
   }
@@ -182,6 +248,12 @@ function assertPlanScope(
   ) {
     fail('live_authority_plan_acceptance_lineage_mismatch');
   }
+}
+
+function sameSet<T>(left: ReadonlySet<T>, right: ReadonlySet<T>): boolean {
+  return (
+    left.size === right.size && [...left].every((value) => right.has(value))
+  );
 }
 
 function requiredProfile(

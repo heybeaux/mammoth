@@ -429,11 +429,22 @@ handoff, integration commit, blockers, and replacement audit.
   readiness/tests/docs, and this ledger. Prohibited: credentials, transport,
   search/provider calls, live bundle, release/tag/receipt work, and the separate
   `/private/tmp/mammoth-p9-t6-reconcile` worktree.
+- Independent review of initial commit `e0765c511` returned BLOCK: self-digested
+  artifacts had no out-of-band trust anchor, execution/question binding,
+  single-use scope, full-vector/request ceilings, complete provider/model and
+  billing lineage, exact role/effect mapping, or credential-free origins.
+- Remediation binds a trusted issuer plus pinned authority digest, one exact
+  execution/question/accepted plan and nonce, full budget vector aggregated
+  from immutable per-profile request ceilings, source-classification policy,
+  destinations, billing accounts, and complete model checkpoint/capability/
+  prompt/output/configuration identities. Legacy environment flags, credentials,
+  budgets, and model names are explicitly ignored as authority.
 - Acceptance: digest-checked closed schemas; exact scoped plan, acceptance,
-  catalog, pricing, profile, budget, actor, and expiry validation; distinct
-  proposer/evaluator families; adversarial resealed substitutions rejected;
-  credential presence derived only from authorized profiles; CLI remains
-  unconditionally blocked at `live_executor_unavailable` with no effects.
+  catalog, pricing, profile, budget, actor, and validity validation; distinct
+  proposer/evaluator families; adversarial resealed substitutions and replay
+  rejected; CLI remains unconditionally blocked at both
+  `authority_consumption_store_unavailable` and `live_executor_unavailable`,
+  with no effects.
 - Gates: frozen install before repository-local commands PASS; focused domain
   (3), governance (3), and CLI (9) tests PASS; format PASS; lint PASS; workspace
   typecheck PASS; full workspace tests PASS; build PASS; `verify:p8` PASS with

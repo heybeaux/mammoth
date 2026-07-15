@@ -1,11 +1,15 @@
 import { z } from 'zod';
 import { canonicalDigest } from './digest.js';
 import {
+  EffectRequestCeilingSchema,
   P9BudgetVectorSchema,
   P9EffectKindSchema,
   P9_CONTRACT_FAMILY,
 } from './p9.js';
-import { ResearchDomainPackIdSchema } from './p9-planning.js';
+import {
+  PlanBudgetAllocationSchema,
+  ResearchDomainPackIdSchema,
+} from './p9-planning.js';
 
 const DigestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 
@@ -18,6 +22,14 @@ export const P9ProviderProfileRoleSchema = z.enum([
 ]);
 export type P9ProviderProfileRole = z.infer<typeof P9ProviderProfileRoleSchema>;
 
+const ROLE_EFFECT_KIND = {
+  search: 'search',
+  retrieval: 'retrieval',
+  parser: 'parser',
+  model_proposer: 'model',
+  model_evaluator: 'model',
+} as const;
+
 export const P9ProviderProfileSchema = z
   .object({
     profileId: z.string().min(1),
@@ -26,34 +38,70 @@ export const P9ProviderProfileSchema = z
     role: P9ProviderProfileRoleSchema,
     effectKind: P9EffectKindSchema,
     modelId: z.string().min(1).nullable(),
-    baseUrl: z.string().url().nullable(),
+    checkpoint: z.string().min(1).nullable(),
+    capabilityManifestDigest: DigestSchema.nullable(),
+    promptTemplateDigest: DigestSchema.nullable(),
+    outputSchemaDigest: DigestSchema.nullable(),
+    configurationDigest: DigestSchema,
+    destinationOrigin: z.string().url(),
     credentialEnvVar: z
       .string()
       .regex(/^[A-Z][A-Z0-9_]*$/u)
       .nullable(),
+    billingAuthorized: z.literal(true),
+    billingAccountId: z.string().min(1),
     catalogEntryIds: z.array(z.string().min(1)).min(1),
+    requestCeiling: EffectRequestCeilingSchema,
   })
   .strict()
   .superRefine((profile, context) => {
-    const isModel = profile.role.startsWith('model_');
-    if ((profile.effectKind === 'model') !== isModel) {
+    if (profile.effectKind !== ROLE_EFFECT_KIND[profile.role]) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['effectKind'],
-        message: 'model roles must use the model effect kind and vice versa',
+        message: 'provider role must use its exact effect kind',
       });
     }
-    if (isModel && (!profile.modelId || !profile.baseUrl)) {
+    let destination: URL | null = null;
+    try {
+      destination = new URL(profile.destinationOrigin);
+    } catch {
+      // The URL schema reports the primary issue.
+    }
+    if (
+      destination &&
+      (destination.username ||
+        destination.password ||
+        destination.pathname !== '/' ||
+        destination.search ||
+        destination.hash)
+    ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'model profiles require an exact model identity and base URL',
+        path: ['destinationOrigin'],
+        message:
+          'provider destination must be a credential-free origin without path, query, or fragment',
       });
     }
-    if (!isModel && profile.modelId !== null) {
+    const isModel = profile.role.startsWith('model_');
+    const modelFields = [
+      profile.modelId,
+      profile.checkpoint,
+      profile.capabilityManifestDigest,
+      profile.promptTemplateDigest,
+      profile.outputSchemaDigest,
+    ];
+    if (isModel && modelFields.some((value) => value === null)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['modelId'],
-        message: 'non-model profiles cannot claim a model identity',
+        message:
+          'model profiles require exact model, checkpoint, capability, prompt, and output-schema identities',
+      });
+    }
+    if (!isModel && modelFields.some((value) => value !== null)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'non-model profiles cannot claim model identities',
       });
     }
   });
@@ -101,10 +149,22 @@ export const P9LivePlanScopeSchema = z
     planId: z.string().min(1),
     planDigest: DigestSchema,
     acceptanceReceiptDigest: DigestSchema,
+    question: z.string().min(1),
+    questionDigest: DigestSchema,
     domainPackId: ResearchDomainPackIdSchema,
     packDigest: DigestSchema,
+    budgetAllocation: PlanBudgetAllocationSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((scope, context) => {
+    if (scope.questionDigest !== canonicalDigest(scope.question)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['questionDigest'],
+        message: 'question digest must bind the exact authorized question',
+      });
+    }
+  });
 export type P9LivePlanScope = z.infer<typeof P9LivePlanScopeSchema>;
 
 export const P9LiveAuthorityReceiptSchema = z
@@ -112,6 +172,13 @@ export const P9LiveAuthorityReceiptSchema = z
     schemaVersion: z.literal('1.0.0'),
     contractFamily: z.literal(P9_CONTRACT_FAMILY),
     authorityId: z.string().min(1),
+    issuerId: z.string().min(1),
+    decision: z.literal('authorized'),
+    reason: z.string().min(1),
+    executionId: z.string().min(1),
+    executionDigest: DigestSchema,
+    consumptionNonce: z.string().min(16),
+    maximumExecutions: z.literal(1),
     planScope: P9LivePlanScopeSchema,
     priceCatalogId: z.string().min(1),
     priceCatalogVersion: z.string().min(1),
@@ -119,13 +186,17 @@ export const P9LiveAuthorityReceiptSchema = z
     providerProfileCatalogId: z.string().min(1),
     providerProfileCatalogVersion: z.string().min(1),
     providerProfileCatalogDigest: DigestSchema,
+    sourceClassificationPolicyDigest: DigestSchema,
     authorizedProfileIds: z.array(z.string().min(1)).min(1),
     proposerProfileId: z.string().min(1),
     evaluatorProfileId: z.string().min(1),
     budgetLimit: P9BudgetVectorSchema,
     authorizedEffectKinds: z.array(P9EffectKindSchema).min(1),
+    authorizedDestinationOrigins: z.array(z.string().url()).min(1),
+    authorizedBillingAccountIds: z.array(z.string().min(1)).min(1),
     actorId: z.string().min(1),
     authorizedAt: z.string().datetime(),
+    notBeforeAt: z.string().datetime(),
     expiresAt: z.string().datetime(),
     receiptDigest: DigestSchema,
   })
@@ -139,21 +210,45 @@ export const P9LiveAuthorityReceiptSchema = z
         message: 'receipt digest must bind the exact scoped live authority',
       });
     }
-    if (Date.parse(receipt.expiresAt) <= Date.parse(receipt.authorizedAt)) {
+    const expectedExecutionDigest = canonicalDigest({
+      executionId: receipt.executionId,
+      planDigest: receipt.planScope.planDigest,
+      questionDigest: receipt.planScope.questionDigest,
+      consumptionNonce: receipt.consumptionNonce,
+    });
+    if (receipt.executionDigest !== expectedExecutionDigest) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['executionDigest'],
+        message:
+          'execution digest must bind execution, plan, question, and nonce',
+      });
+    }
+    if (
+      Date.parse(receipt.notBeforeAt) < Date.parse(receipt.authorizedAt) ||
+      Date.parse(receipt.expiresAt) <= Date.parse(receipt.notBeforeAt)
+    ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['expiresAt'],
-        message: 'live authority must expire after it is authorized',
+        message: 'live authority validity interval is invalid',
       });
+    }
+    for (const [path, values] of [
+      ['authorizedProfileIds', receipt.authorizedProfileIds],
+      ['authorizedEffectKinds', receipt.authorizedEffectKinds],
+      ['authorizedDestinationOrigins', receipt.authorizedDestinationOrigins],
+      ['authorizedBillingAccountIds', receipt.authorizedBillingAccountIds],
+    ] as const) {
+      if (new Set(values).size !== values.length) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [path],
+          message: 'authorized identities must be unique',
+        });
+      }
     }
     const profileIds = new Set(receipt.authorizedProfileIds);
-    if (profileIds.size !== receipt.authorizedProfileIds.length) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['authorizedProfileIds'],
-        message: 'authorized provider profile identities must be unique',
-      });
-    }
     for (const profileId of [
       receipt.proposerProfileId,
       receipt.evaluatorProfileId,

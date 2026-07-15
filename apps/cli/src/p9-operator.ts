@@ -71,6 +71,9 @@ export async function inspectP9LiveReadiness(
   expected: {
     readonly plan?: ResearchPlan;
     readonly acceptanceReceipt?: PlanAcceptanceReceipt;
+    readonly executionId?: string;
+    readonly question?: string;
+    readonly sourceClassificationPolicyDigest?: string;
     readonly now?: string;
   } = {},
 ): Promise<P9LiveReadiness> {
@@ -83,6 +86,10 @@ export async function inspectP9LiveReadiness(
   const catalogPath = env.MAMMOTH_P9_PRICE_CATALOG_PATH;
   const profileCatalogPath = env.MAMMOTH_P9_PROVIDER_PROFILE_CATALOG_PATH;
   const authorityPath = env.MAMMOTH_P9_LIVE_AUTHORITY_RECEIPT_PATH;
+  const expectedAuthorityDigest = env.MAMMOTH_P9_EXPECTED_AUTHORITY_DIGEST;
+  const trustedIssuerId = env.MAMMOTH_P9_TRUSTED_AUTHORIZER_ID;
+  if (!expectedAuthorityDigest) blockers.push('authority_trust_anchor_missing');
+  if (!trustedIssuerId) blockers.push('trusted_authorizer_missing');
   let catalog: ProviderPriceCatalog | null = null;
   let profileCatalog: P9ProviderProfileCatalog | null = null;
   let authority: P9LiveAuthorityReceipt | null = null;
@@ -122,17 +129,40 @@ export async function inspectP9LiveReadiness(
       blockers.push('scoped_live_authority_receipt_invalid');
     }
   }
-  if (catalog && profileCatalog && authority) {
+  if (!expected.plan) blockers.push('accepted_plan_missing');
+  if (!expected.acceptanceReceipt)
+    blockers.push('plan_acceptance_receipt_missing');
+  if (!expected.executionId) blockers.push('execution_identity_missing');
+  if (!expected.question) blockers.push('authorized_question_missing');
+  if (!expected.sourceClassificationPolicyDigest) {
+    blockers.push('source_classification_policy_missing');
+  }
+  if (
+    catalog &&
+    profileCatalog &&
+    authority &&
+    expectedAuthorityDigest &&
+    trustedIssuerId &&
+    expected.plan &&
+    expected.acceptanceReceipt &&
+    expected.executionId &&
+    expected.question &&
+    expected.sourceClassificationPolicyDigest
+  ) {
     try {
       const lineage = assertP9LiveAuthorityLineage({
         receipt: authority,
         profileCatalog,
         priceCatalog: catalog,
+        expectedAuthorityDigest,
+        trustedIssuerId,
+        executionId: expected.executionId,
+        question: expected.question,
+        sourceClassificationPolicyDigest:
+          expected.sourceClassificationPolicyDigest,
+        plan: expected.plan,
+        acceptanceReceipt: expected.acceptanceReceipt,
         now: expected.now ?? new Date().toISOString(),
-        ...(expected.plan ? { plan: expected.plan } : {}),
-        ...(expected.acceptanceReceipt
-          ? { acceptanceReceipt: expected.acceptanceReceipt }
-          : {}),
       });
       proposerFamily = lineage.proposerProfile.profileFamilyId;
       evaluatorFamily = lineage.evaluatorProfile.profileFamilyId;
@@ -153,7 +183,9 @@ export async function inspectP9LiveReadiness(
     }
   }
   // P9 live execution remains structurally unavailable until its effect ports
-  // mechanically reserve every request through P9BudgetAuthority.
+  // durably consume the single-use authority and mechanically reserve every
+  // request through P9BudgetAuthority.
+  blockers.push('authority_consumption_store_unavailable');
   blockers.push('live_executor_unavailable');
   return {
     ready: blockers.length === 0,
@@ -221,7 +253,11 @@ export async function executeP9ResearchCli(
       return await reviseCommand(tail, io, now());
     }
     if (command === 'run') {
-      assertOptions(tail.slice(1), ['--output', '--offline-corpus']);
+      assertOptions(tail.slice(1), [
+        '--output',
+        '--offline-corpus',
+        '--execution-id',
+      ]);
       return await runCommand(tail, io, env, now());
     }
     if (command === 'inspect') {
@@ -422,10 +458,18 @@ async function runCommand(
     });
     artifacts = run.artifacts;
   } else {
+    const executionId = option(argv.slice(1), '--execution-id');
+    const sourceClassificationPolicyDigest =
+      env.MAMMOTH_P9_EXPECTED_SOURCE_POLICY_DIGEST;
     const readiness = await inspectP9LiveReadiness(env, {
       plan,
       acceptanceReceipt: receipt,
+      question: plan.question,
       now: timestamp,
+      ...(executionId ? { executionId } : {}),
+      ...(sourceClassificationPolicyDigest
+        ? { sourceClassificationPolicyDigest }
+        : {}),
     });
     throw new Error(
       `P9 live run blocked before effects: ${readiness.blockers.join(', ')}`,

@@ -74,8 +74,13 @@ always stops at `live_executor_unavailable`, even when credentials and authority
 variables are present. `doctor --p9` loads only digest-checked artifacts named by
 `MAMMOTH_P9_PRICE_CATALOG_PATH`, `MAMMOTH_P9_PROVIDER_PROFILE_CATALOG_PATH`, and
 `MAMMOTH_P9_LIVE_AUTHORITY_RECEIPT_PATH`. The scoped receipt must bind the exact
-accepted plan, price catalog, provider profiles, distinct proposer/evaluator
-families, budget, actor, and expiry. Credential environment variable names come
-from the immutable profiles; loose model/billing environment assertions are not
-authority. Even a valid artifact chain remains blocked until the next slice wires
+accepted plan and question, single execution, price and provider catalogs,
+source-classification policy, distinct proposer/evaluator identities, model
+configuration, destinations, billing accounts, full budget vector, actor, and
+validity interval. The operator must also pin the receipt digest with
+`MAMMOTH_P9_EXPECTED_AUTHORITY_DIGEST` and the trusted issuer with
+`MAMMOTH_P9_TRUSTED_AUTHORIZER_ID`; self-resealed JSON is not authority.
+Credential environment variable names come from the immutable profiles; loose
+model/billing environment assertions are ignored. Even a valid artifact chain
+remains blocked until the next slice provides durable single-use consumption and
 mechanically budgeted effect ports.
