@@ -1,34 +1,410 @@
+import { canonicalDigest } from '@mammoth/domain';
+import {
+  GovernanceError,
+  MemoryP9DurableJournalStore,
+  P9DurableBudgetAuthority,
+  type PlanCoverageThresholds,
+} from '@mammoth/governance';
+import type { retrieveSource } from '@mammoth/retrieval';
 import { describe, expect, it } from 'vitest';
 import {
   P9_LIVE_EXHIBITION_QUESTION,
+  P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
   buildAcceptedP9LivePlan,
   runP9LiveApplication,
+  type P9LiveApplicationInput,
+  type P9LiveClaimSeed,
   type P9LiveModelAdapter,
+  type P9LiveSearchAdapter,
 } from '../src/index.js';
 
 const now = () => new Date('2026-07-15T18:00:00.000Z');
 
-const model: P9LiveModelAdapter = {
-  proposerProfile: {
-    profileVersionId: 'fixture-proposer-profile',
-    profileFamilyId: 'fixture-proposer-family',
-    modelId: 'fixture/proposer',
-  },
-  evaluatorProfile: {
-    profileVersionId: 'fixture-evaluator-profile',
-    profileFamilyId: 'fixture-evaluator-family',
-    modelId: 'fixture/evaluator',
-  },
-  proposeClaims: () => Promise.resolve([]),
-  evaluateClaims: () => Promise.resolve([]),
+const SOURCE_BODY =
+  'Colibri caches mmap-backed experts on Apple silicon. The router reuses cached experts between decode steps.';
+const QUOTE = 'The router reuses cached experts between decode steps.';
+const CANDIDATE_ID = 'cand-colibri-readme';
+
+function makeCatalog() {
+  const entry = (
+    id: string,
+    provider: string,
+    effectKind: 'search' | 'retrieval' | 'parser' | 'model',
+    parserClass: string | null,
+    costPerRequestUsd: number,
+  ) => ({
+    id,
+    provider,
+    effectKind,
+    parserClass,
+    flatCostUsd: 0,
+    costPerRequestUsd,
+    costPerInputTokenUsd: 1e-9,
+    costPerOutputTokenUsd: 1e-9,
+    costPerByteUsd: 1e-10,
+  });
+  const identity = {
+    schemaVersion: '1.0.0' as const,
+    contractFamily: 'p9.v1' as const,
+    catalogId: 'p9-live-test-catalog',
+    version: '1',
+    entries: [
+      entry('brave-search', 'brave/web-search', 'search', null, 0.005),
+      entry('public-retrieval', 'public-web', 'retrieval', null, 0.0005),
+      entry('bounded-parser', 'local-parser', 'parser', 'text/plain', 0.0001),
+      entry('model-proposer-live', 'live/proposer', 'model', null, 0.001),
+      entry('model-evaluator-live', 'live/evaluator', 'model', null, 0.001),
+    ],
+  };
+  return { ...identity, catalogDigest: canonicalDigest(identity) };
+}
+
+function makeProfileCatalog() {
+  const requestCeiling = (
+    requests: number,
+    bytes: number,
+    durationMs: number,
+    inputTokens = 0,
+    outputTokens = 0,
+    parserClass: string | null = null,
+  ) => ({
+    requests,
+    inputTokens,
+    outputTokens,
+    bytes,
+    durationMs,
+    attempts: 1,
+    parserClass,
+  });
+  const profile = (
+    profileId: string,
+    profileFamilyId: string,
+    provider: string,
+    role:
+      | 'search'
+      | 'retrieval'
+      | 'parser'
+      | 'model_proposer'
+      | 'model_evaluator',
+    catalogEntryId: string,
+    ceiling: ReturnType<typeof requestCeiling>,
+    modelId: string | null = null,
+  ) => ({
+    profileId,
+    profileFamilyId,
+    provider,
+    role,
+    effectKind:
+      role === 'model_proposer' || role === 'model_evaluator'
+        ? ('model' as const)
+        : role,
+    modelId,
+    checkpoint: modelId ? `${modelId}:checkpoint` : null,
+    capabilityManifestDigest: modelId
+      ? canonicalDigest({ modelId, capability: 'test' })
+      : null,
+    promptTemplateDigest: modelId
+      ? canonicalDigest({ modelId, prompt: 'test' })
+      : null,
+    outputSchemaDigest: modelId
+      ? canonicalDigest({ modelId, output: 'test' })
+      : null,
+    configurationDigest: canonicalDigest({ profileId, provider, role }),
+    destinationOrigin:
+      role === 'search'
+        ? 'https://api.search.brave.com/'
+        : role === 'retrieval'
+          ? 'https://public-web.example/'
+          : role === 'parser'
+            ? 'https://local-parser.example/'
+            : 'https://provider.example/',
+    credentialEnvVar:
+      role === 'retrieval' || role === 'parser' ? null : 'TEST_SECRET',
+    billingAuthorized: true as const,
+    billingAccountId: `${provider}:billing`,
+    catalogEntryIds: [catalogEntryId],
+    requestCeiling: ceiling,
+  });
+  const identity = {
+    schemaVersion: '1.0.0' as const,
+    contractFamily: 'p9.v1' as const,
+    catalogId: 'p9-live-test-profile-catalog',
+    version: '1',
+    profiles: [
+      profile(
+        'profile-search',
+        'search-family',
+        'brave/web-search',
+        'search',
+        'brave-search',
+        requestCeiling(5, 10_000_000, 150_000),
+      ),
+      profile(
+        'profile-retrieval',
+        'retrieval-family',
+        'public-web',
+        'retrieval',
+        'public-retrieval',
+        requestCeiling(8, 16_000_000, 480_000),
+      ),
+      profile(
+        'profile-parser',
+        'parser-family',
+        'local-parser',
+        'parser',
+        'bounded-parser',
+        requestCeiling(8, 16_000_000, 240_000, 0, 0, 'text/plain'),
+      ),
+      profile(
+        'fixture-proposer-profile',
+        'fixture-proposer-family',
+        'live/proposer',
+        'model_proposer',
+        'model-proposer-live',
+        requestCeiling(1, 2_000_000, 120_000, 120_000, 24_000),
+        'fixture/proposer',
+      ),
+      profile(
+        'fixture-evaluator-profile',
+        'fixture-evaluator-family',
+        'live/evaluator',
+        'model_evaluator',
+        'model-evaluator-live',
+        requestCeiling(1, 2_000_000, 120_000, 120_000, 24_000),
+        'fixture/evaluator',
+      ),
+    ],
+  };
+  return { ...identity, catalogDigest: canonicalDigest(identity) };
+}
+
+function makeReceipt(
+  catalog: ReturnType<typeof makeCatalog>,
+  profileCatalog: ReturnType<typeof makeProfileCatalog>,
+  maxBudgetUsd = 5,
+) {
+  const planBundle = buildAcceptedP9LivePlan({
+    budgetUsd: maxBudgetUsd,
+    now: '2026-07-15T17:00:00.000Z',
+    proposerProfile: makeModel({ calls: 0 }).proposerProfile,
+  });
+  const planScope = {
+    proposalId: planBundle.plan.proposalId,
+    proposalDigest: planBundle.plan.proposalDigest,
+    planId: planBundle.plan.planId,
+    planDigest: planBundle.plan.planDigest,
+    acceptanceReceiptDigest: planBundle.acceptanceReceipt.receiptDigest,
+    question: planBundle.plan.question,
+    questionDigest: canonicalDigest(planBundle.plan.question),
+    domainPackId: planBundle.plan.domainPackId,
+    packDigest: planBundle.plan.packDigest,
+    budgetAllocation: planBundle.plan.budget,
+  };
+  const identity = {
+    schemaVersion: '1.0.0' as const,
+    contractFamily: 'p9.v1' as const,
+    authorityId: 'auth-beaux-p9-live-test',
+    issuerId: 'trusted-test-issuer',
+    decision: 'authorized' as const,
+    reason: 'test authority',
+    executionId: 'p9-live-test',
+    consumptionNonce: 'nonce-1234567890abcdef',
+    maximumExecutions: 1 as const,
+    planScope,
+    priceCatalogId: catalog.catalogId,
+    priceCatalogVersion: catalog.version,
+    priceCatalogDigest: catalog.catalogDigest,
+    providerProfileCatalogId: profileCatalog.catalogId,
+    providerProfileCatalogVersion: profileCatalog.version,
+    providerProfileCatalogDigest: profileCatalog.catalogDigest,
+    sourceClassificationPolicyDigest:
+      P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
+    authorizedProfileIds: profileCatalog.profiles.map(
+      (profile) => profile.profileId,
+    ),
+    proposerProfileId: 'fixture-proposer-profile',
+    evaluatorProfileId: 'fixture-evaluator-profile',
+    budgetLimit: {
+      currencyUsd: maxBudgetUsd,
+      requests: 23,
+      inputTokens: 240_000,
+      outputTokens: 48_000,
+      bytes: 46_000_000,
+      durationMs: 1_110_000,
+    },
+    authorizedEffectKinds: ['search', 'retrieval', 'parser', 'model'],
+    authorizedDestinationOrigins: [
+      ...new Set(
+        profileCatalog.profiles.map((profile) => profile.destinationOrigin),
+      ),
+    ],
+    authorizedBillingAccountIds: [
+      ...new Set(
+        profileCatalog.profiles.map((profile) => profile.billingAccountId),
+      ),
+    ],
+    actorId: 'beaux',
+    authorizedAt: '2026-07-15T17:00:00.000Z',
+    notBeforeAt: '2026-07-15T17:00:00.000Z',
+    expiresAt: '2026-07-16T17:00:00.000Z',
+  };
+  const withExecution = {
+    ...identity,
+    executionDigest: canonicalDigest({
+      executionId: identity.executionId,
+      planDigest: planScope.planDigest,
+      questionDigest: planScope.questionDigest,
+      consumptionNonce: identity.consumptionNonce,
+    }),
+  };
+  return { ...withExecution, receiptDigest: canonicalDigest(withExecution) };
+}
+
+const thresholds: PlanCoverageThresholds = {
+  minAdmittedClaims: 1,
+  minCriticalClaims: 0,
+  minIndependentFamiliesPerCriticalClaim: 1,
+  minMandatorySourceClassCoverageRatio: 0,
 };
+
+function makeSearch(counter: { calls: number }): P9LiveSearchAdapter {
+  return {
+    search: (query) => {
+      counter.calls += 1;
+      return Promise.resolve({
+        candidates: query.includes('README')
+          ? [
+              {
+                candidateId: CANDIDATE_ID,
+                url: 'https://github.com/JustVugg/colibri',
+                title: 'JustVugg/colibri',
+                sourceClass: 'repository_docs',
+                sourceFamilyId: 'github.com',
+              },
+            ]
+          : [],
+        usage: {
+          requests: 1,
+          inputTokens: 0,
+          outputTokens: 0,
+          bytes: 512,
+          durationMs: 5,
+        },
+      });
+    },
+  };
+}
+
+const fakeRetrieve: typeof retrieveSource = (request) =>
+  Promise.resolve({
+    requestedUrl: request.url,
+    finalUrl: request.url,
+    redirectChain: [],
+    retrievedAt: now().toISOString(),
+    status: 200,
+    headers: { 'content-type': 'text/plain' },
+    mediaType: 'text/plain',
+    bytes: new TextEncoder().encode(SOURCE_BODY),
+    networkReceipts: [],
+  });
+
+const seeds: readonly P9LiveClaimSeed[] = [
+  {
+    claimId: 'claim-router-reuse',
+    candidateId: CANDIDATE_ID,
+    quote: QUOTE,
+    statement:
+      'Upstream colibri documentation facts state the router reuses cached experts between decode steps.',
+    subquestionIds: ['sq-upstream'],
+    sectionId: 'upstream_colibri_facts',
+    claimGroupId: 'group-upstream',
+    critical: false,
+    contradictionIds: [],
+  },
+];
+
+const modelUsage = {
+  requests: 1,
+  inputTokens: 2_000,
+  outputTokens: 200,
+  bytes: 1_024,
+  durationMs: 50,
+};
+
+function makeModel(counter: { calls: number }): P9LiveModelAdapter {
+  return {
+    proposerProfile: {
+      profileVersionId: 'fixture-proposer-profile',
+      profileFamilyId: 'fixture-proposer-family',
+      modelId: 'fixture/proposer',
+    },
+    evaluatorProfile: {
+      profileVersionId: 'fixture-evaluator-profile',
+      profileFamilyId: 'fixture-evaluator-family',
+      modelId: 'fixture/evaluator',
+    },
+    proposeClaims: () => {
+      counter.calls += 1;
+      return Promise.resolve({ value: seeds, usage: modelUsage });
+    },
+    evaluateClaims: () => {
+      counter.calls += 1;
+      return Promise.resolve({
+        value: [
+          {
+            claimId: 'claim-router-reuse',
+            verdict: 'entailed' as const,
+          },
+        ],
+        usage: modelUsage,
+      });
+    },
+  };
+}
+
+function makeInput(
+  overrides: Partial<P9LiveApplicationInput> & {
+    searchCounter?: { calls: number };
+    modelCounter?: { calls: number };
+  } = {},
+): P9LiveApplicationInput {
+  const catalog = makeCatalog();
+  const providerProfileCatalog = makeProfileCatalog();
+  const authorizationReceipt = makeReceipt(catalog, providerProfileCatalog);
+  const { searchCounter, modelCounter, ...rest } = overrides;
+  return {
+    executionId: 'p9-live-test',
+    budgetUsd: 5,
+    authorizationReceipt,
+    catalog,
+    providerProfileCatalog,
+    expectedAuthorityDigest: authorizationReceipt.receiptDigest,
+    trustedIssuerId: authorizationReceipt.issuerId,
+    journal: new MemoryP9DurableJournalStore(),
+    search: makeSearch(searchCounter ?? { calls: 0 }),
+    model: makeModel(modelCounter ?? { calls: 0 }),
+    now,
+    retrieve: fakeRetrieve,
+    thresholds,
+    ...rest,
+  };
+}
+
+interface JournalRecord {
+  sequence: number;
+  entry: { kind: string; reservationId?: string } & Record<string, unknown>;
+}
+
+function records(journal: MemoryP9DurableJournalStore): JournalRecord[] {
+  return journal.readLines().map((line) => JSON.parse(line) as JournalRecord);
+}
 
 describe('P9 live application', () => {
   it('freezes the exact Colibri question into an accepted technical due diligence plan', () => {
     const plan = buildAcceptedP9LivePlan({
       budgetUsd: 5,
       now: now().toISOString(),
-      proposerProfile: model.proposerProfile,
+      proposerProfile: makeModel({ calls: 0 }).proposerProfile,
     });
 
     expect(plan.plan.question).toBe(P9_LIVE_EXHIBITION_QUESTION);
@@ -40,30 +416,348 @@ describe('P9 live application', () => {
     expect(plan.acceptanceReceipt.decision).toBe('accepted');
   });
 
-  it('blocks every injected live effect path until the durable authority contract exists', async () => {
-    let searchCalls = 0;
-    let proposerCalls = 0;
+  it('precedes every outbound effect with a durable journaled reservation and settles observed usage', async () => {
+    const journal = new MemoryP9DurableJournalStore();
+    const catalog = makeCatalog();
+    const run = await runP9LiveApplication(makeInput({ journal, catalog }));
+
+    expect(run.exactBundleVerified).toBe(true);
+    expect(run.authorizationReceipt.actorId).toBe('beaux');
+
+    const all = records(journal);
+    expect(all[0]?.entry.kind).toBe('genesis');
+    expect(all[0]?.entry.catalogDigest).toBe(catalog.catalogDigest);
+    expect(all[0]?.entry.authorityReceiptDigest).toBe(
+      makeReceipt(catalog, makeProfileCatalog()).receiptDigest,
+    );
+
+    const sequenceOf = (kind: string, reservationId: string) =>
+      all.find(
+        (record) =>
+          record.entry.kind === kind &&
+          record.entry.reservationId === reservationId,
+      )?.sequence;
+    for (const effectId of [
+      'search:q-colibri-repo',
+      `retrieval:${CANDIDATE_ID}`,
+      `parser:${CANDIDATE_ID}`,
+      'model:proposer',
+      'model:evaluator',
+    ]) {
+      const reserved = sequenceOf('reserve', effectId);
+      const started = sequenceOf('transport_started', effectId);
+      const settled = sequenceOf('settle', effectId);
+      expect(reserved).toBeTypeOf('number');
+      expect(started).toBeTypeOf('number');
+      expect(settled).toBeTypeOf('number');
+      if (
+        typeof reserved !== 'number' ||
+        typeof started !== 'number' ||
+        typeof settled !== 'number'
+      ) {
+        throw new Error(`missing journal sequence for ${effectId}`);
+      }
+      expect(reserved).toBeLessThan(started);
+      expect(started).toBeLessThan(settled);
+    }
+
+    const observed = run.effectReceipts.filter(
+      (receipt) => receipt.costState === 'observed',
+    );
+    expect(observed.length).toBeGreaterThanOrEqual(5);
+    for (const receipt of observed) {
+      expect(receipt.observedUsage).not.toBeNull();
+      expect(receipt.catalogDigest).toBe(catalog.catalogDigest);
+    }
+    const proposerReceipt = run.effectReceipts.find(
+      (receipt) => receipt.effectId === 'effect:model:proposer',
+    );
+    // observed charge = priced usage, never the reserved ceiling
+    expect(proposerReceipt?.charged.inputTokens).toBe(modelUsage.inputTokens);
+    expect(proposerReceipt?.charged.currencyUsd).toBeLessThan(0.0015);
+    expect(run.manifest.citations.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('treats environment-style flags as non-authority: a missing receipt blocks before any effect', async () => {
+    const searchCounter = { calls: 0 };
+    const modelCounter = { calls: 0 };
     await expect(
-      runP9LiveApplication({
-        executionId: 'must-not-run',
-        budgetUsd: 5,
-        now,
-        search: {
-          search: () => {
-            searchCalls += 1;
-            return Promise.resolve([]);
+      runP9LiveApplication(
+        makeInput({
+          authorizationReceipt: undefined,
+          searchCounter,
+          modelCounter,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'authorization_receipt_invalid' });
+    expect(searchCounter.calls).toBe(0);
+    expect(modelCounter.calls).toBe(0);
+  });
+
+  it('rejects a digest-tampered authorization receipt before any effect', async () => {
+    const catalog = makeCatalog();
+    const receipt = makeReceipt(catalog, makeProfileCatalog());
+    const searchCounter = { calls: 0 };
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          catalog,
+          authorizationReceipt: { ...receipt, maxBudgetUsd: 4.99 },
+          searchCounter,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'authorization_receipt_invalid' });
+    expect(searchCounter.calls).toBe(0);
+  });
+
+  it('rejects an authorization bound to a different immutable price catalog', async () => {
+    const catalog = makeCatalog();
+    const profileCatalog = makeProfileCatalog();
+    const otherDigest = canonicalDigest({ someOther: 'catalog' });
+    const original = makeReceipt(catalog, profileCatalog);
+    const { receiptDigest: _receiptDigest, ...receiptIdentity } = original;
+    expect(_receiptDigest).toMatch(/^sha256:/u);
+    const mismatchedIdentity = {
+      ...receiptIdentity,
+      priceCatalogDigest: otherDigest,
+    };
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          catalog,
+          authorizationReceipt: {
+            ...mismatchedIdentity,
+            receiptDigest: canonicalDigest(mismatchedIdentity),
           },
-        },
-        model: {
-          ...model,
-          proposeClaims: () => {
-            proposerCalls += 1;
-            return Promise.resolve([]);
+          expectedAuthorityDigest: canonicalDigest(mismatchedIdentity),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'live_authority_price_catalog_lineage_mismatch',
+    });
+  });
+
+  it('rejects budgets above the scoped human authorization and the hard 5 USD cap', async () => {
+    await expect(
+      runP9LiveApplication(makeInput({ budgetUsd: 6 })),
+    ).rejects.toThrow(/no greater than 5 USD/);
+    const catalog = makeCatalog();
+    const profileCatalog = makeProfileCatalog();
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          catalog,
+          authorizationReceipt: makeReceipt(catalog, profileCatalog, 3),
+          budgetUsd: 5,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'authorization_budget_exceeded' });
+  });
+
+  it('cannot repeat an already-settled effect after restart against the same journal', async () => {
+    const journal = new MemoryP9DurableJournalStore();
+    const catalog = makeCatalog();
+    await runP9LiveApplication(makeInput({ journal, catalog }));
+
+    const searchCounter = { calls: 0 };
+    const modelCounter = { calls: 0 };
+    await expect(
+      runP9LiveApplication(
+        makeInput({ journal, catalog, searchCounter, modelCounter }),
+      ),
+    ).rejects.toMatchObject({ code: 'effect_already_terminal' });
+    expect(searchCounter.calls).toBe(0);
+    expect(modelCounter.calls).toBe(0);
+  });
+
+  it('recovers an interrupted post-transport reservation by charging its full reserved ceiling', async () => {
+    const journal = new MemoryP9DurableJournalStore();
+    const catalog = makeCatalog();
+    const receipt = makeReceipt(catalog, makeProfileCatalog());
+    const limit = receipt.budgetLimit;
+    const crashed = P9DurableBudgetAuthority.open(
+      {
+        accountId: 'p9-live:p9-live-test',
+        programId: 'p9-live-test',
+        catalog,
+        limit,
+        authorizationReceipt: receipt,
+        store: journal,
+        actorId: 'crashed-run',
+      },
+      () => now().toISOString(),
+    );
+    const interrupted = crashed.reserve({
+      reservationId: 'interrupted-effect',
+      workItemId: 'work:interrupted-effect',
+      effectId: 'effect:interrupted-effect',
+      idempotencyKey: 'idem:crash:interrupted-effect',
+      catalogEntryId: 'brave-search',
+      ceiling: {
+        requests: 1,
+        inputTokens: 0,
+        outputTokens: 0,
+        bytes: 2_000_000,
+        durationMs: 30_000,
+        attempts: 1,
+        parserClass: null,
+      },
+      actorId: 'crashed-run',
+    });
+    crashed.markTransportStarted('interrupted-effect', 'crashed-run');
+    // the crashed run stops here without settling
+
+    const run = await runP9LiveApplication(makeInput({ journal, catalog }));
+    expect(run.recoveredReservations).toHaveLength(1);
+    const recovered = run.recoveredReservations[0];
+    if (!recovered) throw new Error('missing recovered reservation');
+    expect(recovered.id).toBe('interrupted-effect');
+    expect(recovered.state).toBe('ambiguous');
+    expect(recovered.settlementCostState).toBe('settlement_lost');
+    expect(recovered.charged).toEqual(interrupted.bound.reserved);
+    expect(run.exactBundleVerified).toBe(true);
+  });
+
+  it('releases an interrupted pre-transport reservation without charge on restart', async () => {
+    const journal = new MemoryP9DurableJournalStore();
+    const catalog = makeCatalog();
+    const receipt = makeReceipt(catalog, makeProfileCatalog());
+    const crashed = P9DurableBudgetAuthority.open(
+      {
+        accountId: 'p9-live:p9-live-test',
+        programId: 'p9-live-test',
+        catalog,
+        limit: receipt.budgetLimit,
+        authorizationReceipt: receipt,
+        store: journal,
+        actorId: 'crashed-run',
+      },
+      () => now().toISOString(),
+    );
+    crashed.reserve({
+      reservationId: 'never-started',
+      workItemId: 'work:never-started',
+      effectId: 'effect:never-started',
+      idempotencyKey: 'idem:crash:never-started',
+      catalogEntryId: 'brave-search',
+      ceiling: {
+        requests: 1,
+        inputTokens: 0,
+        outputTokens: 0,
+        bytes: 2_000_000,
+        durationMs: 30_000,
+        attempts: 1,
+        parserClass: null,
+      },
+      actorId: 'crashed-run',
+    });
+
+    const run = await runP9LiveApplication(makeInput({ journal, catalog }));
+    const recovered = run.recoveredReservations[0];
+    if (!recovered) throw new Error('missing recovered reservation');
+    expect(recovered.state).toBe('released');
+    expect(recovered.charged.currencyUsd).toBe(0);
+  });
+
+  it('settles an effect without trustworthy observed usage at the full reserved ceiling', async () => {
+    const journal = new MemoryP9DurableJournalStore();
+    const search: P9LiveSearchAdapter = {
+      search: () => Promise.resolve({ candidates: [], usage: null }),
+    };
+    const modelCounter = { calls: 0 };
+    // no candidates -> no snapshots -> the run still compiles with gaps visible
+    const run = await runP9LiveApplication(
+      makeInput({ journal, search, modelCounter }),
+    );
+    const searchReceipts = run.effectReceipts.filter(
+      (receipt) => receipt.effectKind === 'search',
+    );
+    expect(searchReceipts.length).toBeGreaterThan(0);
+    for (const receipt of searchReceipts) {
+      expect(receipt.costState).toBe('unknown');
+      expect(receipt.usageSource).toBe('absent');
+      expect(receipt.observedUsage).toBeNull();
+      // ceiling charge, never zero and never an invented observation
+      expect(receipt.charged.bytes).toBe(2_000_000);
+      expect(receipt.charged.currencyUsd).toBeGreaterThan(0);
+    }
+  });
+
+  it('journals a conservative cancellation when live transport fails after start', async () => {
+    const journal = new MemoryP9DurableJournalStore();
+    const model = makeModel({ calls: 0 });
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          journal,
+          model: {
+            ...model,
+            proposeClaims: () => Promise.reject(new Error('provider down')),
           },
-        },
-      }),
-    ).rejects.toThrow(/live executor unavailable/);
-    expect(searchCalls).toBe(0);
-    expect(proposerCalls).toBe(0);
+        }),
+      ),
+    ).rejects.toThrow(/provider down/);
+    const cancel = records(journal).find(
+      (record) =>
+        record.entry.kind === 'cancel' &&
+        record.entry.reservationId === 'model:proposer',
+    );
+    expect(cancel).toBeDefined();
+  });
+
+  it('fails closed when the durable journal cannot accept the pre-transport record', async () => {
+    const journal = new MemoryP9DurableJournalStore();
+    const searchCounter = { calls: 0 };
+    const input = makeInput({ journal, searchCounter });
+    // poison the first append after genesis: the search reservation
+    journal.failNextAppend = true;
+    await expect(runP9LiveApplication(input)).rejects.toMatchObject({
+      code: 'journal_append_failed',
+    });
+    expect(searchCounter.calls).toBe(0);
+  });
+
+  it('rejects a tampered durable journal on restart', async () => {
+    const journal = new MemoryP9DurableJournalStore();
+    const catalog = makeCatalog();
+    await runP9LiveApplication(makeInput({ journal, catalog }));
+    const tampered = new MemoryP9DurableJournalStore();
+    let flipped = false;
+    for (const line of journal.readLines()) {
+      if (!flipped && line.includes('"kind":"reserve"')) {
+        tampered.appendDurable(
+          line.replace('"kind":"reserve"', '"kind":"cancel"'),
+        );
+        flipped = true;
+      } else {
+        tampered.appendDurable(line);
+      }
+    }
+    expect(flipped).toBe(true);
+    await expect(
+      runP9LiveApplication(makeInput({ journal: tampered, catalog })),
+    ).rejects.toSatisfy(
+      (error) =>
+        error instanceof GovernanceError &&
+        (error.code === 'journal_chain_broken' ||
+          error.code === 'journal_corrupt'),
+    );
+  });
+
+  it('rejects shared proposer and evaluator profile families before opening authority', async () => {
+    const model = makeModel({ calls: 0 });
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          model: {
+            ...model,
+            evaluatorProfile: {
+              ...model.evaluatorProfile,
+              profileFamilyId: model.proposerProfile.profileFamilyId,
+            },
+          },
+        }),
+      ),
+    ).rejects.toThrow(/profile families/);
   });
 });

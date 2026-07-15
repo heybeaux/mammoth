@@ -56,16 +56,14 @@ describe('P9 live readiness artifacts', () => {
     );
   });
 
-  it('keeps both the consumption boundary and live executor mechanically unavailable', async () => {
+  it('keeps the live consumption boundary unavailable without immutable artifacts', async () => {
     const readiness = await inspectP9LiveReadiness({});
     expect(readiness.ready).toBe(false);
+    expect(readiness.blockers).toContain('authority_trust_anchor_missing');
+    expect(readiness.blockers).toContain('authority_consumption_store_missing');
     expect(readiness.blockers).toContain(
-      'protected_authority_trust_store_unavailable',
+      'scoped_live_authority_receipt_missing',
     );
-    expect(readiness.blockers).toContain(
-      'authority_consumption_store_unavailable',
-    );
-    expect(readiness.blockers).toContain('live_executor_unavailable');
 
     const output = io();
     expect(

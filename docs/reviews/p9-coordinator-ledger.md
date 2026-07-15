@@ -377,43 +377,44 @@ handoff, integration commit, blockers, and replacement audit.
 
 ### P9-T6 record
 
-- Objective: compose the merged exact-bundle provenance enforcement with a
-  P9-specific live authority gate and the frozen Colibri live exhibition path.
-- Runtime identity: Scout primary session in
-  `/private/tmp/mammoth-p9-t6-live-exhibition`, branch
-  `feat/p9-t6-live-exhibition`, exact base
-  `c12c11250bfe1369bfc9dfd4ff5f9b0435c9272a`.
-- Dependencies: T5 PR #70, T6 authority audit PR #72, and exact-bundle
-  provenance PR #73 are merged. PR #73 exact-head CI passed at `20abf52`.
-- Authority: no immutable, scoped human authorization receipt has been observed.
-  P8 flags, environment self-assertions, and repository prose are insufficient.
+- Objective: implement the final safe P9 live-executor code slice: durable
+  pre-transport reservation before every search/retrieval/parser/model effect,
+  immutable scoped human authorization and price-catalog lineage, observed usage
+  receipts, conservative unknown/lost settlement, replay safety, and a real
+  Brave/OpenAI-compatible `research p9-live` path. The live exhibition itself
+  remains parent-owned and has not run.
+- Runtime identity: Scout OpenClaw subagent session
+  `agent:scout:subagent:1081702d-1960-47ed-b01d-19e2507437c6`; requester
+  `agent:scout:telegram:direct:8274834197`; worktree
+  `/private/tmp/mammoth-p9-t6-live-executor-final`, branch
+  `feat/p9-t6-live-executor-final`, exact base
+  `6ea647c6cfc88a17b7d075e79b1a58595baa4672`.
+- Dependencies: T5 PR #70, T6 authority audit PR #72, exact-bundle provenance
+  PR #73, and fail-closed T6 remediation through `origin/main` at `6ea647c` are
+  merged.
+- Authority: the code now requires an immutable scoped authorization receipt
+  (`MAMMOTH_P9_AUTHORIZATION_RECEIPT_PATH`) bound to the immutable price catalog
+  (`MAMMOTH_P9_PRICE_CATALOG_PATH`) and capped at US$5. Environment flags remain
+  readiness gates only and are not spend authority.
 - Owned paths: P9 live authority/CLI/runtime/tests, T6 verifier and receipt,
   coordinator ledger, exact live bundle, and release evidence.
 - Prohibited paths: arbitrary code execution against the target repository,
   future P11/P12 solver work, unrelated changes, and any spend above US$5.
-- Current state: remediation. No P9 live search or provider effect has run. PR
-  #75 merged with unresolved critical review findings and is not T6 completion.
-  Local implementation now includes a pure observed-bundle compiler, a narrow
-  P9 live application, a controlled `research p9-live` CLI path guarded by
-  `evaluateP9LiveAuthority`, distinct profile-family rejection, and injected
-  adapter tests for budget cap rejection, same-family rejection, terminal
-  acquisition residue, exact-bundle replay, and OpenRouter-shaped capability
-  discovery through `OpenAICompatibleModelProvider`.
-- Current local verification: `pnpm format:check` PASS; `pnpm lint` PASS after
-  lint-only fixes; `pnpm typecheck` PASS; focused runtime live-application test
-  PASS (5); focused CLI authority test PASS (6); full `pnpm test` PASS before
-  the lint-only cleanup; `pnpm build` PASS; `pnpm verify:p8` PASS with manifest
-  digest `sha256:d154c6e1df6bfdb41f5222643f33862fa4eb15531af75ce6194171150077298f`;
-  `pnpm verify:p9` PASS with T6 authority and frozen live-plan acceptance still
-  reporting live effects blocked pending authorization/merge gates. The known
-  `packages/temporal-adapter/src/research-cli.ts` mode toggle is absent after
-  build. Follow-up provider-boundary refactor focused checks: OpenAI-compatible
-  provider test PASS (18), runtime live-application test PASS (5), CLI authority
-  test PASS (6), and `pnpm typecheck` PASS.
-- Next predicate: merge the fail-closed reconciliation, then implement durable
-  pre-transport budget persistence, observed usage/cost receipts, immutable
-  price/profile/authority lineage, fail-closed source classification, and
-  adversarial replay before seeking separate authority for any live effect.
+- Current state: producing. No Brave/OpenRouter/OpenAI metered live effect has
+  run in this lane. Local implementation adds digest-bound P9 live authorization
+  and effect receipt schemas, a hash-chained durable budget journal, a live
+  effect executor, Brave and OpenAI-compatible adapters, CLI wiring, adversarial
+  restart/tamper/unknown-cost tests, and `verify:p9` T6 offline live-executor
+  checks.
+- Current local verification: `pnpm format:check` PASS; `pnpm lint` PASS;
+  `pnpm typecheck` PASS; `pnpm test` PASS; `pnpm build` PASS; `pnpm verify:p8`
+  PASS with manifest digest
+  `sha256:d154c6e1df6bfdb41f5222643f33862fa4eb15531af75ce6194171150077298f`;
+  `pnpm verify:p9` PASS with `T6 live_executor=pass
+live_effects=offline_adapters_only`. Focused runtime live-application tests
+  PASS (14), focused CLI P9 tests PASS (9).
+- Next predicate: push/open PR, resolve review, require exact-head CI, then let
+  the parent perform the separately authorized live exhibition and release gates.
 
 ### P9-T6 authority contract record
 

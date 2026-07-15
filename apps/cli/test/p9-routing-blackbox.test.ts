@@ -39,7 +39,9 @@ describe('research command routing black box', () => {
       const result = error as { code?: number; stderr?: string };
       failed =
         result.code === 3 &&
-        Boolean(result.stderr?.includes('live_executor_unavailable')) &&
+        Boolean(
+          result.stderr?.includes('scoped_live_authority_receipt_missing'),
+        ) &&
         Boolean(result.stderr?.includes('blocked_before_effects'));
     }
     expect(failed).toBe(true);

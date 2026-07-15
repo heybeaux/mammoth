@@ -1,10 +1,14 @@
+import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { mkdir, open, readdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import {
+  canonicalDigest,
   P9LiveAuthorityReceiptSchema,
   P9ProviderProfileCatalogSchema,
+  P9ExecutionReceiptSchema,
   type P9LiveAuthorityReceipt,
+  type P9ProviderProfile,
   type P9ProviderProfileCatalog,
   type PlanAcceptanceReceipt,
   PlanAcceptanceReceiptSchema,
@@ -17,6 +21,7 @@ import {
 import {
   acceptResearchPlan,
   assertP9LiveAuthorityLineage,
+  FileP9DurableJournalStore,
   GovernanceError,
   P9_DOMAIN_POLICY_PACKS,
   previewResearchPlan,
@@ -25,7 +30,13 @@ import {
 } from '@mammoth/governance';
 import {
   assertP9AcceptedPlanChain,
+  BraveP9LiveSearchAdapter,
+  OpenAICompatibleP9LiveModelAdapter,
   P9OfflineCorpusSchema,
+  P9_LIVE_EXHIBITION_QUESTION,
+  P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
+  buildAcceptedP9LivePlan,
+  runP9LiveApplication,
   runP9PlanDrivenResearch,
   verifyP9ExactBundle,
 } from '@mammoth/runtime';
@@ -49,6 +60,7 @@ export interface P9LiveReadiness {
 export interface P9CliDependencies {
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly now?: () => string;
+  readonly fetchImpl?: typeof fetch;
 }
 
 const DEFAULT_ACCEPTANCE_THRESHOLDS: PlanAcceptanceThresholds = {
@@ -90,6 +102,9 @@ export async function inspectP9LiveReadiness(
   const trustedIssuerId = env.MAMMOTH_P9_TRUSTED_AUTHORIZER_ID;
   if (!expectedAuthorityDigest) blockers.push('authority_trust_anchor_missing');
   if (!trustedIssuerId) blockers.push('trusted_authorizer_missing');
+  if (!env.MAMMOTH_P9_BUDGET_JOURNAL_PATH) {
+    blockers.push('authority_consumption_store_missing');
+  }
   let catalog: ProviderPriceCatalog | null = null;
   let profileCatalog: P9ProviderProfileCatalog | null = null;
   let authority: P9LiveAuthorityReceipt | null = null;
@@ -182,13 +197,6 @@ export async function inspectP9LiveReadiness(
       );
     }
   }
-  // P9 live execution remains structurally unavailable until its effect ports
-  // resolve the issuer from a protected trust store, durably consume the
-  // single-use authority, and mechanically reserve every request through
-  // P9BudgetAuthority.
-  blockers.push('protected_authority_trust_store_unavailable');
-  blockers.push('authority_consumption_store_unavailable');
-  blockers.push('live_executor_unavailable');
   return {
     ready: blockers.length === 0,
     blockers,
@@ -210,16 +218,8 @@ export async function executeP9ResearchCli(
   const now = dependencies.now ?? (() => new Date().toISOString());
   try {
     if (command === 'p9-live') {
-      const readiness = await inspectP9LiveReadiness(env);
-      io.stderr(
-        JSON.stringify({
-          command: 'p9-live',
-          phase: 'p9',
-          status: 'blocked_before_effects',
-          ...readiness,
-        }),
-      );
-      return 3;
+      assertOptions(tail, ['--output', '--max-candidates']);
+      return await liveCommand(tail, io, env, dependencies, now());
     }
     if (command === 'doctor') {
       assertOptions(tail, [], ['--p9']);
@@ -493,6 +493,158 @@ async function runCommand(
   return 0;
 }
 
+async function liveCommand(
+  argv: readonly string[],
+  io: P9CliIo,
+  env: Readonly<Record<string, string | undefined>>,
+  dependencies: P9CliDependencies,
+  timestamp: string,
+): Promise<number> {
+  const configurationReadiness = await inspectP9LiveReadiness(env);
+  const deferredLineageBlockers = new Set([
+    'accepted_plan_missing',
+    'plan_acceptance_receipt_missing',
+    'execution_identity_missing',
+    'authorized_question_missing',
+    'source_classification_policy_missing',
+  ]);
+  const configurationBlockers = configurationReadiness.blockers.filter(
+    (blocker) => !deferredLineageBlockers.has(blocker),
+  );
+  if (configurationBlockers.length > 0) {
+    io.stderr(
+      JSON.stringify({
+        command: 'p9-live',
+        phase: 'p9',
+        status: 'blocked_before_effects',
+        ...configurationReadiness,
+        blockers: configurationBlockers,
+        ready: false,
+      }),
+    );
+    return 3;
+  }
+  const catalog = await readJson(
+    requiredEnv(env, 'MAMMOTH_P9_PRICE_CATALOG_PATH'),
+    ProviderPriceCatalogSchema,
+  );
+  const profileCatalog = await readJson(
+    requiredEnv(env, 'MAMMOTH_P9_PROVIDER_PROFILE_CATALOG_PATH'),
+    P9ProviderProfileCatalogSchema,
+  );
+  const authorityReceipt = await readJson(
+    requiredEnv(env, 'MAMMOTH_P9_LIVE_AUTHORITY_RECEIPT_PATH'),
+    P9LiveAuthorityReceiptSchema,
+  );
+  const proposerProfile = requiredProfile(
+    profileCatalog,
+    authorityReceipt.proposerProfileId,
+  );
+  const evaluatorProfile = requiredProfile(
+    profileCatalog,
+    authorityReceipt.evaluatorProfileId,
+  );
+  const planBundle = buildAcceptedP9LivePlan({
+    budgetUsd: authorityReceipt.planScope.budgetAllocation.currencyUsd,
+    now: authorityReceipt.authorizedAt,
+    proposerProfile: toModelProfile(proposerProfile),
+  });
+  const readiness = await inspectP9LiveReadiness(env, {
+    plan: planBundle.plan,
+    acceptanceReceipt: planBundle.acceptanceReceipt,
+    executionId: authorityReceipt.executionId,
+    question: P9_LIVE_EXHIBITION_QUESTION,
+    sourceClassificationPolicyDigest:
+      P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
+    now: timestamp,
+  });
+  if (!readiness.ready) {
+    io.stderr(
+      JSON.stringify({
+        command: 'p9-live',
+        phase: 'p9',
+        status: 'blocked_before_effects',
+        ...readiness,
+      }),
+    );
+    return 3;
+  }
+  const searchProfile = requiredRoleProfile(profileCatalog, 'search');
+  const fetchImpl = dependencies.fetchImpl ?? fetch;
+  const dependencyNow = dependencies.now;
+  const liveNow = dependencyNow ? () => new Date(dependencyNow()) : undefined;
+  const maxCandidates = numericOption(argv, '--max-candidates');
+  const run = await runP9LiveApplication({
+    executionId: authorityReceipt.executionId,
+    budgetUsd: authorityReceipt.budgetLimit.currencyUsd,
+    authorizationReceipt: authorityReceipt,
+    catalog,
+    providerProfileCatalog: profileCatalog,
+    expectedAuthorityDigest: requiredEnv(
+      env,
+      'MAMMOTH_P9_EXPECTED_AUTHORITY_DIGEST',
+    ),
+    trustedIssuerId: requiredEnv(env, 'MAMMOTH_P9_TRUSTED_AUTHORIZER_ID'),
+    sourceClassificationPolicyDigest:
+      P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
+    journal: new FileP9DurableJournalStore(
+      resolve(requiredEnv(env, 'MAMMOTH_P9_BUDGET_JOURNAL_PATH')),
+    ),
+    search: new BraveP9LiveSearchAdapter({
+      apiKeyEnvironmentVariable: requiredCredentialEnv(searchProfile),
+      environment: env,
+      fetchImpl,
+      ...(liveNow ? { now: liveNow } : {}),
+    }),
+    model: new OpenAICompatibleP9LiveModelAdapter({
+      baseUrl: proposerProfile.destinationOrigin,
+      apiKeyEnvironmentVariable: requiredCredentialEnv(proposerProfile),
+      proposerProfile: toModelProfile(proposerProfile),
+      evaluatorProfile: toModelProfile(evaluatorProfile),
+      proposerMaxOutputTokens: proposerProfile.requestCeiling.outputTokens,
+      evaluatorMaxOutputTokens: evaluatorProfile.requestCeiling.outputTokens,
+      environment: env,
+      fetchImpl,
+      ...(liveNow ? { now: liveNow } : {}),
+    }),
+    ...(liveNow ? { now: liveNow } : {}),
+    ...(maxCandidates !== undefined ? { maxCandidates } : {}),
+  });
+  const artifacts = resealWithLiveLineage({
+    ...run.artifacts,
+    'live-authority-receipt.json': JSON.stringify(
+      run.authorizationReceipt,
+      null,
+      2,
+    ),
+    'live-price-catalog.json': JSON.stringify(catalog, null, 2),
+    'live-provider-profile-catalog.json': JSON.stringify(
+      profileCatalog,
+      null,
+      2,
+    ),
+    'live-effect-receipts.jsonl': toJsonLines(run.effectReceipts),
+    'live-recovered-reservations.jsonl': toJsonLines(run.recoveredReservations),
+  });
+  const outputDirectory = resolve(
+    option(argv, '--output') ?? `research/p9-live-${slug(timestamp)}`,
+  );
+  await writeFreshP9Bundle(outputDirectory, artifacts);
+  const verification = verifyP9ExactBundle(
+    await loadP9BundleDirectory(outputDirectory),
+  );
+  io.stdout(
+    JSON.stringify({
+      command: 'p9-live',
+      outputDirectory,
+      manifestId: verification.manifest.manifestId,
+      verifiedCitationCount: verification.verifiedCitationCount,
+      effectReceiptCount: run.effectReceipts.length,
+    }),
+  );
+  return 0;
+}
+
 export async function writeFreshP9Bundle(
   outputDirectory: string,
   artifacts: Readonly<Record<string, string>>,
@@ -542,6 +694,97 @@ function assertSafeArtifactName(name: string): void {
   ) {
     throw new Error(`P9 artifact name is not path-safe: ${name}`);
   }
+}
+
+function requiredProfile(
+  catalog: P9ProviderProfileCatalog,
+  profileId: string,
+): P9ProviderProfile {
+  const profile = catalog.profiles.find(
+    (entry) => entry.profileId === profileId,
+  );
+  if (!profile) throw new Error(`provider profile not found: ${profileId}`);
+  return profile;
+}
+
+function requiredRoleProfile(
+  catalog: P9ProviderProfileCatalog,
+  role: P9ProviderProfile['role'],
+): P9ProviderProfile {
+  const profile = catalog.profiles.find((entry) => entry.role === role);
+  if (!profile) throw new Error(`provider profile role not found: ${role}`);
+  return profile;
+}
+
+function requiredCredentialEnv(profile: P9ProviderProfile): string {
+  if (!profile.credentialEnvVar) {
+    throw new Error(
+      `provider profile ${profile.profileId} has no credential env var`,
+    );
+  }
+  return profile.credentialEnvVar;
+}
+
+function toModelProfile(profile: P9ProviderProfile): {
+  readonly profileVersionId: string;
+  readonly profileFamilyId: string;
+  readonly modelId: string;
+} {
+  if (!profile.modelId) {
+    throw new Error(
+      `provider profile ${profile.profileId} has no model identity`,
+    );
+  }
+  return {
+    profileVersionId: profile.profileId,
+    profileFamilyId: profile.profileFamilyId,
+    modelId: profile.modelId,
+  };
+}
+
+function resealWithLiveLineage(
+  artifacts: Record<string, string>,
+): Record<string, string> {
+  const previous = P9ExecutionReceiptSchema.parse(
+    JSON.parse(artifacts['execution-receipt.json'] ?? '{}'),
+  );
+  delete artifacts['execution-receipt.json'];
+  const artifactDigests = Object.fromEntries(
+    Object.entries(artifacts).map(([name, content]) => [
+      name,
+      sha256Text(content),
+    ]),
+  );
+  const receiptIdentity = {
+    schemaVersion: previous.schemaVersion,
+    contractFamily: previous.contractFamily,
+    executionId: previous.executionId,
+    planId: previous.planId,
+    planDigest: previous.planDigest,
+    question: previous.question,
+    budget: previous.budget,
+    counts: previous.counts,
+    typedResidue: previous.typedResidue,
+    coverageVerdict: previous.coverageVerdict,
+    coverageAssessmentDigest: previous.coverageAssessmentDigest,
+    artifactDigests,
+    startedAt: previous.startedAt,
+    finishedAt: previous.finishedAt,
+  };
+  const receipt = P9ExecutionReceiptSchema.parse({
+    ...receiptIdentity,
+    receiptDigest: canonicalDigest(receiptIdentity),
+  });
+  artifacts['execution-receipt.json'] = JSON.stringify(receipt, null, 2);
+  return artifacts;
+}
+
+function sha256Text(value: string): string {
+  return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`;
+}
+
+function toJsonLines(values: readonly unknown[]): string {
+  return values.map((value) => JSON.stringify(value)).join('\n') + '\n';
 }
 
 async function inspectCommand(
@@ -598,6 +841,28 @@ function option(argv: readonly string[], name: string): string | undefined {
   if (!value || value.startsWith('-'))
     throw new Error(`${name} requires a value`);
   return value;
+}
+
+function numericOption(
+  argv: readonly string[],
+  name: string,
+): number | undefined {
+  const value = option(argv, name);
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} requires a positive integer`);
+  }
+  return parsed;
+}
+
+function requiredEnv(
+  env: Readonly<Record<string, string | undefined>>,
+  name: string,
+): string {
+  const value = env[name];
+  if (!value?.trim()) throw new Error(`${name} is required`);
+  return value.trim();
 }
 
 function assertOptions(
