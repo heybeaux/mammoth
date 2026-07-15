@@ -179,6 +179,8 @@ export const P9LiveAuthorityReceiptSchema = z
     executionId: z.string().min(1),
     executionDigest: DigestSchema,
     consumptionNonce: z.string().min(16),
+    consumptionStoreId: z.string().min(1),
+    consumptionStoreDigest: DigestSchema,
     maximumExecutions: z.literal(1),
     planScope: P9LivePlanScopeSchema,
     priceCatalogId: z.string().min(1),
@@ -194,6 +196,7 @@ export const P9LiveAuthorityReceiptSchema = z
     budgetLimit: P9BudgetVectorSchema,
     authorizedEffectKinds: z.array(P9EffectKindSchema).min(1),
     authorizedDestinationOrigins: z.array(z.string().url()).min(1),
+    authorizedRetrievalOrigins: z.array(z.string().url()).min(1),
     authorizedBillingAccountIds: z.array(z.string().min(1)).min(1),
     actorId: z.string().min(1),
     authorizedAt: z.string().datetime(),
@@ -226,6 +229,19 @@ export const P9LiveAuthorityReceiptSchema = z
       });
     }
     if (
+      receipt.consumptionStoreDigest !==
+      canonicalDigest({
+        kind: 'p9-consumption-store/v1',
+        id: receipt.consumptionStoreId,
+      })
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['consumptionStoreDigest'],
+        message: 'consumption store digest must bind the exact store identity',
+      });
+    }
+    if (
       Date.parse(receipt.notBeforeAt) < Date.parse(receipt.authorizedAt) ||
       Date.parse(receipt.expiresAt) <= Date.parse(receipt.notBeforeAt)
     ) {
@@ -239,6 +255,7 @@ export const P9LiveAuthorityReceiptSchema = z
       ['authorizedProfileIds', receipt.authorizedProfileIds],
       ['authorizedEffectKinds', receipt.authorizedEffectKinds],
       ['authorizedDestinationOrigins', receipt.authorizedDestinationOrigins],
+      ['authorizedRetrievalOrigins', receipt.authorizedRetrievalOrigins],
       ['authorizedBillingAccountIds', receipt.authorizedBillingAccountIds],
     ] as const) {
       if (new Set(values).size !== values.length) {

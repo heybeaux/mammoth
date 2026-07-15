@@ -1,8 +1,9 @@
-import { canonicalDigest } from '@mammoth/domain';
+import { canonicalDigest, P9LiveAuthorityReceiptSchema } from '@mammoth/domain';
 import {
   GovernanceError,
   MemoryP9DurableJournalStore,
   P9DurableBudgetAuthority,
+  type P9DurableJournalStore,
   type PlanCoverageThresholds,
 } from '@mammoth/governance';
 import type { retrieveSource } from '@mammoth/retrieval';
@@ -11,7 +12,9 @@ import {
   P9_LIVE_EXHIBITION_QUESTION,
   P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
   buildAcceptedP9LivePlan,
+  resealP9LiveArtifacts,
   runP9LiveApplication,
+  verifyP9LiveBundle,
   type P9LiveApplicationInput,
   type P9LiveClaimSeed,
   type P9LiveModelAdapter,
@@ -52,8 +55,8 @@ function makeCatalog() {
       entry('brave-search', 'brave/web-search', 'search', null, 0.005),
       entry('public-retrieval', 'public-web', 'retrieval', null, 0.0005),
       entry('bounded-parser', 'local-parser', 'parser', 'text/plain', 0.0001),
-      entry('model-proposer-live', 'live/proposer', 'model', null, 0.001),
-      entry('model-evaluator-live', 'live/evaluator', 'model', null, 0.001),
+      entry('model-proposer-live', 'openrouter', 'model', null, 0.001),
+      entry('model-evaluator-live', 'openrouter', 'model', null, 0.001),
     ],
   };
   return { ...identity, catalogDigest: canonicalDigest(identity) };
@@ -158,7 +161,7 @@ function makeProfileCatalog() {
       profile(
         'fixture-proposer-profile',
         'fixture-proposer-family',
-        'live/proposer',
+        'openrouter',
         'model_proposer',
         'model-proposer-live',
         requestCeiling(1, 2_000_000, 120_000, 120_000, 24_000),
@@ -167,7 +170,7 @@ function makeProfileCatalog() {
       profile(
         'fixture-evaluator-profile',
         'fixture-evaluator-family',
-        'live/evaluator',
+        'openrouter',
         'model_evaluator',
         'model-evaluator-live',
         requestCeiling(1, 2_000_000, 120_000, 120_000, 24_000),
@@ -182,6 +185,7 @@ function makeReceipt(
   catalog: ReturnType<typeof makeCatalog>,
   profileCatalog: ReturnType<typeof makeProfileCatalog>,
   maxBudgetUsd = 5,
+  journal: P9DurableJournalStore = new MemoryP9DurableJournalStore(),
 ) {
   const planBundle = buildAcceptedP9LivePlan({
     budgetUsd: maxBudgetUsd,
@@ -209,6 +213,8 @@ function makeReceipt(
     reason: 'test authority',
     executionId: 'p9-live-test',
     consumptionNonce: 'nonce-1234567890abcdef',
+    consumptionStoreId: journal.identityId(),
+    consumptionStoreDigest: journal.identityDigest(),
     maximumExecutions: 1 as const,
     planScope,
     priceCatalogId: catalog.catalogId,
@@ -238,6 +244,7 @@ function makeReceipt(
         profileCatalog.profiles.map((profile) => profile.destinationOrigin),
       ),
     ],
+    authorizedRetrievalOrigins: ['https://github.com/'],
     authorizedBillingAccountIds: [
       ...new Set(
         profileCatalog.profiles.map((profile) => profile.billingAccountId),
@@ -370,17 +377,32 @@ function makeInput(
 ): P9LiveApplicationInput {
   const catalog = makeCatalog();
   const providerProfileCatalog = makeProfileCatalog();
-  const authorizationReceipt = makeReceipt(catalog, providerProfileCatalog);
   const { searchCounter, modelCounter, ...rest } = overrides;
+  const journal = rest.journal ?? new MemoryP9DurableJournalStore();
+  const defaultAuthorizationReceipt = makeReceipt(
+    catalog,
+    providerProfileCatalog,
+    5,
+    journal,
+  );
+  const authorizationReceipt = Object.hasOwn(rest, 'authorizationReceipt')
+    ? rest.authorizationReceipt
+    : defaultAuthorizationReceipt;
+  const parsedAuthorizationReceipt =
+    P9LiveAuthorityReceiptSchema.safeParse(authorizationReceipt);
   return {
     executionId: 'p9-live-test',
     budgetUsd: 5,
     authorizationReceipt,
     catalog,
     providerProfileCatalog,
-    expectedAuthorityDigest: authorizationReceipt.receiptDigest,
-    trustedIssuerId: authorizationReceipt.issuerId,
-    journal: new MemoryP9DurableJournalStore(),
+    expectedAuthorityDigest: parsedAuthorizationReceipt.success
+      ? parsedAuthorizationReceipt.data.receiptDigest
+      : defaultAuthorizationReceipt.receiptDigest,
+    trustedIssuerId: parsedAuthorizationReceipt.success
+      ? parsedAuthorizationReceipt.data.issuerId
+      : defaultAuthorizationReceipt.issuerId,
+    journal,
     search: makeSearch(searchCounter ?? { calls: 0 }),
     model: makeModel(modelCounter ?? { calls: 0 }),
     now,
@@ -476,6 +498,58 @@ describe('P9 live application', () => {
     expect(proposerReceipt?.charged.inputTokens).toBe(modelUsage.inputTokens);
     expect(proposerReceipt?.charged.currencyUsd).toBeLessThan(0.0015);
     expect(run.manifest.citations.length).toBeGreaterThanOrEqual(1);
+
+    const liveArtifacts = resealP9LiveArtifacts({
+      ...run.artifacts,
+      'live-authority-receipt.json': JSON.stringify(
+        run.authorizationReceipt,
+        null,
+        2,
+      ),
+      'live-price-catalog.json': JSON.stringify(catalog, null, 2),
+      'live-provider-profile-catalog.json': JSON.stringify(
+        run.providerProfileCatalog,
+        null,
+        2,
+      ),
+      'live-effect-receipts.jsonl': `${run.effectReceipts.map((value) => JSON.stringify(value)).join('\n')}\n`,
+      'live-recovered-reservations.jsonl': `${run.recoveredReservations.map((value) => JSON.stringify(value)).join('\n')}${run.recoveredReservations.length ? '\n' : ''}`,
+      'live-budget-journal.jsonl': `${journal.readLines().join('\n')}\n`,
+    });
+    expect(
+      verifyP9LiveBundle(liveArtifacts, {
+        expectedAuthorityDigest: run.authorizationReceipt.receiptDigest,
+        trustedIssuerId: run.authorizationReceipt.issuerId,
+      }),
+    ).toMatchObject({ effectReceiptCount: run.effectReceipts.length });
+
+    const forgedEffect = structuredClone(run.effectReceipts[0]);
+    if (!forgedEffect) throw new Error('missing effect receipt to forge');
+    const { receiptDigest: _forgedDigest, ...forgedIdentity } = forgedEffect;
+    expect(_forgedDigest).toMatch(/^sha256:/u);
+    const changedIdentity = {
+      ...forgedIdentity,
+      charged: {
+        ...forgedIdentity.charged,
+        currencyUsd: forgedIdentity.charged.currencyUsd + 0.001,
+      },
+    };
+    const forgedArtifacts = resealP9LiveArtifacts({
+      ...liveArtifacts,
+      'live-effect-receipts.jsonl': `${JSON.stringify({
+        ...changedIdentity,
+        receiptDigest: canonicalDigest(changedIdentity),
+      })}\n${run.effectReceipts
+        .slice(1)
+        .map((value) => JSON.stringify(value))
+        .join('\n')}\n`,
+    });
+    expect(() =>
+      verifyP9LiveBundle(forgedArtifacts, {
+        expectedAuthorityDigest: run.authorizationReceipt.receiptDigest,
+        trustedIssuerId: run.authorizationReceipt.issuerId,
+      }),
+    ).toThrow(/does not match journaled reservation/u);
   });
 
   it('treats environment-style flags as non-authority: a missing receipt blocks before any effect', async () => {
@@ -570,10 +644,74 @@ describe('P9 live application', () => {
     expect(modelCounter.calls).toBe(0);
   });
 
+  it('rejects an authority receipt bound to a different durable journal store before effects continue', async () => {
+    const authorizedJournal = new MemoryP9DurableJournalStore(
+      'p9-memory-durable-budget-journal/authorized',
+    );
+    const runtimeJournal = new MemoryP9DurableJournalStore(
+      'p9-memory-durable-budget-journal/runtime',
+    );
+    const catalog = makeCatalog();
+    const receipt = makeReceipt(
+      catalog,
+      makeProfileCatalog(),
+      5,
+      authorizedJournal,
+    );
+    const searchCounter = { calls: 0 };
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          journal: runtimeJournal,
+          catalog,
+          authorizationReceipt: receipt,
+          expectedAuthorityDigest: receipt.receiptDigest,
+          searchCounter,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'authorization_consumption_store_mismatch',
+    });
+    expect(searchCounter.calls).toBe(0);
+  });
+
+  it('skips retrieval candidates outside the scoped source-origin authorization before retrieval transport', async () => {
+    const journal = new MemoryP9DurableJournalStore();
+    const search: P9LiveSearchAdapter = {
+      search: () =>
+        Promise.resolve({
+          candidates: [
+            {
+              candidateId: 'blocked-evil-source',
+              url: 'https://evil.example/research',
+              title: 'Blocked source',
+              sourceClass: 'repository_docs',
+              sourceFamilyId: 'evil.example',
+            },
+          ],
+          usage: null,
+        }),
+    };
+    const blockedRetrievalCounter = { calls: 0 };
+    await runP9LiveApplication(
+      makeInput({
+        journal,
+        search,
+        retrieve: (...args) => {
+          if (args[0].url.startsWith('https://evil.example/')) {
+            blockedRetrievalCounter.calls += 1;
+          }
+          return fakeRetrieve(...args);
+        },
+      }),
+    );
+    expect(blockedRetrievalCounter.calls).toBe(0);
+  });
+
   it('recovers an interrupted post-transport reservation by charging its full reserved ceiling', async () => {
     const journal = new MemoryP9DurableJournalStore();
     const catalog = makeCatalog();
-    const receipt = makeReceipt(catalog, makeProfileCatalog());
+    const receipt = makeReceipt(catalog, makeProfileCatalog(), 5, journal);
     const limit = receipt.budgetLimit;
     const crashed = P9DurableBudgetAuthority.open(
       {
@@ -621,7 +759,7 @@ describe('P9 live application', () => {
   it('releases an interrupted pre-transport reservation without charge on restart', async () => {
     const journal = new MemoryP9DurableJournalStore();
     const catalog = makeCatalog();
-    const receipt = makeReceipt(catalog, makeProfileCatalog());
+    const receipt = makeReceipt(catalog, makeProfileCatalog(), 5, journal);
     const crashed = P9DurableBudgetAuthority.open(
       {
         accountId: 'p9-live:p9-live-test',

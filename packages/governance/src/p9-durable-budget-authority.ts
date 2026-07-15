@@ -18,7 +18,7 @@ import {
   unlinkSync,
   writeSync,
 } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { z } from 'zod';
 import { GovernanceError, systemClock, type Clock } from './common.js';
 import {
@@ -37,6 +37,7 @@ const GenesisEntrySchema = z
     catalogDigest: DigestSchema,
     authorityReceiptDigest: DigestSchema,
     consumptionNonce: z.string().min(16),
+    consumptionStoreDigest: DigestSchema,
     limit: P9BudgetVectorSchema,
   })
   .strict();
@@ -102,7 +103,7 @@ const JournalEntrySchema = z.discriminatedUnion('kind', [
 ]);
 export type P9DurableJournalEntry = z.infer<typeof JournalEntrySchema>;
 
-const JournalRecordSchema = z
+export const P9DurableJournalRecordSchema = z
   .object({
     sequence: z.number().int().nonnegative(),
     prevDigest: DigestSchema.nullable(),
@@ -111,7 +112,9 @@ const JournalRecordSchema = z
     recordDigest: DigestSchema,
   })
   .strict();
-export type P9DurableJournalRecord = z.infer<typeof JournalRecordSchema>;
+export type P9DurableJournalRecord = z.infer<
+  typeof P9DurableJournalRecordSchema
+>;
 
 /**
  * Append-only durable line store. `appendDurable` must not return until the
@@ -119,6 +122,8 @@ export type P9DurableJournalRecord = z.infer<typeof JournalRecordSchema>;
  * guarantee that no transport starts without a durable reservation record.
  */
 export interface P9DurableJournalStore {
+  identityId(): string;
+  identityDigest(): string;
   acquireExclusive(): void;
   releaseExclusive(): void;
   appendDurable(line: string): void;
@@ -137,9 +142,20 @@ export class FileP9DurableJournalStore implements P9DurableJournalStore {
         'durable P9 budget journal path is required',
       );
     }
-    this.#path = path;
-    this.#lockPath = `${path}.lock`;
-    mkdirSync(dirname(path), { recursive: true });
+    this.#path = resolve(path);
+    this.#lockPath = `${this.#path}.lock`;
+    mkdirSync(dirname(this.#path), { recursive: true });
+  }
+
+  identityId(): string {
+    return this.#path;
+  }
+
+  identityDigest(): string {
+    return canonicalDigest({
+      kind: 'p9-consumption-store/v1',
+      id: this.identityId(),
+    });
   }
 
   acquireExclusive(): void {
@@ -234,6 +250,21 @@ export class MemoryP9DurableJournalStore implements P9DurableJournalStore {
   readonly #lines: string[] = [];
   #locked = false;
   failNextAppend = false;
+
+  constructor(
+    private readonly storeId = 'p9-memory-durable-budget-journal/default',
+  ) {}
+
+  identityId(): string {
+    return this.storeId;
+  }
+
+  identityDigest(): string {
+    return canonicalDigest({
+      kind: 'p9-consumption-store/v1',
+      id: this.identityId(),
+    });
+  }
 
   acquireExclusive(): void {
     if (this.#locked) {
@@ -334,6 +365,15 @@ export class P9DurableBudgetAuthority {
       );
     }
     const receipt = receiptResult.data;
+    if (
+      receipt.consumptionStoreId !== input.store.identityId() ||
+      receipt.consumptionStoreDigest !== input.store.identityDigest()
+    ) {
+      throw new GovernanceError(
+        'authorization_consumption_store_mismatch',
+        'authorization receipt binds a different protected consumption store',
+      );
+    }
     const catalog = ProviderPriceCatalogSchema.parse(input.catalog);
     if (receipt.priceCatalogDigest !== catalog.catalogDigest) {
       throw new GovernanceError(
@@ -374,6 +414,7 @@ export class P9DurableBudgetAuthority {
         catalogDigest: catalog.catalogDigest,
         authorityReceiptDigest: receipt.receiptDigest,
         consumptionNonce: receipt.consumptionNonce,
+        consumptionStoreDigest: input.store.identityDigest(),
         limit,
       });
       return authority;
@@ -416,7 +457,7 @@ export class P9DurableBudgetAuthority {
           `durable P9 budget journal line ${String(index)} is not valid JSON`,
         );
       }
-      const record = JournalRecordSchema.safeParse(parsed);
+      const record = P9DurableJournalRecordSchema.safeParse(parsed);
       if (!record.success) {
         throw new GovernanceError(
           'journal_corrupt',
@@ -451,6 +492,9 @@ export class P9DurableBudgetAuthority {
       genesis.catalogDigest !== context.catalog.catalogDigest ||
       genesis.authorityReceiptDigest !== context.receipt.receiptDigest ||
       genesis.consumptionNonce !== context.receipt.consumptionNonce ||
+      genesis.consumptionStoreDigest !== context.store.identityDigest() ||
+      genesis.consumptionStoreDigest !==
+        context.receipt.consumptionStoreDigest ||
       canonicalDigest(genesis.limit) !== canonicalDigest(expected.limit)
     ) {
       throw new GovernanceError(

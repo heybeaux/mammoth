@@ -60,6 +60,7 @@ function authorityReceipt(overrides: Record<string, unknown> = {}) {
   const planDigest = digest('plan');
   const executionId = 'execution:test';
   const consumptionNonce = 'nonce:single-use:0001';
+  const consumptionStoreId = 'p9-test-consumption-store';
   const identity = {
     schemaVersion: '1.0.0' as const,
     contractFamily: 'p9.v1' as const,
@@ -75,6 +76,11 @@ function authorityReceipt(overrides: Record<string, unknown> = {}) {
       consumptionNonce,
     }),
     consumptionNonce,
+    consumptionStoreId,
+    consumptionStoreDigest: canonicalDigest({
+      kind: 'p9-consumption-store/v1',
+      id: consumptionStoreId,
+    }),
     maximumExecutions: 1 as const,
     planScope: {
       proposalId: 'proposal:test',
@@ -113,6 +119,7 @@ function authorityReceipt(overrides: Record<string, unknown> = {}) {
     },
     authorizedEffectKinds: ['model'] as const,
     authorizedDestinationOrigins: ['https://models.example/'],
+    authorizedRetrievalOrigins: ['https://github.com/'],
     authorizedBillingAccountIds: ['billing:model_proposer'],
     actorId: 'operator:test',
     authorizedAt: '2026-07-15T17:00:00.000Z',
@@ -218,6 +225,22 @@ describe('P9 live authority contracts', () => {
     }
   });
 
+  it('rejects a malformed durable consumption store digest', () => {
+    const receipt = authorityReceipt();
+    const identity = {
+      ...receipt,
+      consumptionStoreId: 'p9-test-consumption-store-other',
+      consumptionStoreDigest: digest('forged-store'),
+      receiptDigest: undefined,
+    };
+    expect(() =>
+      P9LiveAuthorityReceiptSchema.parse({
+        ...identity,
+        receiptDigest: canonicalDigest(identity),
+      }),
+    ).toThrow(/consumption store digest/u);
+  });
+
   it('rejects invalid validity windows and duplicate authorization identities', () => {
     for (const changed of [
       { notBeforeAt: '2026-07-15T16:59:59.000Z' },
@@ -226,6 +249,12 @@ describe('P9 live authority contracts', () => {
         authorizedDestinationOrigins: [
           'https://models.example/',
           'https://models.example/',
+        ],
+      },
+      {
+        authorizedRetrievalOrigins: [
+          'https://github.com/',
+          'https://github.com/',
         ],
       },
     ]) {
