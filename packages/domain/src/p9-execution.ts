@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { canonicalDigest } from './digest.js';
+import { P9EntailmentLocatorSchema } from './p9.js';
 import { ResearchDomainPackIdSchema } from './p9-planning.js';
 
 const DigestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
@@ -239,13 +240,38 @@ export type P9ReportSection = z.infer<typeof P9ReportSectionSchema>;
 export const P9ReportCitationSchema = z
   .object({
     claimId: z.string().min(1),
+    admissionId: z.string().min(1),
+    admissionPolicyId: z.string().min(1),
+    admissionDecision: z.literal('admitted'),
+    admissionDigest: DigestSchema,
+    entailmentVerdictId: z.string().min(1),
+    entailmentVerdict: z.literal('entailed'),
+    entailmentVerdictDigest: DigestSchema,
     attemptId: z.string().min(1),
     requestedUrl: z.string().url(),
     sourceClass: z.string().min(1),
     sourceFamilyId: z.string().min(1),
+    locator: P9EntailmentLocatorSchema,
+    snapshotDigest: DigestSchema,
     quoteDigest: DigestSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((citation, context) => {
+    if (citation.snapshotDigest !== citation.locator.snapshotDigest) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['snapshotDigest'],
+        message: 'citation snapshot digest must match its exact locator',
+      });
+    }
+    if (citation.quoteDigest !== citation.locator.quoteDigest) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['quoteDigest'],
+        message: 'citation quote digest must match its exact locator',
+      });
+    }
+  });
 export type P9ReportCitation = z.infer<typeof P9ReportCitationSchema>;
 
 export const P9ReportManifestSchema = z

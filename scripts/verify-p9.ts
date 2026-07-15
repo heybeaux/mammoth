@@ -1491,6 +1491,29 @@ async function verifyT5GenericExecution(): Promise<void> {
       !run.report.toLowerCase().includes('data center'),
     'T5 unrelated report is admitted-claim grounded and free of data-center template leakage',
   );
+  const citationsByClaim = new Map(
+    run.manifest.citations.map((citation) => [citation.claimId, citation]),
+  );
+  const factualClaimIds = run.manifest.sections.flatMap((section) =>
+    section.sentences
+      .filter((sentence) => sentence.kind === 'factual')
+      .flatMap((sentence) => sentence.claimIds),
+  );
+  invariant(
+    factualClaimIds.every((claimId) => {
+      const citation = citationsByClaim.get(claimId);
+      return (
+        citation !== undefined &&
+        citation.admissionPolicyId.length > 0 &&
+        citation.admissionDigest.startsWith('sha256:') &&
+        citation.entailmentVerdictDigest.startsWith('sha256:') &&
+        citation.snapshotDigest === citation.locator.snapshotDigest &&
+        citation.quoteDigest === citation.locator.quoteDigest &&
+        citation.locator.coordinateSpace === 'utf16-code-units/v1'
+      );
+    }),
+    'T5 factual citations bind admission, entailment, exact locator, and immutable snapshot metadata',
+  );
 
   const canned = runP9PlanDrivenResearch({
     planProposal: proposal,
