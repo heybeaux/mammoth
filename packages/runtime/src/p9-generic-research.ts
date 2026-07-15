@@ -42,6 +42,7 @@ import {
   assessPlanCoverage,
   isClaimRelevantToPlan,
   P9BudgetAuthority,
+  P9_PLAN_ACCEPTANCE_POLICY_ID,
   PlanCoverageThresholdsSchema,
   P9CoverageEvidenceRecordSchema,
   priceCatalogDigest,
@@ -282,6 +283,13 @@ export interface P9ObservedResearchInput {
   readonly stopCriterionFindings: readonly P9StopCriterionFinding[];
 }
 
+export interface P9AcceptedPlanChain {
+  readonly planProposal: ResearchPlanProposal;
+  readonly plan: ResearchPlan;
+  readonly acceptanceReceipt: PlanAcceptanceReceipt;
+  readonly pack: DomainPolicyPack;
+}
+
 const P9SerializedEvidenceSourceSchema = z
   .object({
     candidateId: z.string().min(1),
@@ -325,6 +333,70 @@ function p9PlanContentProjection(value: ResearchPlanProposal | ResearchPlan) {
     criticalClaimPolicy: value.criticalClaimPolicy,
     derivations: value.derivations,
   };
+}
+
+/**
+ * Validates the exact immutable proposal -> accepted plan -> receipt -> policy
+ * pack chain before an application is allowed to consider external effects.
+ */
+export function assertP9AcceptedPlanChain(input: {
+  readonly planProposal: unknown;
+  readonly plan: unknown;
+  readonly acceptanceReceipt: unknown;
+  readonly pack: unknown;
+}): P9AcceptedPlanChain {
+  const planProposalResult = ResearchPlanProposalSchema.safeParse(
+    input.planProposal,
+  );
+  const planResult = ResearchPlanSchema.safeParse(input.plan);
+  const receiptResult = PlanAcceptanceReceiptSchema.safeParse(
+    input.acceptanceReceipt,
+  );
+  const packResult = DomainPolicyPackSchema.safeParse(input.pack);
+  if (
+    !planProposalResult.success ||
+    !planResult.success ||
+    !receiptResult.success ||
+    !packResult.success
+  ) {
+    throw new P9GenericResearchError(
+      'plan_binding_mismatch',
+      'execution requires a schema-valid accepted plan contract',
+    );
+  }
+  const planProposal = planProposalResult.data;
+  const plan = planResult.data;
+  const acceptanceReceipt = receiptResult.data;
+  const pack = packResult.data;
+  if (
+    acceptanceReceipt.decision !== 'accepted' ||
+    acceptanceReceipt.proposalId !== planProposal.proposalId ||
+    acceptanceReceipt.proposalDigest !== planProposal.proposalDigest ||
+    acceptanceReceipt.planId !== plan.planId ||
+    acceptanceReceipt.planDigest !== plan.planDigest ||
+    acceptanceReceipt.packId !== pack.packId ||
+    acceptanceReceipt.packDigest !== pack.packDigest ||
+    acceptanceReceipt.packId !== planProposal.domainPackId ||
+    acceptanceReceipt.packDigest !== planProposal.packDigest ||
+    acceptanceReceipt.packId !== plan.domainPackId ||
+    acceptanceReceipt.packDigest !== plan.packDigest ||
+    plan.proposalId !== planProposal.proposalId ||
+    plan.proposalDigest !== planProposal.proposalDigest ||
+    plan.domainPackId !== pack.packId ||
+    plan.packDigest !== pack.packDigest ||
+    plan.acceptancePolicyId !== P9_PLAN_ACCEPTANCE_POLICY_ID ||
+    acceptanceReceipt.acceptancePolicyId !== P9_PLAN_ACCEPTANCE_POLICY_ID ||
+    plan.acceptedAt !== acceptanceReceipt.decidedAt ||
+    plan.acceptedBy !== acceptanceReceipt.actorId ||
+    canonicalDigest(p9PlanContentProjection(planProposal)) !==
+      canonicalDigest(p9PlanContentProjection(plan))
+  ) {
+    throw new P9GenericResearchError(
+      'plan_binding_mismatch',
+      'execution requires the exact accepted plan, proposal, receipt, actor, time, policy, and pack chain',
+    );
+  }
+  return { planProposal, plan, acceptanceReceipt, pack };
 }
 
 export interface P9ExactBundleVerification {
@@ -537,14 +609,6 @@ export function runP9PlanDrivenResearch(
   input: P9GenericResearchInput,
 ): P9GenericResearchRun {
   const corpus = P9OfflineCorpusSchema.parse(input.corpus);
-  const planProposalResult = ResearchPlanProposalSchema.safeParse(
-    input.planProposal,
-  );
-  const planResult = ResearchPlanSchema.safeParse(input.plan);
-  const receiptResult = PlanAcceptanceReceiptSchema.safeParse(
-    input.acceptanceReceipt,
-  );
-  const packResult = DomainPolicyPackSchema.safeParse(input.pack);
   const thresholdsResult = PlanCoverageThresholdsSchema.safeParse(
     input.thresholds,
   );
@@ -558,46 +622,15 @@ export function runP9PlanDrivenResearch(
       'execution identity and clock must be valid before budgeted work',
     );
   }
-  if (
-    !planProposalResult.success ||
-    !planResult.success ||
-    !receiptResult.success ||
-    !packResult.success ||
-    !thresholdsResult.success
-  ) {
+  if (!thresholdsResult.success) {
     throw new P9GenericResearchError(
       'plan_binding_mismatch',
       'execution requires a schema-valid accepted plan contract',
     );
   }
-  const planProposal = planProposalResult.data;
-  const plan = planResult.data;
-  const acceptanceReceipt = receiptResult.data;
-  const pack = packResult.data;
+  const { planProposal, plan, acceptanceReceipt, pack } =
+    assertP9AcceptedPlanChain(input);
   const thresholds = thresholdsResult.data;
-  if (
-    acceptanceReceipt.decision !== 'accepted' ||
-    acceptanceReceipt.proposalId !== planProposal.proposalId ||
-    acceptanceReceipt.proposalDigest !== planProposal.proposalDigest ||
-    acceptanceReceipt.planId !== plan.planId ||
-    acceptanceReceipt.planDigest !== plan.planDigest ||
-    acceptanceReceipt.packId !== pack.packId ||
-    acceptanceReceipt.packDigest !== pack.packDigest ||
-    plan.proposalId !== planProposal.proposalId ||
-    plan.proposalDigest !== planProposal.proposalDigest ||
-    plan.domainPackId !== pack.packId ||
-    plan.packDigest !== pack.packDigest ||
-    plan.acceptancePolicyId !== acceptanceReceipt.acceptancePolicyId ||
-    plan.acceptedAt !== acceptanceReceipt.decidedAt ||
-    plan.acceptedBy !== acceptanceReceipt.actorId ||
-    canonicalDigest(p9PlanContentProjection(planProposal)) !==
-      canonicalDigest(p9PlanContentProjection(plan))
-  ) {
-    throw new P9GenericResearchError(
-      'plan_binding_mismatch',
-      'execution requires the exact accepted plan, proposal, and receipt chain',
-    );
-  }
   const reportSectionIds = new Set(
     plan.reportOutline.sections.map((section) => section.sectionId),
   );

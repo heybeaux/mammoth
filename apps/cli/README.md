@@ -47,17 +47,17 @@ stable workflow ID derived from the charter program ID plus
 `criterion-v1` and `main`). Temporal-backed bounded `--max-steps` execution is
 rejected explicitly rather than silently changing its semantics.
 
-## P9 plan-first research application
+## P9 offline operator scaffolding
 
-P9 adds a separate, plan-first operator surface while preserving the P8
-`research ask` behavior:
+This slice adds a separate offline, plan-first operator surface while preserving
+the P8 `research ask` behavior. It is not the P9 live executor or T6 completion:
 
 ```text
 mammoth research plan "QUESTION" --proposal proposal.json --output ./research/slug
 mammoth research preview ./research/slug
 mammoth research accept ./research/slug [--actor ID]
 mammoth research revise ./research/slug --proposal revision.json [--actor ID]
-mammoth research run ./research/slug/research-plan.json [--output PATH]
+mammoth research run ./research/slug/research-plan.json --offline-corpus CORPUS [--output PATH]
 mammoth research inspect ./research/slug/run
 mammoth research doctor --p9
 ```
@@ -67,11 +67,11 @@ pretend locally supplied JSON is accepted authority. `accept` writes the immutab
 plan and acceptance receipt only after deterministic policy validation. Rejected
 revisions remain separate and cannot replace the currently accepted plan chain.
 
-The explicitly labelled `--offline-corpus PATH` run mode composes the frozen P9
-fixture runtime and exact-bundle verifier without network or paid effects. A live
-run fails before invoking any adapter unless all P9-specific authorization,
-search/model credentials, search/model billing authority, an immutable complete
-price catalog, an accepted plan, and distinct proposer/evaluator profile families
-are present. The repository does not ship a live P9 executor yet, so the normal
-binary also reports `live_executor_unavailable` rather than falling back to P8 or
-inventing authority.
+The explicitly labelled `--offline-corpus PATH` mode composes the frozen P9
+fixture runtime and exact-bundle verifier without network or paid effects. There
+is deliberately no injectable live callback. A run without the offline corpus
+always stops at `live_executor_unavailable`, even when credentials and authority
+variables are present. `doctor --p9` reports which future P9-specific credentials,
+billing authority, immutable pricing, and distinct model profile families are
+missing, but those values cannot make this scaffolding live-ready. The next slice
+must wire mechanically budgeted effect ports before any live execution exists.

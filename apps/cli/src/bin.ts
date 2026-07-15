@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
+import { P9ExecutionReceiptSchema } from '@mammoth/domain';
 import { executeCli, nodeDependencies } from './operator.js';
 import { executeLocalP7ResearchCli } from './p7-local.js';
 import { executeP8ResearchCli } from './p8-operator.js';
@@ -64,7 +65,33 @@ function isP9Command(args: readonly string[]): boolean {
   if (basename(resolved) === 'research-plan.json') return true;
   if (command === 'run')
     return existsSync(join(resolved, 'research-plan.json'));
-  return existsSync(join(resolved, 'execution-receipt.json'));
+  return isP9BundleDirectory(resolved);
+}
+
+function isP9BundleDirectory(directory: string): boolean {
+  const receiptPath = join(directory, 'execution-receipt.json');
+  if (!existsSync(receiptPath)) return false;
+  try {
+    const receipt = P9ExecutionReceiptSchema.safeParse(
+      JSON.parse(readFileSync(receiptPath, 'utf8')),
+    );
+    if (!receipt.success) return false;
+    return [
+      'research-plan-proposal.json',
+      'research-plan.json',
+      'plan-acceptance-receipt.json',
+      'claim-proposals.jsonl',
+      'claim-evidence.jsonl',
+      'entailment-verdicts.jsonl',
+      'report-manifest.json',
+    ].every(
+      (name) =>
+        receipt.data.artifactDigests[name] !== undefined &&
+        existsSync(join(directory, name)),
+    );
+  } catch {
+    return false;
+  }
 }
 
 function isP8BundleCommand(args: readonly string[]): boolean {

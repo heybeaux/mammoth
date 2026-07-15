@@ -1,4 +1,5 @@
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { mkdir, open, readdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import {
   PlanAcceptanceReceiptSchema,
@@ -14,6 +15,7 @@ import {
   type PlanAcceptanceThresholds,
 } from '@mammoth/governance';
 import {
+  assertP9AcceptedPlanChain,
   P9OfflineCorpusSchema,
   runP9PlanDrivenResearch,
   verifyP9ExactBundle,
@@ -36,11 +38,6 @@ export interface P9LiveReadiness {
 export interface P9CliDependencies {
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly now?: () => string;
-  /** The live adapter remains deliberately injectable and absent by default. */
-  readonly runLive?: (input: {
-    readonly planDirectory: string;
-    readonly outputDirectory: string;
-  }) => Promise<Readonly<Record<string, string>>>;
 }
 
 const DEFAULT_ACCEPTANCE_THRESHOLDS: PlanAcceptanceThresholds = {
@@ -60,7 +57,6 @@ const DEFAULT_COVERAGE_THRESHOLDS = PlanCoverageThresholdsSchema.parse({
 
 export async function inspectP9LiveReadiness(
   env: Readonly<Record<string, string | undefined>>,
-  hasLiveAdapter: boolean,
 ): Promise<P9LiveReadiness> {
   const blockers: string[] = [];
   if (env.MAMMOTH_P9_LIVE_RESEARCH !== 'authorized') {
@@ -115,7 +111,9 @@ export async function inspectP9LiveReadiness(
       blockers.push('immutable_price_catalog_invalid');
     }
   }
-  if (!hasLiveAdapter) blockers.push('live_executor_unavailable');
+  // P9 live execution remains structurally unavailable until its effect ports
+  // mechanically reserve every request through P9BudgetAuthority.
+  blockers.push('live_executor_unavailable');
   return {
     ready: blockers.length === 0,
     blockers,
@@ -136,10 +134,7 @@ export async function executeP9ResearchCli(
   try {
     if (command === 'doctor') {
       assertOptions(tail, [], ['--p9']);
-      const readiness = await inspectP9LiveReadiness(
-        env,
-        dependencies.runLive !== undefined,
-      );
+      const readiness = await inspectP9LiveReadiness(env);
       io.stdout(
         JSON.stringify({
           command: 'doctor',
@@ -172,7 +167,7 @@ export async function executeP9ResearchCli(
     }
     if (command === 'run') {
       assertOptions(tail.slice(1), ['--output', '--offline-corpus']);
-      return await runCommand(tail, io, env, dependencies, now());
+      return await runCommand(tail, io, env, now());
     }
     if (command === 'inspect') {
       assertOptions(tail.slice(1), []);
@@ -287,18 +282,31 @@ async function reviseCommand(
     decidedAt,
     actorId: option(argv.slice(1), '--actor') ?? 'operator:local',
   });
-  await writeJson(
-    join(directory, 'plan-acceptance-receipt.json'),
-    result.receipt,
-  );
   if (result.plan) {
     await writeJson(join(directory, 'research-plan-proposal.json'), proposal);
     await writeJson(join(directory, 'research-plan.json'), result.plan);
-  } else {
     await writeJson(
-      join(directory, `rejected-revision-${slug(proposal.proposalId)}.json`),
-      { proposal, receipt: result.receipt },
+      join(directory, 'plan-acceptance-receipt.json'),
+      result.receipt,
     );
+  } else {
+    const rejectionId = slug(
+      `${proposal.proposalId}-${result.receipt.receiptDigest}`,
+    );
+    await writeJson(join(directory, `rejected-revision-${rejectionId}.json`), {
+      proposal,
+      rejectionReceipt: result.receipt,
+    });
+    await writeJson(join(directory, `revision-attempt-${rejectionId}.json`), {
+      status: 'rejected',
+      currentPlanId: currentPlan.planId,
+      currentPlanDigest: currentPlan.planDigest,
+      proposedRevisionId: proposal.proposalId,
+      proposedRevisionDigest: proposal.proposalDigest,
+      rejectionReceiptDigest: result.receipt.receiptDigest,
+      attemptedAt: decidedAt,
+      actorId: option(argv.slice(1), '--actor') ?? 'operator:local',
+    });
   }
   if (result.revisionRecord) {
     await writeJson(
@@ -314,7 +322,6 @@ async function runCommand(
   argv: readonly string[],
   io: P9CliIo,
   env: Readonly<Record<string, string | undefined>>,
-  dependencies: P9CliDependencies,
   timestamp: string,
 ): Promise<number> {
   const subject = resolve(
@@ -337,12 +344,12 @@ async function runCommand(
     join(planDirectory, 'plan-acceptance-receipt.json'),
     PlanAcceptanceReceiptSchema,
   );
-  if (
-    receipt.decision !== 'accepted' ||
-    receipt.planDigest !== plan.planDigest
-  ) {
-    throw new Error('research run requires the exact accepted plan receipt');
-  }
+  const chain = assertP9AcceptedPlanChain({
+    planProposal: proposal,
+    plan,
+    acceptanceReceipt: receipt,
+    pack: P9_DOMAIN_POLICY_PACKS[plan.domainPackId],
+  });
 
   const offlineCorpusPath = option(argv.slice(1), '--offline-corpus');
   let artifacts: Readonly<Record<string, string>>;
@@ -352,7 +359,7 @@ async function runCommand(
       planProposal: proposal,
       plan,
       acceptanceReceipt: receipt,
-      pack: P9_DOMAIN_POLICY_PACKS[plan.domainPackId],
+      pack: chain.pack,
       corpus,
       thresholds: DEFAULT_COVERAGE_THRESHOLDS,
       executionId: `p9-run:${slug(corpus.corpusId)}`,
@@ -360,25 +367,12 @@ async function runCommand(
     });
     artifacts = run.artifacts;
   } else {
-    const readiness = await inspectP9LiveReadiness(
-      env,
-      dependencies.runLive !== undefined,
+    const readiness = await inspectP9LiveReadiness(env);
+    throw new Error(
+      `P9 live run blocked before effects: ${readiness.blockers.join(', ')}`,
     );
-    if (!readiness.ready || !dependencies.runLive) {
-      throw new Error(
-        `P9 live run blocked before effects: ${readiness.blockers.join(', ')}`,
-      );
-    }
-    artifacts = await dependencies.runLive({ planDirectory, outputDirectory });
-    verifyP9ExactBundle(artifacts);
   }
-  await mkdir(outputDirectory, { recursive: true });
-  for (const [name, content] of Object.entries(artifacts)) {
-    assertSafeArtifactName(name);
-    const target = join(outputDirectory, name);
-    await mkdir(dirname(target), { recursive: true });
-    await writeFile(target, content, 'utf8');
-  }
+  await writeFreshP9Bundle(outputDirectory, artifacts);
   const verification = verifyP9ExactBundle(
     await loadP9BundleDirectory(outputDirectory),
   );
@@ -392,6 +386,44 @@ async function runCommand(
     }),
   );
   return 0;
+}
+
+export async function writeFreshP9Bundle(
+  outputDirectory: string,
+  artifacts: Readonly<Record<string, string>>,
+): Promise<void> {
+  const output = resolve(outputDirectory);
+  await mkdir(dirname(output), { recursive: true });
+  await mkdir(output);
+  const createdDirectories = new Set<string>(['']);
+  for (const [name, content] of Object.entries(artifacts).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    assertSafeArtifactName(name);
+    const segments = name.split('/');
+    let relativeDirectory = '';
+    for (const segment of segments.slice(0, -1)) {
+      relativeDirectory = relativeDirectory
+        ? `${relativeDirectory}/${segment}`
+        : segment;
+      if (createdDirectories.has(relativeDirectory)) continue;
+      await mkdir(join(output, relativeDirectory));
+      createdDirectories.add(relativeDirectory);
+    }
+    const handle = await open(
+      join(output, name),
+      constants.O_CREAT |
+        constants.O_EXCL |
+        constants.O_WRONLY |
+        constants.O_NOFOLLOW,
+      0o600,
+    );
+    try {
+      await handle.writeFile(content, 'utf8');
+    } finally {
+      await handle.close();
+    }
+  }
 }
 
 function assertSafeArtifactName(name: string): void {
