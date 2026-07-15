@@ -15,13 +15,14 @@ Never use a branch, worktree, or accepted spawn as proof that work is active.
 
 ## Ownership
 
-| Assignment | State   | Owner/runtime             | Worktree / branch                                                             | Base           | Record                       | Next                          |
-| ---------- | ------- | ------------------------- | ----------------------------------------------------------------------------- | -------------- | ---------------------------- | ----------------------------- |
-| `P9-PLAN`  | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                          | `1de5b37`      | [P9-PLAN](#p9-plan-record)   | complete                      |
-| `P9-T0`    | merged  | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`           | `2aeb3db`      | [P9-T0](#p9-t0-record)       | complete                      |
-| `P9-T1`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`   | `5db0fc9`      | [P9-T1](#p9-t1-record)       | complete                      |
-| `P9-T2`    | active  | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition` | `60e2da8`      | [P9-T2](#p9-t2-record)       | implement and verify          |
-| `P9-T3-T6` | blocked | unassigned                | fresh worktrees required                                                      | later T2 merge | [P9-T3-T6](#p9-t3-t6-record) | claim after accepted T2 merge |
+| Assignment | State   | Owner/runtime             | Worktree / branch                                                                     | Base           | Record                       | Next                          |
+| ---------- | ------- | ------------------------- | ------------------------------------------------------------------------------------- | -------------- | ---------------------------- | ----------------------------- |
+| `P9-PLAN`  | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                                  | `1de5b37`      | [P9-PLAN](#p9-plan-record)   | complete                      |
+| `P9-T0`    | merged  | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`                   | `2aeb3db`      | [P9-T0](#p9-t0-record)       | complete                      |
+| `P9-T1`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9`      | [P9-T1](#p9-t1-record)       | complete                      |
+| `P9-T2`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8`      | [P9-T2](#p9-t2-record)       | complete                      |
+| `P9-T3`    | active  | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38`      | [P9-T3](#p9-t3-record)       | implement and verify          |
+| `P9-T4-T6` | blocked | unassigned                | fresh worktrees required                                                              | later T3 merge | [P9-T4-T6](#p9-t4-t6-record) | claim after accepted T3 merge |
 
 ## Required state fields for implementation lanes
 
@@ -156,20 +157,68 @@ handoff, integration commit, blockers, and replacement audit.
   acquisition/parsers enabled and T3-T6 still blocked. A detached clean checkout
   of the committed implementation passed a frozen install and the same complete
   ladder with a clean worktree.
-- Reviewer: GitHub PR review plus exact-head CI; actual findings must be inspected
-  and resolved before merge recommendation.
+- Reviewer: CodeRabbit remained pending and produced no findings or completed
+  review before merge; this is recorded as no reviewer result, not approval.
+  Exact-head PR CI `29388313735` passed every lane in 4m29s.
 - Registry/artifact proof: current-session Git worktree at exact base, frozen
   install, ledger assignment, attributable diffs/tests, PR head, and CI. No child
-  worker registry claim applies.
+  worker registry claim applies. Fresh merged-main CI `29388542063` passed every
+  lane and the aggregate check in 4m21s.
+- Handoff/integration: PR #64 merged as
+  `bbc6b38988ac5e6ae12aa0161b4ccfb5f8618927`.
+- Blockers: none.
+- Replacement audit: none.
+
+### P9-T3 record
+
+- Objective: implement distinct claim-proposal and entailment-evaluator work,
+  hostile-span defenses, deterministic semantic-delta admission, independent
+  profile policy, factual-sentence render gating, and preserved rejection residue.
+- Acceptance evidence: the frozen T3 entailment and prompt-injection cases fail
+  closed; correct contradiction remains contradicted; unsupported rewrites cannot
+  render; exact accepted verdicts bind statement, quote, context, locator,
+  snapshot, work identities, raw-response identities, and profile families.
+- Runtime identity: Scout primary Telegram session; Codex root runtime with no
+  delegated child session or run ID; resolved model identity is not exposed to
+  the repository runtime.
+- Worktree/branch/base: `/private/tmp/mammoth-p9-t3-entailment-admission`;
+  `feat/p9-t3-entailment-admission`; exact merged T2 `bbc6b38`.
+- Owned paths: P9 entailment/admission domain contracts; evidence policy module
+  and tests; `scripts/verify-p9.ts`; evidence package/lock wiring; this ledger.
+- Prohibited paths: T4 planning, T5 generic execution/composition, T6 live
+  exhibition/release/tag work, frozen T0/P8 fixtures, unrelated user changes,
+  and external repositories.
+- Allowed contract changes: T3 subset of `p9.v1`: proposal/evaluator work refs,
+  exact entailment inputs/verdicts, semantic deltas, admissions, and residue.
+- Dependencies: P9 T2 merged as `bbc6b38`; merged-main CI `29388542063` passed
+  every lane and the aggregate check in 4m21s.
+- Exact gates: focused domain/evidence tests; format; lint; typecheck; full tests;
+  build; `pnpm verify:p8`; `pnpm verify:p9`; detached clean-checkout frozen
+  install and repeat before merge recommendation.
+- Current local results: evidence tests PASS (24 tests, including 17 T3
+  entailment/admission cases); format PASS; lint PASS; full workspace typecheck
+  PASS; full workspace tests PASS; build PASS; P8 regression PASS; `verify:p9`
+  PASS with T3 entailment enabled and T4-T6 still blocked. The first focused
+  runtime test exposed a missing direct `@mammoth/domain` dependency in the
+  evidence package; the package manifest and lockfile now declare it, and a
+  frozen install is required in the detached clean-checkout proof.
+- Detached clean-checkout result: the committed candidate passed
+  `pnpm install --frozen-lockfile`, format, lint, full workspace typecheck, full
+  workspace tests, build, P8 regression, and `verify:p9`; the worktree was clean
+  after restoring the known install-induced CLI mode toggle.
+- Reviewer: GitHub PR review plus exact-head CI; actual findings must be inspected
+  and resolved before merge recommendation.
+- Registry/artifact proof: current-session fresh worktree, exact base, frozen
+  install, attributable diff/tests, PR head, and CI. No child worker claim applies.
 - Handoff/integration: pending.
 - Blockers: none at assignment time.
 - Replacement audit: none.
 
-### P9-T3-T6 record
+### P9-T4-T6 record
 
 - Objective: continue one accepted slice at a time after T1.
 - State: blocked and unassigned.
-- Blocker: P9 T2 must merge and fresh default-branch CI must pass.
+- Blocker: P9 T3 must merge and fresh default-branch CI must pass.
 
 ## Release evidence
 

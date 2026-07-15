@@ -478,3 +478,177 @@ export const RetrievalCoverageResidueSchema = z
 export type RetrievalCoverageResidue = z.infer<
   typeof RetrievalCoverageResidueSchema
 >;
+
+export const P9ModelRoleSchema = z.enum([
+  'claim_proposer',
+  'entailment_evaluator',
+]);
+export type P9ModelRole = z.infer<typeof P9ModelRoleSchema>;
+
+export const P9ModelWorkRefSchema = z
+  .object({
+    workId: z.string().min(1),
+    workDigest: DigestSchema,
+    rawResponseDigest: DigestSchema,
+    role: P9ModelRoleSchema,
+    profileVersionId: z.string().min(1),
+    profileFamilyId: z.string().min(1),
+  })
+  .strict();
+export type P9ModelWorkRef = z.infer<typeof P9ModelWorkRefSchema>;
+
+export const P9EntailmentLocatorSchema = z
+  .object({
+    evidenceSpanId: z.string().min(1),
+    snapshotDigest: DigestSchema,
+    quoteDigest: DigestSchema,
+    contextDigest: DigestSchema,
+    coordinateSpace: z.string().min(1),
+    startOffset: NonNegativeIntegerSchema,
+    endOffset: NonNegativeIntegerSchema,
+  })
+  .strict()
+  .superRefine((locator, context) => {
+    if (locator.endOffset <= locator.startOffset) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endOffset'],
+        message: 'entailment locator must select a non-empty span',
+      });
+    }
+  });
+export type P9EntailmentLocator = z.infer<typeof P9EntailmentLocatorSchema>;
+
+export const P9ClaimProposalSchema = z
+  .object({
+    schemaVersion: z.literal('1.0.0'),
+    contractFamily: z.literal(P9_CONTRACT_FAMILY),
+    proposalId: z.string().min(1),
+    statement: z.string().min(1),
+    critical: z.boolean(),
+    locator: P9EntailmentLocatorSchema,
+    proposerWork: P9ModelWorkRefSchema,
+    proposalDigest: DigestSchema,
+  })
+  .strict()
+  .superRefine((proposal, context) => {
+    if (proposal.proposerWork.role !== 'claim_proposer') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['proposerWork', 'role'],
+        message: 'claim proposal requires claim_proposer work',
+      });
+    }
+    const identity = { ...proposal, proposalDigest: undefined };
+    if (proposal.proposalDigest !== canonicalDigest(identity)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['proposalDigest'],
+        message: 'proposal digest must bind the exact proposal and locator',
+      });
+    }
+  });
+export type P9ClaimProposal = z.infer<typeof P9ClaimProposalSchema>;
+
+export const P9SemanticDeltaSchema = z.enum([
+  'negation',
+  'quantity',
+  'unit',
+  'scope',
+  'causality',
+  'comparison',
+  'certainty',
+  'actor',
+  'timeframe',
+  'recommendation_premise',
+]);
+export type P9SemanticDelta = z.infer<typeof P9SemanticDeltaSchema>;
+
+export const P9EntailmentVerdictSchema = z
+  .object({
+    schemaVersion: z.literal('1.0.0'),
+    contractFamily: z.literal(P9_CONTRACT_FAMILY),
+    verdictId: z.string().min(1),
+    proposalId: z.string().min(1),
+    proposalDigest: DigestSchema,
+    evaluatedStatement: z.string().min(1),
+    evaluatedQuote: z.string().min(1),
+    boundedContext: z.string().min(1),
+    locator: P9EntailmentLocatorSchema,
+    verdict: z.enum(['entailed', 'contradicted', 'insufficient']),
+    semanticDeltas: z.array(P9SemanticDeltaSchema),
+    hostileInstructionDetected: z.boolean(),
+    reasonCodes: z.array(z.string().min(1)).min(1),
+    evaluatorWork: P9ModelWorkRefSchema,
+    evaluatedAt: z.string().datetime(),
+    verdictDigest: DigestSchema,
+  })
+  .strict()
+  .superRefine((verdict, context) => {
+    if (verdict.evaluatorWork.role !== 'entailment_evaluator') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['evaluatorWork', 'role'],
+        message: 'entailment verdict requires entailment_evaluator work',
+      });
+    }
+    if (
+      verdict.locator.quoteDigest !== canonicalDigest(verdict.evaluatedQuote)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['locator', 'quoteDigest'],
+        message:
+          'entailment verdict quote digest does not bind evaluated quote',
+      });
+    }
+    if (
+      verdict.locator.contextDigest !== canonicalDigest(verdict.boundedContext)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['locator', 'contextDigest'],
+        message:
+          'entailment verdict context digest does not bind bounded context',
+      });
+    }
+    const identity = { ...verdict, verdictDigest: undefined };
+    if (verdict.verdictDigest !== canonicalDigest(identity)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['verdictDigest'],
+        message: 'verdict digest must bind the complete evaluator result',
+      });
+    }
+  });
+export type P9EntailmentVerdict = z.infer<typeof P9EntailmentVerdictSchema>;
+
+export const P9ClaimAdmissionSchema = z
+  .object({
+    schemaVersion: z.literal('1.0.0'),
+    contractFamily: z.literal(P9_CONTRACT_FAMILY),
+    admissionId: z.string().min(1),
+    proposalId: z.string().min(1),
+    proposalDigest: DigestSchema,
+    verdictId: z.string().min(1),
+    verdictDigest: DigestSchema,
+    decision: z.enum(['admitted', 'contradicted', 'rejected']),
+    independentProfile: z.boolean(),
+    reasonCodes: z.array(z.string().min(1)).min(1),
+    policyId: z.string().min(1),
+    decidedAt: z.string().datetime(),
+    admissionDigest: DigestSchema,
+  })
+  .strict()
+  .superRefine((admission, context) => {
+    const identity = { ...admission, admissionDigest: undefined };
+    if (admission.admissionDigest !== canonicalDigest(identity)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['admissionDigest'],
+        message:
+          'admission digest must bind the complete deterministic decision',
+      });
+    }
+  });
+export type P9ClaimAdmission = z.infer<typeof P9ClaimAdmissionSchema>;
