@@ -15,16 +15,16 @@ Never use a branch, worktree, or accepted spawn as proof that work is active.
 
 ## Ownership
 
-| Assignment | State           | Owner/runtime             | Worktree / branch                                                                     | Base      | Record                     | Next                                   |
-| ---------- | --------------- | ------------------------- | ------------------------------------------------------------------------------------- | --------- | -------------------------- | -------------------------------------- |
-| `P9-PLAN`  | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                                  | `1de5b37` | [P9-PLAN](#p9-plan-record) | complete                               |
-| `P9-T0`    | merged          | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`                   | `2aeb3db` | [P9-T0](#p9-t0-record)     | complete                               |
-| `P9-T1`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9` | [P9-T1](#p9-t1-record)     | complete                               |
-| `P9-T2`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8` | [P9-T2](#p9-t2-record)     | complete                               |
-| `P9-T3`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38` | [P9-T3](#p9-t3-record)     | complete                               |
-| `P9-T4`    | merged          | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f` | [P9-T4](#p9-t4-record)     | complete                               |
-| `P9-T5`    | merged/verified | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t5-generic-retry` / `feat/p9-t5-generic-execution-retry`     | `ff03482` | [P9-T5](#p9-t5-record)     | complete                               |
-| `P9-T6`    | active          | Scout / primary session   | `/private/tmp/mammoth-p9-t6-evidence-replay` / `feat/p9-t6-evidence-replay`           | `21513a2` | [P9-T6](#p9-t6-record)     | exact-bundle PR, then live application |
+| Assignment | State           | Owner/runtime             | Worktree / branch                                                                     | Base      | Record                     | Next                                                      |
+| ---------- | --------------- | ------------------------- | ------------------------------------------------------------------------------------- | --------- | -------------------------- | --------------------------------------------------------- |
+| `P9-PLAN`  | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                                  | `1de5b37` | [P9-PLAN](#p9-plan-record) | complete                                                  |
+| `P9-T0`    | merged          | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`                   | `2aeb3db` | [P9-T0](#p9-t0-record)     | complete                                                  |
+| `P9-T1`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9` | [P9-T1](#p9-t1-record)     | complete                                                  |
+| `P9-T2`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8` | [P9-T2](#p9-t2-record)     | complete                                                  |
+| `P9-T3`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38` | [P9-T3](#p9-t3-record)     | complete                                                  |
+| `P9-T4`    | merged          | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f` | [P9-T4](#p9-t4-record)     | complete                                                  |
+| `P9-T5`    | merged/verified | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t5-generic-retry` / `feat/p9-t5-generic-execution-retry`     | `ff03482` | [P9-T5](#p9-t5-record)     | complete                                                  |
+| `P9-T6`    | active          | Scout / Codex subagent    | `/private/tmp/mammoth-p9-t6-live-application` / `feat/p9-t6-live-application`         | `c12c112` | [P9-T6](#p9-t6-record)     | offline operator scaffolding review; live remains blocked |
 
 ## Required state fields for implementation lanes
 
@@ -377,8 +377,9 @@ handoff, integration commit, blockers, and replacement audit.
 
 ### P9-T6 record
 
-- Objective: finish exact-bundle provenance hardening, then build the safe P9
-  live application/CLI/readiness path before any authorized exhibition.
+- Objective: finish exact-bundle provenance hardening, then build safe offline P9
+  application/CLI scaffolding and a fail-closed readiness gate before any
+  separately authorized live implementation or exhibition.
 - Runtime identity: Scout primary session in fresh worktree
   `/private/tmp/mammoth-p9-t6-live-authority`, branch
   `feat/p9-t6-live-authority`, exact base
@@ -428,6 +429,42 @@ handoff, integration commit, blockers, and replacement audit.
 - Compatibility: stricter required citation fields remain under `p9.v1` schema
   `1.0.0` because P9 is unreleased and no P9 release artifact is compatibility
   authority yet. The first released P9 bundle establishes that baseline.
+
+#### P9-T6 safe application assignment
+
+- Objective: add offline plan/preview/accept/revise/run/inspect/doctor operator
+  scaffolding and prove live execution remains unavailable before any effect.
+- Runtime identity: Scout Codex subagent `/root/p9_t6_live_application`;
+  resolved model identity and separate run ID are not exposed to the repository.
+- Worktree/branch/base: `/private/tmp/mammoth-p9-t6-live-application`;
+  `feat/p9-t6-live-application`; exact base
+  `c12c11250bfe1369bfc9dfd4ff5f9b0435c9272a`.
+- Owned paths: `apps/cli` P9 routing/operator/tests/docs, shared P9 accepted-plan
+  chain validation in `packages/runtime`, and this assignment record.
+- Prohibited paths: provider transport, search/model calls, metered effects,
+  release/tag/receipt publication, frozen fixtures, and unrelated changes.
+- Contracts changed: no new live authority. The runtime exposes deterministic
+  validation of the existing proposal/plan/acceptance-receipt/policy-pack chain.
+- Dependencies: merged exact-bundle/provenance base `c12c112`; existing T1-T5
+  budget, acquisition, entailment, planning, and offline execution contracts.
+- State: active remediation after independent review blocked initial commit
+  `a59be64` for P8/P9 routing ambiguity, an unconstrained injectable live
+  callback, incomplete accepted-plan cross-binding, rejected-revision overwrite,
+  symlink-unsafe bundle writes, and overstated documentation.
+- Remediation evidence: format check, lint, workspace typecheck, all 30 CLI tests,
+  workspace build, `verify:p8`, and `verify:p9` pass. Focused adversarial tests
+  cover P8 black-box routing, absent live callback authority, resealed plan-chain
+  tampering, rejected-revision preservation, and pre-existing output symlinks.
+  The P8 manifest digest remains
+  `sha256:d154c6e1df6bfdb41f5222643f33862fa4eb15531af75ce6194171150077298f`;
+  P9 correctly remains `T6=blocked` rather than claiming live completion.
+- Live blocker: `live_executor_unavailable` is unconditional in this slice. No
+  credentials, environment variables, or injected callback can make it ready;
+  future live ports must mechanically enforce `P9BudgetAuthority` before every
+  effect and require separate human authorization.
+- Reviewer/handoff: return the remediated commit to the independent reviewer and
+  P9 coordinator; no push, PR, merge, exhibition, tag, or release is authorized
+  by this assignment.
 
 ## Release evidence
 
