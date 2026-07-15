@@ -13,7 +13,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
         claims: Array.from({ length: 6 }, (_, index) => {
           const claimNumber = index + 1;
           return {
-            claimId: `claim-${claimNumber}`,
+            claimId: `claim-${String(claimNumber)}`,
             candidateId: 'candidate-1',
             quote: 'Exact source quote.',
             statement: 'The source contains an exact quote.',
