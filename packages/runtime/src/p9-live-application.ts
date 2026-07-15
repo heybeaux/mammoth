@@ -90,6 +90,7 @@ const RIGHTS_POLICY_ID = 'p9-live-rights-unknown/v1';
 const COORDINATE_SPACE = 'utf16-code-units/v1';
 const CURRENT_COMMIT_DATE_POLICY_ID = 'p9-live-current-commit-date/v1';
 const P9_LIVE_PARSER_CLASS = 'mammoth-deterministic-text';
+const P9_LIVE_COLIBRI_COMMIT_SHA = '550ddcba83afd27a892dba92c587bfcc1d30f020';
 
 export interface P9LiveCandidate {
   readonly candidateId: string;
@@ -98,6 +99,58 @@ export interface P9LiveCandidate {
   readonly sourceClass: string;
   readonly sourceFamilyId: string;
 }
+
+/**
+ * The release exhibition has six mandatory source classes. Search remains a
+ * governed discovery effect, but ranking volatility must not be able to crowd
+ * an entire mandatory class out of the bounded retrieval budget. These exact
+ * primary-source targets are therefore seeded before search results are
+ * backfilled.
+ */
+const P9_LIVE_MANDATORY_SOURCE_CANDIDATES: readonly P9LiveCandidate[] = [
+  {
+    candidateId: 'pinned:colibri-metal-source',
+    url: `https://raw.githubusercontent.com/JustVugg/colibri/${P9_LIVE_COLIBRI_COMMIT_SHA}/c/backend_metal.mm`,
+    title: 'JustVugg/colibri Metal backend source',
+    sourceClass: 'repository_code',
+    sourceFamilyId: 'github.com',
+  },
+  {
+    candidateId: 'pinned:colibri-repository-docs',
+    url: `https://raw.githubusercontent.com/JustVugg/colibri/${P9_LIVE_COLIBRI_COMMIT_SHA}/README.md`,
+    title: 'JustVugg/colibri repository documentation',
+    sourceClass: 'repository_docs',
+    sourceFamilyId: 'github.com',
+  },
+  {
+    candidateId: 'pinned:glm-5-model-card',
+    url: 'https://huggingface.co/zai-org/GLM-5',
+    title: 'Official GLM-5 model card',
+    sourceClass: 'upstream_model_docs',
+    sourceFamilyId: 'huggingface.co',
+  },
+  {
+    candidateId: 'pinned:apple-m4-max-specification',
+    url: 'https://www.apple.com/newsroom/2024/10/apple-introduces-m4-pro-and-m4-max/',
+    title: 'Apple M4 Max unified-memory specification',
+    sourceClass: 'hardware_vendor_docs',
+    sourceFamilyId: 'apple.com',
+  },
+  {
+    candidateId: 'pinned:repeated-run-evaluation-study',
+    url: 'https://arxiv.org/html/2509.24086v1',
+    title: 'Primary repeated-run evaluation study',
+    sourceClass: 'peer_reviewed_or_primary_technical',
+    sourceFamilyId: 'arxiv.org',
+  },
+  {
+    candidateId: 'pinned:cisa-memory-safety-guidance',
+    url: 'https://www.cisa.gov/resources-tools/resources/case-memory-safe-roadmaps',
+    title: 'CISA memory-safe coding guidance',
+    sourceClass: 'security_advisory',
+    sourceFamilyId: 'cisa.gov',
+  },
+];
 
 export interface P9LiveSearchOutcome {
   readonly candidates: readonly P9LiveCandidate[];
@@ -170,6 +223,7 @@ export interface P9LiveApplicationInput {
   readonly parserRegistry?: BoundedParserRegistry;
   readonly thresholds?: PlanCoverageThresholds;
   readonly maxCandidates?: number;
+  readonly includeMandatorySourceTargets?: boolean;
 }
 
 export interface P9LiveApplicationRun extends P9GenericResearchRun {
@@ -652,6 +706,21 @@ async function runP9LiveApplicationExclusive(
     input.maxCandidates ?? retrievalProfile.requestCeiling.requests,
     retrievalProfile.requestCeiling.requests,
   );
+  if (input.includeMandatorySourceTargets === true) {
+    for (const candidate of P9_LIVE_MANDATORY_SOURCE_CANDIDATES) {
+      if (candidatesByUrl.size >= candidateLimit) break;
+      if (!authorizedRetrievalOrigins.has(new URL(candidate.url).origin)) {
+        throw new GovernanceError(
+          'mandatory_source_origin_unauthorized',
+          `mandatory P9 source origin is not authorized: ${new URL(candidate.url).origin}`,
+        );
+      }
+      candidatesByUrl.set(
+        canonicalP9CandidateSelectionUrl(candidate.url),
+        candidate,
+      );
+    }
+  }
   for (const query of planBundle.plan.searchQueries.slice(
     0,
     searchProfile.requestCeiling.requests,
@@ -812,6 +881,9 @@ async function runP9LiveApplicationExclusive(
         parsedText: parserResult.value.text,
         retrievedAt: retrieved.retrievedAt,
         observedAt: timestamp(),
+        ...(input.includeMandatorySourceTargets === true
+          ? { expectedCommitSha: P9_LIVE_COLIBRI_COMMIT_SHA }
+          : {}),
       });
       attempts.push(
         buildTruthfulRetrievalAttempt({
@@ -1194,25 +1266,25 @@ export function buildAcceptedP9LivePlan(input: {
       {
         subquestionId: 'sq-upstream',
         question:
-          'Which current upstream colibri code and documentation facts constrain a bounded first change?',
+          'Which current upstream colibri code, GLM-5 model, cache, memory, or documentation facts constrain a bounded first change?',
         mandatory: true,
       },
       {
         subquestionId: 'sq-apple-silicon',
         question:
-          'Which Apple silicon memory and performance facts matter on a 128 GB machine?',
+          'Which Apple silicon memory bandwidth and performance facts matter on a 128 GB machine?',
         mandatory: true,
       },
       {
         subquestionId: 'sq-experiment',
         question:
-          'What controlled experiment would distinguish a real colibri improvement from measurement noise?',
+          'What repeated-run measurement experiment would distinguish capability differences from random chance and noise?',
         mandatory: true,
       },
       {
         subquestionId: 'sq-risk',
         question:
-          'What correctness, security, or maintenance risks could falsify the recommended bounded colibri change?',
+          'Which memory safety guidance applies to security risks in a bounded colibri code change?',
         mandatory: true,
       },
     ],
@@ -1303,8 +1375,7 @@ export function buildAcceptedP9LivePlan(input: {
       },
       {
         queryId: 'q-security',
-        query:
-          'site:nvd.nist.gov C++ memory mapped file bounds checking vulnerability CVE',
+        query: 'site:cisa.gov C C++ memory safety secure coding guidance',
         subquestionIds: ['sq-risk'],
       },
     ],
@@ -1770,6 +1841,7 @@ function observeCurrentRepositoryCommitDate(input: {
   readonly parsedText: string;
   readonly retrievedAt: string;
   readonly observedAt: string;
+  readonly expectedCommitSha?: string;
 }) {
   if (
     canonicalP9CandidateSelectionUrl(input.candidate.url) !==
@@ -1785,6 +1857,14 @@ function observeCurrentRepositoryCommitDate(input: {
   }
   const parsed = CurrentGitHubCommitSchema.safeParse(decoded);
   if (!parsed.success) return null;
+  if (
+    input.expectedCommitSha !== undefined &&
+    parsed.data.sha !== input.expectedCommitSha
+  ) {
+    throw new Error(
+      `current Colibri commit ${parsed.data.sha} does not match pinned source commit ${input.expectedCommitSha}`,
+    );
+  }
   const normalizedValue = new Date(
     parsed.data.commit.committer.date,
   ).toISOString();

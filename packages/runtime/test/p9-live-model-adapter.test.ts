@@ -10,9 +10,10 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     const requestUrls: string[] = [];
     const responses = [
       {
-        claims: [
-          {
-            claimId: 'claim-1',
+        claims: Array.from({ length: 6 }, (_, index) => {
+          const claimNumber = index + 1;
+          return {
+            claimId: `claim-${String(claimNumber)}`,
             candidateId: 'candidate-1',
             quote: 'Exact source quote.',
             statement: 'The source contains an exact quote.',
@@ -21,8 +22,8 @@ describe('OpenAI-compatible P9 live model adapter', () => {
             claimGroupId: 'group-1',
             critical: false,
             contradictionIds: [],
-          },
-        ],
+          };
+        }),
       },
       {
         findings: [
@@ -108,6 +109,13 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     expect(JSON.stringify(requests[0])).toContain(
       'statement must be exactly identical to the quote',
     );
+    expect(requests[0]?.response_format).toMatchObject({
+      json_schema: {
+        schema: {
+          properties: { claims: { minItems: 6 } },
+        },
+      },
+    });
     expect(requests[1]?.response_format).toMatchObject({
       json_schema: {
         schema: {
@@ -139,6 +147,65 @@ describe('OpenAI-compatible P9 live model adapter', () => {
         },
       },
     });
+  });
+
+  it('fails closed when the provider ignores the six-claim response contract', async () => {
+    const adapter = new OpenAICompatibleP9LiveModelAdapter({
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKeyEnvironmentVariable: 'TEST_MODEL_KEY',
+      proposerProfile: {
+        profileVersionId: 'proposer-v1',
+        profileFamilyId: 'proposer-family',
+        modelId: 'provider/proposer',
+      },
+      evaluatorProfile: {
+        profileVersionId: 'evaluator-v1',
+        profileFamilyId: 'evaluator-family',
+        modelId: 'provider/evaluator',
+      },
+      proposerMaxOutputTokens: 1_200,
+      evaluatorMaxOutputTokens: 800,
+      environment: { TEST_MODEL_KEY: 'secret-not-for-output' },
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      claims: [
+                        {
+                          claimId: 'claim-1',
+                          candidateId: 'candidate-1',
+                          quote: 'Exact source quote.',
+                          statement: 'Exact source quote.',
+                          subquestionIds: ['sq-upstream'],
+                          sectionId: 'upstream_colibri_facts',
+                          claimGroupId: 'group-1',
+                          critical: false,
+                          contradictionIds: [],
+                        },
+                      ],
+                    }),
+                  },
+                },
+              ],
+              usage: { prompt_tokens: 100, completion_tokens: 20 },
+            }),
+            { status: 200 },
+          ),
+        )) as typeof fetch,
+    });
+    const plan = buildAcceptedP9LivePlan({
+      budgetUsd: 5,
+      now: '2026-07-15T18:00:00.000Z',
+      proposerProfile: adapter.proposerProfile,
+    }).plan;
+
+    await expect(
+      adapter.proposeClaims({ plan, snapshots: [] }),
+    ).rejects.toThrow(/at least 6/u);
   });
 
   it('rejects evaluator output outside the governed semantic-delta enum', async () => {

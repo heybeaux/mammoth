@@ -14,7 +14,7 @@ import type {
 import type { P9ObservedSourceSnapshot } from './p9-generic-research.js';
 
 const MAX_RESPONSE_BYTES = 2_000_000;
-const MAX_SNAPSHOT_EXCERPT = 6_000;
+const MAX_SNAPSHOT_EXCERPT = 8_000;
 const REQUEST_TIMEOUT_MS = 90_000;
 
 export interface OpenAICompatibleP9LiveModelAdapterInput {
@@ -49,7 +49,7 @@ const EvaluatorFindingSchema = z.object({
 });
 
 const ClaimSeedResponseSchema = z.object({
-  claims: z.array(ClaimSeedSchema),
+  claims: z.array(ClaimSeedSchema).min(6),
 });
 
 const EvaluatorResponseSchema = z.object({
@@ -143,7 +143,10 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'directly answer, and the quote itself must include at least two material',
         'words from each mapped subquestion. Prefer coverage across distinct source',
         'classes and all mandatory subquestions over multiple claims from one',
-        'source. Mark a claim critical only when its quote directly supports a',
+        'source. Return at least six claims: at least one valid claim from every',
+        'mandatory source class present in the snapshots, and enough claims to',
+        'directly cover every mandatory subquestion. Mark a claim critical only',
+        'when its quote directly supports a',
         'factual premise essential to the bounded-change decision.',
         'Return the governed JSON object whose claims array contains objects',
         'with keys: claimId,',
@@ -271,39 +274,44 @@ function promptContext(
 }
 
 function claimSeedResponseFormat(): object {
-  return structuredResponseFormat('p9_live_claim_seeds', 'claims', {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      claimId: { type: 'string', minLength: 1 },
-      candidateId: { type: 'string', minLength: 1 },
-      quote: { type: 'string', minLength: 1 },
-      statement: { type: 'string', minLength: 1 },
-      subquestionIds: {
-        type: 'array',
-        minItems: 1,
-        items: { type: 'string', minLength: 1 },
+  return structuredResponseFormat(
+    'p9_live_claim_seeds',
+    'claims',
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        claimId: { type: 'string', minLength: 1 },
+        candidateId: { type: 'string', minLength: 1 },
+        quote: { type: 'string', minLength: 1 },
+        statement: { type: 'string', minLength: 1 },
+        subquestionIds: {
+          type: 'array',
+          minItems: 1,
+          items: { type: 'string', minLength: 1 },
+        },
+        sectionId: { type: 'string', minLength: 1 },
+        claimGroupId: { type: 'string', minLength: 1 },
+        critical: { type: 'boolean' },
+        contradictionIds: {
+          type: 'array',
+          items: { type: 'string', minLength: 1 },
+        },
       },
-      sectionId: { type: 'string', minLength: 1 },
-      claimGroupId: { type: 'string', minLength: 1 },
-      critical: { type: 'boolean' },
-      contradictionIds: {
-        type: 'array',
-        items: { type: 'string', minLength: 1 },
-      },
+      required: [
+        'claimId',
+        'candidateId',
+        'quote',
+        'statement',
+        'subquestionIds',
+        'sectionId',
+        'claimGroupId',
+        'critical',
+        'contradictionIds',
+      ],
     },
-    required: [
-      'claimId',
-      'candidateId',
-      'quote',
-      'statement',
-      'subquestionIds',
-      'sectionId',
-      'claimGroupId',
-      'critical',
-      'contradictionIds',
-    ],
-  });
+    6,
+  );
 }
 
 function evaluatorResponseFormat(): object {
@@ -334,6 +342,7 @@ function structuredResponseFormat(
   name: string,
   collectionKey: string,
   itemSchema: object,
+  minimumItems?: number,
 ): object {
   return {
     type: 'json_schema',
@@ -344,7 +353,11 @@ function structuredResponseFormat(
         type: 'object',
         additionalProperties: false,
         properties: {
-          [collectionKey]: { type: 'array', items: itemSchema },
+          [collectionKey]: {
+            type: 'array',
+            items: itemSchema,
+            ...(minimumItems === undefined ? {} : { minItems: minimumItems }),
+          },
         },
         required: [collectionKey],
       },
