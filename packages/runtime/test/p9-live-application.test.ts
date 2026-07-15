@@ -462,6 +462,59 @@ describe('P9 live application', () => {
     expect(sleeps).toEqual([1_100, 1_100]);
   });
 
+  it('extends Brave pacing from an exhausted sliding-window header', async () => {
+    let monotonicMs = 10_000;
+    const sleeps: number[] = [];
+    const fetchTimes: number[] = [];
+    const adapter = new BraveP9LiveSearchAdapter({
+      apiKeyEnvironmentVariable: 'TEST_BRAVE_KEY',
+      environment: { TEST_BRAVE_KEY: 'secret-value' },
+      minimumIntervalMs: 1_100,
+      monotonicNow: () => monotonicMs,
+      sleep: (milliseconds) => {
+        sleeps.push(milliseconds);
+        monotonicMs += milliseconds;
+        return Promise.resolve();
+      },
+      fetchImpl: (() => {
+        fetchTimes.push(monotonicMs);
+        return Promise.resolve(
+          new Response(JSON.stringify({ web: { results: [] } }), {
+            status: 200,
+            headers: {
+              'x-ratelimit-remaining': '0, 1000',
+              'x-ratelimit-reset': '1, 100000',
+            },
+          }),
+        );
+      }) as typeof fetch,
+    });
+
+    await adapter.search('first query');
+    await adapter.search('second query');
+
+    expect(fetchTimes).toEqual([10_000, 11_250]);
+    expect(sleeps).toEqual([1_250]);
+  });
+
+  it('includes a validated Brave reset hint in rate-limit failures', async () => {
+    const adapter = new BraveP9LiveSearchAdapter({
+      apiKeyEnvironmentVariable: 'TEST_BRAVE_KEY',
+      environment: { TEST_BRAVE_KEY: 'secret-value' },
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response('', {
+            status: 429,
+            headers: { 'x-ratelimit-reset': '2, 99999' },
+          }),
+        )) as typeof fetch,
+    });
+
+    await expect(adapter.search('rate limited query')).rejects.toThrow(
+      /HTTP 429; rate limit reset 2, 99999 seconds/u,
+    );
+  });
+
   it('freezes the exact Colibri question into an accepted technical due diligence plan', () => {
     const plan = buildAcceptedP9LivePlan({
       budgetUsd: 5,
