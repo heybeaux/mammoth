@@ -1088,7 +1088,10 @@ export function runP9PlanDrivenResearch(
     return {
       claimId: claim.claimId,
       admissionId: binding.admission.admissionId,
+      admissionPolicyId: binding.admission.policyId,
+      admissionDigest: binding.admission.admissionDigest,
       verdictId: binding.admission.verdictId,
+      verdictDigest: binding.admission.verdictDigest,
       attemptId: attempt.attemptId,
       requestedUrl: attempt.requestedUrl,
       sourceClass: binding.evidence.sourceClass,

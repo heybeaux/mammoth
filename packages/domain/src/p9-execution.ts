@@ -240,7 +240,10 @@ export const P9ReportCitationSchema = z
   .object({
     claimId: z.string().min(1),
     admissionId: z.string().min(1),
+    admissionPolicyId: z.string().min(1),
+    admissionDigest: DigestSchema,
     verdictId: z.string().min(1),
+    verdictDigest: DigestSchema,
     attemptId: z.string().min(1),
     requestedUrl: z.string().url(),
     sourceClass: z.string().min(1),

@@ -170,7 +170,10 @@ describe('P9 report provenance contracts', () => {
         {
           claimId: 'claim:1',
           admissionId: 'admission:1',
+          admissionPolicyId: 'p9-independent-entailment/v1',
+          admissionDigest: DIGEST,
           verdictId: 'verdict:1',
+          verdictDigest: DIGEST,
           attemptId: 'attempt:1',
           requestedUrl: 'https://example.test/source',
           sourceClass: 'primary',

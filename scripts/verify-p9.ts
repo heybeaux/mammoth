@@ -1559,7 +1559,10 @@ async function verifyT5GenericExecution(): Promise<void> {
     run.manifest.citations.every(
       (citation) =>
         citation.admissionId.length > 0 &&
+        citation.admissionPolicyId.length > 0 &&
+        citation.admissionDigest.startsWith('sha256:') &&
         citation.verdictId.length > 0 &&
+        citation.verdictDigest.startsWith('sha256:') &&
         citation.evidenceSpanId.length > 0 &&
         citation.snapshotDigest.startsWith('sha256:') &&
         citation.endOffset > citation.startOffset,
