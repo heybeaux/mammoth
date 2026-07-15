@@ -16,6 +16,7 @@ import {
   boundedP9SentenceContext,
   buildAcceptedP9LivePlan,
   canonicalP9CandidateSelectionUrl,
+  assertP9LiveBundleReleaseable,
   resealP9LiveArtifacts,
   runP9LiveApplication,
   verifyP9LiveBundle,
@@ -352,8 +353,7 @@ const seeds: readonly P9LiveClaimSeed[] = [
     claimId: 'claim-router-reuse',
     candidateId: CANDIDATE_ID,
     quote: QUOTE,
-    statement:
-      'Upstream colibri documentation facts state the router reuses cached experts between decode steps.',
+    statement: QUOTE,
     subquestionIds: ['sq-upstream'],
     sectionId: 'upstream_colibri_facts',
     claimGroupId: 'group-upstream',
@@ -560,6 +560,20 @@ describe('P9 live application', () => {
     ).toBe(
       canonicalP9CandidateSelectionUrl('https://github.com/JustVugg/colibri'),
     );
+    expect(
+      canonicalP9CandidateSelectionUrl(
+        'https://example.test/resource?id=first&utm_source=test',
+      ),
+    ).toBe('https://example.test/resource?id=first');
+    expect(
+      canonicalP9CandidateSelectionUrl(
+        'https://example.test/resource?id=first',
+      ),
+    ).not.toBe(
+      canonicalP9CandidateSelectionUrl(
+        'https://example.test/resource?id=second',
+      ),
+    );
   });
 
   it('only classifies allowlisted official Hugging Face model cards as upstream docs', async () => {
@@ -592,6 +606,41 @@ describe('P9 live application', () => {
 
     expect(result.candidates.map((candidate) => candidate.sourceClass)).toEqual(
       ['upstream_model_docs', 'unclassified_public_source'],
+    );
+  });
+
+  it('classifies only the CISA domain and its subdomains as security advisories', async () => {
+    const adapter = new BraveP9LiveSearchAdapter({
+      apiKeyEnvironmentVariable: 'TEST_BRAVE_KEY',
+      environment: { TEST_BRAVE_KEY: 'secret-value' },
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              web: {
+                results: [
+                  { title: 'CISA', url: 'https://www.cisa.gov/advisory' },
+                  { title: 'Impostor', url: 'https://fakecisa.gov/advisory' },
+                  {
+                    title: 'Nested impostor',
+                    url: 'https://cisa.gov.example.com/advisory',
+                  },
+                ],
+              },
+            }),
+            { status: 200 },
+          ),
+        )) as typeof fetch,
+    });
+
+    const result = await adapter.search('security advisory');
+
+    expect(result.candidates.map((candidate) => candidate.sourceClass)).toEqual(
+      [
+        'security_advisory',
+        'peer_reviewed_or_primary_technical',
+        'peer_reviewed_or_primary_technical',
+      ],
     );
   });
 
@@ -776,12 +825,13 @@ describe('P9 live application', () => {
       'live-recovered-reservations.jsonl': `${run.recoveredReservations.map((value) => JSON.stringify(value)).join('\n')}${run.recoveredReservations.length ? '\n' : ''}`,
       'live-budget-journal.jsonl': `${journal.readLines().join('\n')}\n`,
     });
-    expect(() =>
-      verifyP9LiveBundle(liveArtifacts, {
-        expectedAuthorityDigest: run.authorizationReceipt.receiptDigest,
-        trustedIssuerId: run.authorizationReceipt.issuerId,
-      }),
-    ).toThrow(/not releaseable/u);
+    const insufficientVerification = verifyP9LiveBundle(liveArtifacts, {
+      expectedAuthorityDigest: run.authorizationReceipt.receiptDigest,
+      trustedIssuerId: run.authorizationReceipt.issuerId,
+    });
+    expect(() => {
+      assertP9LiveBundleReleaseable(insufficientVerification);
+    }).toThrow(/not releaseable/u);
 
     const forgedEffect = structuredClone(run.effectReceipts[0]);
     if (!forgedEffect) throw new Error('missing effect receipt to forge');
@@ -1200,6 +1250,27 @@ describe('P9 live application', () => {
         record.entry.reservationId === 'model:proposer',
     );
     expect(cancel).toBeDefined();
+  });
+
+  it('rejects a provider claim whose statement is not the exact quoted evidence', async () => {
+    const model = makeModel({ calls: 0 });
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          model: {
+            ...model,
+            proposeClaims: () =>
+              Promise.resolve({
+                value: seeds.map((seed) => ({
+                  ...seed,
+                  statement: `Paraphrase: ${seed.quote}`,
+                })),
+                usage: modelUsage,
+              }),
+          },
+        }),
+      ),
+    ).rejects.toThrow(/extractive claim normalization failed/u);
   });
 
   it('fails closed when the durable journal cannot accept the pre-transport record', async () => {

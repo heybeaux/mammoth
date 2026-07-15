@@ -14,6 +14,7 @@ import {
   type P9ClaimProposal,
   type P9EffectReceipt,
   type P9EntailmentVerdict,
+  type P9ExecutionReceipt,
   P9LiveAuthorityReceiptSchema,
   P9ProviderProfileCatalogSchema,
   type P9LiveAuthorityReceipt,
@@ -185,6 +186,20 @@ export interface P9LiveBundleVerification {
   readonly effectReceiptCount: number;
   readonly journalRecordCount: number;
   readonly spent: ReturnType<P9DurableBudgetAuthority['snapshot']>['spent'];
+  readonly coverageVerdict: P9ExecutionReceipt['coverageVerdict'];
+}
+
+export function assertP9LiveBundleReleaseable(
+  verification: P9LiveBundleVerification,
+): void {
+  if (
+    verification.coverageVerdict !== 'covered' ||
+    verification.verifiedCitationCount === 0
+  ) {
+    throw new Error(
+      'P9 live bundle is not releaseable: covered evidence and at least one verified citation are required',
+    );
+  }
 }
 
 export function verifyP9LiveBundle(
@@ -391,20 +406,13 @@ export function verifyP9LiveBundle(
       );
     }
   }
-  if (
-    executionReceipt.coverageVerdict !== 'covered' ||
-    exact.verifiedCitationCount === 0
-  ) {
-    throw new Error(
-      'P9 live bundle is not releaseable: covered evidence and at least one verified citation are required',
-    );
-  }
   return {
     manifest: exact.manifest,
     verifiedCitationCount: exact.verifiedCitationCount,
     effectReceiptCount: effectReceipts.length,
     journalRecordCount: journalLines.length,
     spent: snapshot.spent,
+    coverageVerdict: executionReceipt.coverageVerdict,
   };
 }
 
@@ -891,17 +899,20 @@ async function runP9LiveApplicationExclusive(
       ? proposerResult.error
       : new Error(String(proposerResult.error));
   }
-  const seeds = proposerResult.value.map((seed) => ({
-    ...seed,
-    statement: seed.quote,
-  }));
-  for (const seed of seeds) {
-    if (detectP9SemanticDeltas(seed.statement, seed.quote).length > 0) {
+  for (const seed of proposerResult.value) {
+    if (
+      seed.statement !== seed.quote ||
+      detectP9SemanticDeltas(seed.statement, seed.quote).length > 0
+    ) {
       throw new Error(
         `P9 live extractive claim normalization failed for ${seed.claimId}`,
       );
     }
   }
+  const seeds = proposerResult.value.map((seed) => ({
+    ...seed,
+    statement: seed.quote,
+  }));
 
   const evaluatorResult = await executor.execute<
     readonly P9LiveEvaluatorFinding[]
@@ -1733,7 +1744,21 @@ const CurrentGitHubCommitSchema = z
 
 export function canonicalP9CandidateSelectionUrl(input: string): string {
   const url = canonicalizeAcquisitionUrl(input);
-  url.search = '';
+  const trackingParameters = new Set([
+    'fbclid',
+    'gclid',
+    'mc_cid',
+    'mc_eid',
+    'ref',
+  ]);
+  for (const key of [...url.searchParams.keys()]) {
+    if (
+      key.toLowerCase().startsWith('utm_') ||
+      trackingParameters.has(key.toLowerCase())
+    ) {
+      url.searchParams.delete(key);
+    }
+  }
   if (url.pathname.length > 1) {
     url.pathname = url.pathname.replace(/\/+$/u, '');
   }
@@ -1820,7 +1845,8 @@ function inferSourceClass(url: string): string {
   if (
     host.includes('cve') ||
     host.includes('nvd.nist.gov') ||
-    host.includes('cisa.gov')
+    host === 'cisa.gov' ||
+    host.endsWith('.cisa.gov')
   )
     return 'security_advisory';
   return 'peer_reviewed_or_primary_technical';

@@ -295,6 +295,13 @@ describe('P9 plan-relative coverage authority', () => {
         'Which experiment distinguishes improvement from measurement noise?',
       ),
     ).toBe(true);
+    expect(
+      isClaimRelevantToSubquestion(
+        buildBinding('Experiment experiments occurred.'),
+        'sq-safety',
+        'Which experiment experiments matter?',
+      ),
+    ).toBe(false);
   });
 
   it('accepts only digest-bound evidence labels linked to the exact attempt', () => {

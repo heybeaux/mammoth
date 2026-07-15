@@ -132,14 +132,14 @@ export interface PlanCoverageInput {
 }
 
 function sharedMaterialTermCount(statement: string, question: string): number {
-  const variants = (term: string): readonly string[] =>
-    term.endsWith('s') && term.length > 4 ? [term, term.slice(0, -1)] : [term];
-  const statementTerms = new Set(
-    materialQuestionTerms(statement).flatMap(variants),
+  const family = (term: string): string =>
+    term.endsWith('s') && term.length > 4 ? term.slice(0, -1) : term;
+  const statementFamilies = new Set(
+    materialQuestionTerms(statement).map(family),
   );
-  return materialQuestionTerms(question).filter((term) =>
-    variants(term).some((variant) => statementTerms.has(variant)),
-  ).length;
+  const questionFamilies = new Set(materialQuestionTerms(question).map(family));
+  return [...questionFamilies].filter((term) => statementFamilies.has(term))
+    .length;
 }
 
 export function isClaimRelevantToSubquestion(

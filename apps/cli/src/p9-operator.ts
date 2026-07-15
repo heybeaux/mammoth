@@ -28,6 +28,7 @@ import {
 } from '@mammoth/governance';
 import {
   assertP9AcceptedPlanChain,
+  assertP9LiveBundleReleaseable,
   BraveP9LiveSearchAdapter,
   OpenAICompatibleP9LiveModelAdapter,
   P9OfflineCorpusSchema,
@@ -695,6 +696,9 @@ async function liveCommand(
     verifiedCitationCount: verification.verifiedCitationCount,
     stopCriterionStatuses: run.assessment.stopCriterionStatuses,
   });
+  if (sufficiency.succeeded) {
+    assertP9LiveBundleReleaseable(verification);
+  }
   io.stdout(
     JSON.stringify({
       command: 'p9-live',

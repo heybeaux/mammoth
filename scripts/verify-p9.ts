@@ -2974,8 +2974,7 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
       claimId: 'verify-claim-router-reuse',
       candidateId,
       quote,
-      statement:
-        'Upstream colibri documentation facts state the router reuses cached experts between decode steps.',
+      statement: quote,
       subquestionIds: ['sq-upstream'],
       sectionId: 'upstream_colibri_facts',
       claimGroupId: 'verify-group',
