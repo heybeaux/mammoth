@@ -135,6 +135,8 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'You are a research claim proposer. Given a research plan and source',
         'snapshots, propose factual claims. Each claim must include an exact',
         'verbatim quote copied character-for-character from one snapshot body.',
+        'The statement must be exactly identical to the quote; do not paraphrase',
+        'or add recommendations, causality, comparisons, quantities, or scope.',
         'Return the governed JSON object whose claims array contains objects',
         'with keys: claimId,',
         'candidateId, quote, statement, subquestionIds, sectionId,',

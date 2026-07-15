@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  evaluateP9LiveExhibitionSufficiency,
   executeP9ResearchCli,
   inspectP9LiveReadiness,
 } from '../src/p9-operator.js';
@@ -18,6 +19,32 @@ function io() {
 }
 
 describe('P9 live readiness artifacts', () => {
+  it('fails release sufficiency for an exact but empty or incomplete exhibition', () => {
+    expect(
+      evaluateP9LiveExhibitionSufficiency({
+        coverageVerdict: 'insufficient',
+        verifiedCitationCount: 0,
+        stopCriterionStatuses: [
+          { stopId: 'stop-source-classes', status: 'not_met' },
+          { stopId: 'stop-budget-terminal', status: 'met' },
+        ],
+      }),
+    ).toEqual({
+      succeeded: false,
+      unmetStopCriteria: ['stop-source-classes'],
+    });
+    expect(
+      evaluateP9LiveExhibitionSufficiency({
+        coverageVerdict: 'covered',
+        verifiedCitationCount: 4,
+        stopCriterionStatuses: [
+          { stopId: 'stop-source-classes', status: 'met' },
+          { stopId: 'stop-budget-terminal', status: 'met' },
+        ],
+      }).succeeded,
+    ).toBe(true);
+  });
+
   it('does not accept legacy environment assertions as live authority', async () => {
     const readiness = await inspectP9LiveReadiness({
       MAMMOTH_P9_LIVE_RESEARCH: 'authorized',

@@ -18,6 +18,7 @@ import {
   runP9LiveApplication,
   verifyP9LiveBundle,
   type P9LiveApplicationInput,
+  type P9LiveCandidate,
   type P9LiveClaimSeed,
   type P9LiveModelAdapter,
   type P9LiveSearchAdapter,
@@ -26,8 +27,8 @@ import {
 const now = () => new Date('2026-07-15T18:00:00.000Z');
 
 const SOURCE_BODY =
-  'Colibri caches mmap-backed experts on Apple silicon. The router reuses cached experts between decode steps.';
-const QUOTE = 'The router reuses cached experts between decode steps.';
+  'Colibri caches mmap-backed experts on Apple silicon. The Colibri router reuses cached experts between decode steps.';
+const QUOTE = 'The Colibri router reuses cached experts between decode steps.';
 const CANDIDATE_ID = 'cand-colibri-readme';
 
 function makeCatalog() {
@@ -505,6 +506,33 @@ describe('P9 live application', () => {
     expect(sleeps).toEqual([1_250]);
   });
 
+  it('classifies Hugging Face model cards as upstream model documentation', async () => {
+    const adapter = new BraveP9LiveSearchAdapter({
+      apiKeyEnvironmentVariable: 'TEST_BRAVE_KEY',
+      environment: { TEST_BRAVE_KEY: 'secret-value' },
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              web: {
+                results: [
+                  {
+                    title: 'Official model card',
+                    url: 'https://huggingface.co/zai-org/GLM-4.7-Flash',
+                  },
+                ],
+              },
+            }),
+            { status: 200 },
+          ),
+        )) as typeof fetch,
+    });
+
+    const outcome = await adapter.search('official model card');
+
+    expect(outcome.candidates[0]?.sourceClass).toBe('upstream_model_docs');
+  });
+
   it('includes a validated Brave reset hint in rate-limit failures', async () => {
     const adapter = new BraveP9LiveSearchAdapter({
       apiKeyEnvironmentVariable: 'TEST_BRAVE_KEY',
@@ -537,6 +565,72 @@ describe('P9 live application', () => {
       plan.plan.sourceClassTargets.map((target) => target.sourceClass),
     ).toContain('hardware_vendor_docs');
     expect(plan.acceptanceReceipt.decision).toBe('accepted');
+    expect(
+      plan.plan.searchQueries.some(
+        (query) => query.queryId === 'q-upstream-model',
+      ),
+    ).toBe(true);
+  });
+
+  it('selects authorized candidates round-robin across every search query', async () => {
+    let searchCall = 0;
+    const retrievedUrls: string[] = [];
+    const candidate = (candidateId: string, url: string): P9LiveCandidate => ({
+      candidateId,
+      url,
+      title: candidateId,
+      sourceClass: 'repository_docs',
+      sourceFamilyId: 'github.com',
+    });
+    const search: P9LiveSearchAdapter = {
+      destinationOrigin: 'https://api.search.brave.com',
+      search: () => {
+        searchCall += 1;
+        return Promise.resolve({
+          candidates:
+            searchCall === 1
+              ? [
+                  candidate(
+                    CANDIDATE_ID,
+                    'https://github.com/JustVugg/colibri',
+                  ),
+                  candidate(
+                    'cand-commits',
+                    'https://github.com/JustVugg/colibri/commits/main',
+                  ),
+                ]
+              : searchCall === 2
+                ? [
+                    candidate(
+                      'cand-readme',
+                      'https://github.com/JustVugg/colibri/blob/main/README.md',
+                    ),
+                  ]
+                : [],
+          usage: {
+            requests: 1,
+            inputTokens: 0,
+            outputTokens: 0,
+            bytes: 512,
+            durationMs: 5,
+          },
+        });
+      },
+    };
+    const retrieve: typeof retrieveSource = async (request) => {
+      retrievedUrls.push(request.url);
+      return fakeRetrieve(request, {});
+    };
+
+    await runP9LiveApplication(
+      makeInput({ search, retrieve, maxCandidates: 2 }),
+    );
+
+    expect(searchCall).toBe(5);
+    expect(retrievedUrls).toEqual([
+      'https://github.com/JustVugg/colibri',
+      'https://github.com/JustVugg/colibri/blob/main/README.md',
+    ]);
   });
 
   it('precedes every outbound effect with a durable journaled reservation and settles observed usage', async () => {
@@ -598,7 +692,11 @@ describe('P9 live application', () => {
     // observed charge = priced usage, never the reserved ceiling
     expect(proposerReceipt?.charged.inputTokens).toBe(modelUsage.inputTokens);
     expect(proposerReceipt?.charged.currencyUsd).toBeLessThan(0.0015);
+    expect(run.admissions[0]).toMatchObject({ decision: 'admitted' });
     expect(run.manifest.citations.length).toBeGreaterThanOrEqual(1);
+    expect(run.proposals[0]?.statement).toBe(
+      `Colibri upstream evidence: ${QUOTE}`,
+    );
 
     const liveArtifacts = resealP9LiveArtifacts({
       ...run.artifacts,

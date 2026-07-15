@@ -31,7 +31,10 @@ import {
 } from '@mammoth/domain';
 import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { evaluateP9ClaimAdmission } from '@mammoth/evidence';
+import {
+  detectP9SemanticDeltas,
+  evaluateP9ClaimAdmission,
+} from '@mammoth/evidence';
 import {
   acceptResearchPlan,
   assertP9LiveAuthorityLineage,
@@ -75,7 +78,7 @@ import {
 export const P9_LIVE_EXHIBITION_QUESTION =
   'Using the current upstream repository and primary technical sources, which bounded change to JustVugg/colibri should be tested first on a 128 GB Apple-silicon machine, and what experiment would distinguish a real improvement from measurement noise?';
 export const P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST = canonicalDigest(
-  'p9-live-source-classification/v1',
+  'p9-live-source-classification/v2',
 );
 
 const USER_AGENT = 'mammoth-research/0.9';
@@ -618,7 +621,7 @@ async function runP9LiveApplicationExclusive(
     };
   };
 
-  const candidatesById = new Map<string, P9LiveCandidate>();
+  const candidateGroups: P9LiveCandidate[][] = [];
   const authorizedRetrievalOrigins = new Set(
     authorityReceipt.authorizedRetrievalOrigins.map(
       (value) => new URL(value).origin,
@@ -656,16 +659,30 @@ async function runP9LiveApplicationExclusive(
         ? result.error
         : new Error(String(result.error));
     }
-    for (const candidate of result.value) {
-      if (!authorizedRetrievalOrigins.has(new URL(candidate.url).origin)) {
-        continue;
+    candidateGroups.push(
+      result.value.filter((candidate) =>
+        authorizedRetrievalOrigins.has(new URL(candidate.url).origin),
+      ),
+    );
+  }
+  const candidatesByUrl = new Map<string, P9LiveCandidate>();
+  const maximumGroupLength = Math.max(
+    0,
+    ...candidateGroups.map((group) => group.length),
+  );
+  for (
+    let candidateIndex = 0;
+    candidateIndex < maximumGroupLength &&
+    candidatesByUrl.size < candidateLimit;
+    candidateIndex += 1
+  ) {
+    for (const group of candidateGroups) {
+      const candidate = group[candidateIndex];
+      if (candidate && !candidatesByUrl.has(candidate.url)) {
+        candidatesByUrl.set(candidate.url, candidate);
       }
-      if (!candidatesById.has(candidate.candidateId)) {
-        candidatesById.set(candidate.candidateId, candidate);
-      }
-      if (candidatesById.size >= candidateLimit) break;
+      if (candidatesByUrl.size >= candidateLimit) break;
     }
-    if (candidatesById.size >= candidateLimit) break;
   }
 
   const retrieve = input.retrieve ?? retrieveSource;
@@ -673,7 +690,7 @@ async function runP9LiveApplicationExclusive(
   const attempts: RetrievalAttempt[] = [];
   const parserReceipts: ParserReceipt[] = [];
   const snapshots: P9ObservedSourceSnapshot[] = [];
-  for (const candidate of candidatesById.values()) {
+  for (const candidate of candidatesByUrl.values()) {
     const retrievalResult = await executor.execute<RetrievedSource>({
       id: `retrieval:${candidate.candidateId}`,
       catalogEntryId: 'public-retrieval',
@@ -839,7 +856,36 @@ async function runP9LiveApplicationExclusive(
       ? proposerResult.error
       : new Error(String(proposerResult.error));
   }
-  const seeds = proposerResult.value;
+  const seeds = proposerResult.value.map((seed) => {
+    const relevanceAnchors = new Set<string>();
+    for (const subquestionId of seed.subquestionIds) {
+      if (subquestionId === 'sq-upstream') {
+        relevanceAnchors.add('Colibri');
+        relevanceAnchors.add('upstream');
+      } else if (subquestionId === 'sq-apple-silicon') {
+        relevanceAnchors.add('Apple');
+        relevanceAnchors.add('silicon');
+      } else if (subquestionId === 'sq-experiment') {
+        relevanceAnchors.add('experiment');
+        relevanceAnchors.add('measurement');
+      } else if (subquestionId === 'sq-risk') {
+        relevanceAnchors.add('Colibri');
+        relevanceAnchors.add('risks');
+      }
+    }
+    const label = [...relevanceAnchors].join(' ');
+    return {
+      ...seed,
+      statement: label ? `${label} evidence: ${seed.quote}` : seed.quote,
+    };
+  });
+  for (const seed of seeds) {
+    if (detectP9SemanticDeltas(seed.statement, seed.quote).length > 0) {
+      throw new Error(
+        `P9 live extractive claim normalization failed for ${seed.claimId}`,
+      );
+    }
+  }
 
   const evaluatorResult = await executor.execute<
     readonly P9LiveEvaluatorFinding[]
@@ -911,7 +957,11 @@ async function runP9LiveApplicationExclusive(
         role: 'claim_proposer',
         claimId: seed.claimId,
         profile: input.model.proposerProfile,
-        raw: seeds,
+        raw: {
+          policyId: 'p9-live-extractive-claim/v2',
+          providerClaims: proposerResult.value,
+          normalizedClaims: seeds,
+        },
       }),
     };
     const proposal = P9ClaimProposalSchema.parse({
@@ -1208,10 +1258,10 @@ export function buildAcceptedP9LivePlan(input: {
         subquestionIds: ['sq-upstream'],
       },
       {
-        queryId: 'q-colibri-implementation',
+        queryId: 'q-upstream-model',
         query:
-          'JustVugg colibri mmap cache quantization expert offload source code',
-        subquestionIds: ['sq-upstream', 'sq-risk'],
+          'GLM model card official Hugging Face MoE architecture documentation',
+        subquestionIds: ['sq-upstream'],
       },
       {
         queryId: 'q-apple-silicon',
@@ -1635,6 +1685,7 @@ function inferSourceClass(url: string): string {
       : 'repository_docs';
   }
   if (host.includes('apple.com')) return 'hardware_vendor_docs';
+  if (host === 'huggingface.co') return 'upstream_model_docs';
   if (
     host.includes('arxiv.org') ||
     host.includes('acm.org') ||
