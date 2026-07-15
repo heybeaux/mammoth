@@ -753,6 +753,7 @@ describe('P9 live application', () => {
       journal,
     );
     const { receiptDigest: _baseDigest, ...baseIdentity } = baseReceipt;
+    expect(_baseDigest).toMatch(/^sha256:/u);
     const expandedIdentity = {
       ...baseIdentity,
       authorizedRetrievalOrigins: [
