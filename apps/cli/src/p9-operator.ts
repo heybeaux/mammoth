@@ -63,6 +63,29 @@ export interface P9CliDependencies {
   readonly fetchImpl?: typeof fetch;
 }
 
+export function evaluateP9LiveExhibitionSufficiency(input: {
+  readonly coverageVerdict: 'covered' | 'insufficient';
+  readonly verifiedCitationCount: number;
+  readonly stopCriterionStatuses: readonly {
+    readonly stopId: string;
+    readonly status: 'met' | 'not_met';
+  }[];
+}): {
+  readonly succeeded: boolean;
+  readonly unmetStopCriteria: readonly string[];
+} {
+  const unmetStopCriteria = input.stopCriterionStatuses
+    .filter((criterion) => criterion.status !== 'met')
+    .map((criterion) => criterion.stopId);
+  return {
+    succeeded:
+      input.coverageVerdict === 'covered' &&
+      input.verifiedCitationCount > 0 &&
+      unmetStopCriteria.length === 0,
+    unmetStopCriteria,
+  };
+}
+
 const DEFAULT_ACCEPTANCE_THRESHOLDS: PlanAcceptanceThresholds = {
   minSubquestions: 4,
   minSourceClasses: 5,
@@ -667,16 +690,24 @@ async function liveCommand(
       trustedIssuerId: requiredEnv(env, 'MAMMOTH_P9_TRUSTED_AUTHORIZER_ID'),
     },
   );
+  const sufficiency = evaluateP9LiveExhibitionSufficiency({
+    coverageVerdict: run.assessment.verdict,
+    verifiedCitationCount: verification.verifiedCitationCount,
+    stopCriterionStatuses: run.assessment.stopCriterionStatuses,
+  });
   io.stdout(
     JSON.stringify({
       command: 'p9-live',
+      status: sufficiency.succeeded ? 'sufficient' : 'insufficient_exhibition',
       outputDirectory,
       manifestId: verification.manifest.manifestId,
       verifiedCitationCount: verification.verifiedCitationCount,
       effectReceiptCount: run.effectReceipts.length,
+      coverageVerdict: run.assessment.verdict,
+      unmetStopCriteria: sufficiency.unmetStopCriteria,
     }),
   );
-  return 0;
+  return sufficiency.succeeded ? 0 : 1;
 }
 
 export async function writeFreshP9Bundle(

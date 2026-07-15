@@ -14,6 +14,7 @@ import {
   BraveP9LiveSearchAdapter,
   boundedP9SentenceContext,
   buildAcceptedP9LivePlan,
+  canonicalP9CandidateSelectionUrl,
   resealP9LiveArtifacts,
   runP9LiveApplication,
   verifyP9LiveBundle,
@@ -26,8 +27,9 @@ import {
 const now = () => new Date('2026-07-15T18:00:00.000Z');
 
 const SOURCE_BODY =
-  'Colibri caches mmap-backed experts on Apple silicon. The router reuses cached experts between decode steps.';
-const QUOTE = 'The router reuses cached experts between decode steps.';
+  'Colibri caches mmap-backed experts on Apple silicon. Upstream Colibri documentation states the router reuses cached experts between decode steps.';
+const QUOTE =
+  'Upstream Colibri documentation states the router reuses cached experts between decode steps.';
 const CANDIDATE_ID = 'cand-colibri-readme';
 
 function makeCatalog() {
@@ -246,7 +248,10 @@ function makeReceipt(
         profileCatalog.profiles.map((profile) => profile.destinationOrigin),
       ),
     ],
-    authorizedRetrievalOrigins: ['https://github.com/'],
+    authorizedRetrievalOrigins: [
+      'https://github.com/',
+      'https://api.github.com/',
+    ],
     authorizedBillingAccountIds: [
       ...new Set(
         profileCatalog.profiles.map((profile) => profile.billingAccountId),
@@ -305,18 +310,28 @@ function makeSearch(counter: { calls: number }): P9LiveSearchAdapter {
   };
 }
 
-const fakeRetrieve: typeof retrieveSource = (request) =>
-  Promise.resolve({
+const fakeRetrieve: typeof retrieveSource = (request) => {
+  const currentCommit = request.url.startsWith('https://api.github.com/');
+  const body = currentCommit
+    ? JSON.stringify({
+        sha: '0123456789abcdef0123456789abcdef01234567',
+        commit: { committer: { date: '2026-07-10T12:00:00.000Z' } },
+      })
+    : SOURCE_BODY;
+  return Promise.resolve({
     requestedUrl: request.url,
     finalUrl: request.url,
     redirectChain: [],
     retrievedAt: now().toISOString(),
     status: 200,
-    headers: { 'content-type': 'text/plain' },
-    mediaType: 'text/plain',
-    bytes: new TextEncoder().encode(SOURCE_BODY),
+    headers: {
+      'content-type': currentCommit ? 'application/json' : 'text/plain',
+    },
+    mediaType: currentCommit ? 'application/json' : 'text/plain',
+    bytes: new TextEncoder().encode(body),
     networkReceipts: [],
   });
+};
 
 const seeds: readonly P9LiveClaimSeed[] = [
   {
@@ -523,6 +538,49 @@ describe('P9 live application', () => {
     );
   });
 
+  it('canonicalizes candidate variants before diversity counting', () => {
+    expect(
+      canonicalP9CandidateSelectionUrl(
+        'https://github.com/JustVugg/colibri/?utm_source=test#readme',
+      ),
+    ).toBe(
+      canonicalP9CandidateSelectionUrl('https://github.com/JustVugg/colibri'),
+    );
+  });
+
+  it('only classifies allowlisted official Hugging Face model cards as upstream docs', async () => {
+    const adapter = new BraveP9LiveSearchAdapter({
+      apiKeyEnvironmentVariable: 'TEST_BRAVE_KEY',
+      environment: { TEST_BRAVE_KEY: 'secret-value' },
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              web: {
+                results: [
+                  {
+                    title: 'Official model card',
+                    url: 'https://huggingface.co/zai-org/GLM-5',
+                  },
+                  {
+                    title: 'Community copy',
+                    url: 'https://huggingface.co/community/GLM-5',
+                  },
+                ],
+              },
+            }),
+            { status: 200 },
+          ),
+        )) as typeof fetch,
+    });
+
+    const result = await adapter.search('official model card');
+
+    expect(result.candidates.map((candidate) => candidate.sourceClass)).toEqual(
+      ['upstream_model_docs', 'unclassified_public_source'],
+    );
+  });
+
   it('freezes the exact Colibri question into an accepted technical due diligence plan', () => {
     const plan = buildAcceptedP9LivePlan({
       budgetUsd: 5,
@@ -587,13 +645,14 @@ describe('P9 live application', () => {
     };
 
     await runP9LiveApplication(
-      makeInput({ search, retrieve, maxCandidates: 2 }),
+      makeInput({ search, retrieve, maxCandidates: 3 }),
     );
 
     expect(searched).toHaveLength(5);
     expect(retrieved).toEqual([
-      'https://github.com/JustVugg/colibri/blob/main/source-1.md',
+      'https://api.github.com/repos/JustVugg/colibri/commits/main',
       'https://github.com/JustVugg/colibri/blob/main/source-2.md',
+      'https://github.com/JustVugg/colibri/blob/main/source-3.md',
     ]);
   });
 
@@ -657,6 +716,15 @@ describe('P9 live application', () => {
     expect(proposerReceipt?.charged.inputTokens).toBe(modelUsage.inputTokens);
     expect(proposerReceipt?.charged.currencyUsd).toBeLessThan(0.0015);
     expect(run.manifest.citations.length).toBeGreaterThanOrEqual(1);
+    expect(run.proposals[0]?.statement).toBe(QUOTE);
+    const currentCommitAttempt = run.attempts.find(
+      (attempt) => attempt.candidateId === 'github-api:justvugg-colibri:main',
+    );
+    expect(currentCommitAttempt?.publishedAt).toBe('2026-07-10T12:00:00.000Z');
+    expect(currentCommitAttempt?.dateObservation?.exactLocator).toContain(
+      'sha:0123456789abcdef0123456789abcdef01234567',
+    );
+    expect(currentCommitAttempt?.dateVerdict?.verdict).toBe('accepted');
 
     const liveArtifacts = resealP9LiveArtifacts({
       ...run.artifacts,
