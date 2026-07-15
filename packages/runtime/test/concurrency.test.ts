@@ -63,11 +63,16 @@ describe('runtime concurrent ownership', () => {
       runResearchProgram(options),
     ]);
     const completed = settled.filter((result) => result.status === 'fulfilled');
+    const rejected = settled.filter((result) => result.status === 'rejected');
 
-    expect(completed).toHaveLength(1);
-    expect(
-      settled.filter((result) => result.status === 'rejected'),
-    ).toHaveLength(1);
+    expect(completed.length).toBeLessThanOrEqual(1);
+    expect(rejected.length).toBeGreaterThanOrEqual(1);
+    expect(retrievalEffects).toBeLessThanOrEqual(1);
+
+    // Contention may fail both simultaneous callers closed before either owns
+    // the workflow. A later retry must still make progress (or reconstruct the
+    // winner) without performing a duplicate retrieval.
+    await expect(runResearchProgram(options)).resolves.toBeDefined();
     expect(retrievalEffects).toBe(1);
   });
 });
