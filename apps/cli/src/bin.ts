@@ -16,6 +16,7 @@ if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
     args[1] === 'init' ||
     args[1] === 'up' ||
     args[1] === 'doctor' ||
+    args[1] === 'p9-live' ||
     isP8BundleCommand(args)
   ) {
     process.exitCode = await executeP8ResearchCli(args, {
