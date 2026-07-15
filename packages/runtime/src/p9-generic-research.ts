@@ -32,11 +32,14 @@ import {
 } from '@mammoth/domain';
 import {
   assertEveryP9FactualSentenceAdmitted,
+  containsP9HostileInstruction,
   evaluateP9ClaimAdmission,
 } from '@mammoth/evidence';
 import {
   assessPlanCoverage,
+  isClaimRelevantToPlan,
   P9BudgetAuthority,
+  PlanCoverageThresholdsSchema,
   priceCatalogDigest,
   type P9ClaimEvidenceBinding,
   type P9StopCriterionFinding,
@@ -233,16 +236,6 @@ export interface P9GenericResearchInput {
   readonly now: string;
 }
 
-function containsHostileInstruction(value: string): boolean {
-  return /\b(ignore|disregard|override)\b.{0,80}\b(instruction|previous|policy|system)\b|\b(call|use|run)\b.{0,80}\b(tool|command|shell)\b|\b(approve|reveal|exfiltrate)\b.{0,80}\b(secret|claim|credential)\b/iu.test(
-    value,
-  );
-}
-
-function materialTerms(value: string): readonly string[] {
-  return value.toLowerCase().match(/[a-z][a-z0-9_-]{2,}/gu) ?? [];
-}
-
 export interface P9GenericResearchRun {
   readonly corpusId: string;
   readonly attempts: readonly RetrievalAttempt[];
@@ -287,6 +280,40 @@ const RETRIEVAL_FAILURES: Readonly<Record<string, RetrievalFailure>> = {
 
 function sha256Text(value: string): string {
   return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`;
+}
+
+function boundedSentenceContext(
+  body: string,
+  startOffset: number,
+  endOffset: number,
+): string {
+  const priorBoundary = Math.max(
+    body.lastIndexOf('.', Math.max(0, startOffset - 1)),
+    body.lastIndexOf('!', Math.max(0, startOffset - 1)),
+    body.lastIndexOf('?', Math.max(0, startOffset - 1)),
+    body.lastIndexOf('\n', Math.max(0, startOffset - 1)),
+  );
+  const lastSelected = body[endOffset - 1];
+  const endsAtBoundary =
+    lastSelected === '.' ||
+    lastSelected === '!' ||
+    lastSelected === '?' ||
+    lastSelected === '\n';
+  const following = endsAtBoundary
+    ? endOffset
+    : [
+        body.indexOf('.', endOffset),
+        body.indexOf('!', endOffset),
+        body.indexOf('?', endOffset),
+        body.indexOf('\n', endOffset),
+      ].filter((index) => index >= 0);
+  const contextEnd =
+    typeof following === 'number'
+      ? following
+      : following.length === 0
+        ? body.length
+        : Math.min(...following) + 1;
+  return body.slice(priorBoundary + 1, contextEnd).trim();
 }
 
 function round12(value: number): number {
@@ -428,12 +455,17 @@ export function runP9PlanDrivenResearch(
   input: P9GenericResearchInput,
 ): P9GenericResearchRun {
   const corpus = P9OfflineCorpusSchema.parse(input.corpus);
-  const planProposal = ResearchPlanProposalSchema.parse(input.planProposal);
-  const plan = ResearchPlanSchema.parse(input.plan);
-  const acceptanceReceipt = PlanAcceptanceReceiptSchema.parse(
+  const planProposalResult = ResearchPlanProposalSchema.safeParse(
+    input.planProposal,
+  );
+  const planResult = ResearchPlanSchema.safeParse(input.plan);
+  const receiptResult = PlanAcceptanceReceiptSchema.safeParse(
     input.acceptanceReceipt,
   );
-  const pack = DomainPolicyPackSchema.parse(input.pack);
+  const packResult = DomainPolicyPackSchema.safeParse(input.pack);
+  const thresholdsResult = PlanCoverageThresholdsSchema.safeParse(
+    input.thresholds,
+  );
   const { executionId, now } = input;
   if (
     !z.string().min(1).safeParse(executionId).success ||
@@ -445,6 +477,57 @@ export function runP9PlanDrivenResearch(
     );
   }
   if (
+    !planProposalResult.success ||
+    !planResult.success ||
+    !receiptResult.success ||
+    !packResult.success ||
+    !thresholdsResult.success
+  ) {
+    throw new P9GenericResearchError(
+      'plan_binding_mismatch',
+      'execution requires a schema-valid accepted plan contract',
+    );
+  }
+  const planProposal = planProposalResult.data;
+  const plan = planResult.data;
+  const acceptanceReceipt = receiptResult.data;
+  const pack = packResult.data;
+  const thresholds = thresholdsResult.data;
+  const proposalContent = {
+    question: planProposal.question,
+    domainPackId: planProposal.domainPackId,
+    packDigest: planProposal.packDigest,
+    scope: planProposal.scope,
+    subquestions: planProposal.subquestions,
+    coverageRequirements: planProposal.coverageRequirements,
+    sourceClassTargets: planProposal.sourceClassTargets,
+    searchQueries: planProposal.searchQueries,
+    contradictionRequirements: planProposal.contradictionRequirements,
+    freshnessRequirements: planProposal.freshnessRequirements,
+    stopCriteria: planProposal.stopCriteria,
+    reportOutline: planProposal.reportOutline,
+    budget: planProposal.budget,
+    criticalClaimPolicy: planProposal.criticalClaimPolicy,
+    derivations: planProposal.derivations,
+  };
+  const acceptedContent = {
+    question: plan.question,
+    domainPackId: plan.domainPackId,
+    packDigest: plan.packDigest,
+    scope: plan.scope,
+    subquestions: plan.subquestions,
+    coverageRequirements: plan.coverageRequirements,
+    sourceClassTargets: plan.sourceClassTargets,
+    searchQueries: plan.searchQueries,
+    contradictionRequirements: plan.contradictionRequirements,
+    freshnessRequirements: plan.freshnessRequirements,
+    stopCriteria: plan.stopCriteria,
+    reportOutline: plan.reportOutline,
+    budget: plan.budget,
+    criticalClaimPolicy: plan.criticalClaimPolicy,
+    derivations: plan.derivations,
+  };
+  if (
     acceptanceReceipt.decision !== 'accepted' ||
     acceptanceReceipt.proposalId !== planProposal.proposalId ||
     acceptanceReceipt.proposalDigest !== planProposal.proposalDigest ||
@@ -455,7 +538,11 @@ export function runP9PlanDrivenResearch(
     plan.proposalId !== planProposal.proposalId ||
     plan.proposalDigest !== planProposal.proposalDigest ||
     plan.domainPackId !== pack.packId ||
-    plan.packDigest !== pack.packDigest
+    plan.packDigest !== pack.packDigest ||
+    plan.acceptancePolicyId !== acceptanceReceipt.acceptancePolicyId ||
+    plan.acceptedAt !== acceptanceReceipt.decidedAt ||
+    plan.acceptedBy !== acceptanceReceipt.actorId ||
+    canonicalDigest(proposalContent) !== canonicalDigest(acceptedContent)
   ) {
     throw new P9GenericResearchError(
       'plan_binding_mismatch',
@@ -728,14 +815,20 @@ export function runP9PlanDrivenResearch(
       );
     }
     const startOffset = source.body.indexOf(claim.quote);
+    const endOffset = startOffset + claim.quote.length;
+    const boundedContext = boundedSentenceContext(
+      source.body,
+      startOffset,
+      endOffset,
+    );
     const locator = {
       evidenceSpanId: `span:${claim.claimId}`,
       snapshotDigest: canonicalDigest(source.body),
       quoteDigest: canonicalDigest(claim.quote),
-      contextDigest: canonicalDigest(claim.quote),
+      contextDigest: canonicalDigest(boundedContext),
       coordinateSpace: COORDINATE_SPACE,
       startOffset,
-      endOffset: startOffset + claim.quote.length,
+      endOffset,
     };
     const proposalIdentity = {
       schemaVersion: '1.0.0' as const,
@@ -758,15 +851,15 @@ export function runP9PlanDrivenResearch(
       proposalDigest: proposal.proposalDigest,
       evaluatedStatement: claim.statement,
       evaluatedQuote: claim.quote,
-      boundedContext: claim.quote,
+      boundedContext,
       locator,
       verdict: claim.evaluatorVerdict,
       semanticDeltas: [],
-      hostileInstructionDetected: containsHostileInstruction(
-        `${claim.statement}\n${claim.quote}`,
+      hostileInstructionDetected: containsP9HostileInstruction(
+        `${claim.statement}\n${claim.quote}\n${boundedContext}`,
       ),
-      reasonCodes: containsHostileInstruction(
-        `${claim.statement}\n${claim.quote}`,
+      reasonCodes: containsP9HostileInstruction(
+        `${claim.statement}\n${claim.quote}\n${boundedContext}`,
       )
         ? ['hostile_instruction_detected']
         : ['fixture_deterministic_evaluation'],
@@ -785,18 +878,28 @@ export function runP9PlanDrivenResearch(
     proposals.push(proposal);
     verdicts.push(verdict);
     admissions.push(admission);
+    const attempt = attemptBySource.get(claim.candidateId);
+    if (!attempt) {
+      throw new P9GenericResearchError(
+        'coverage_evidence_missing',
+        `claim ${claim.claimId} lacks a terminal retrieval attempt`,
+      );
+    }
     bindings.push({
       proposal,
       admission,
-      subquestionIds: claim.subquestionIds,
-      claimGroupId: claim.claimGroupId,
-      contradictionIds: claim.contradictionIds,
       evidence: (() => {
         const identity = {
-          attemptId: attemptBySource.get(claim.candidateId)?.attemptId ?? '',
+          candidateId: claim.candidateId,
+          attemptId: attempt.attemptId,
+          attemptDigest: canonicalDigest(attempt),
           snapshotDigest: canonicalDigest(source.body),
+          subquestionIds: claim.subquestionIds,
           sourceClass: source.sourceClass,
           sourceFamilyId: source.sourceFamilyId,
+          claimGroupId: claim.claimGroupId,
+          contradictionIds: claim.contradictionIds,
+          reportSectionId: claim.sectionId,
         };
         return { ...identity, evidenceDigest: canonicalDigest(identity) };
       })(),
@@ -816,6 +919,9 @@ export function runP9PlanDrivenResearch(
     corpus.claims.map((claim) => [claim.claimId, claim]),
   );
 
+  const relevantAdmitted = admitted.filter((binding) =>
+    isClaimRelevantToPlan(binding, plan),
+  );
   const sections: P9ReportSection[] = [];
   const outlineSections = [
     ...plan.reportOutline.sections,
@@ -830,18 +936,17 @@ export function runP9PlanDrivenResearch(
         claimIds: [],
       },
     ];
-    for (const binding of admitted) {
-      const claim = claimsById.get(binding.proposal.proposalId);
-      if (claim?.sectionId !== outline.sectionId) continue;
+    for (const binding of relevantAdmitted) {
+      if (binding.evidence.reportSectionId !== outline.sectionId) continue;
       sentences.push({
-        sentenceId: `s:${outline.sectionId}:${claim.claimId}`,
+        sentenceId: `s:${outline.sectionId}:${binding.proposal.proposalId}`,
         kind: 'factual',
         text: binding.proposal.statement,
-        claimIds: [claim.claimId],
+        claimIds: [binding.proposal.proposalId],
       });
     }
     if (outline.sectionId === 'references_provenance') {
-      for (const binding of admitted) {
+      for (const binding of relevantAdmitted) {
         const attempt = attemptBySource.get(
           claimsById.get(binding.proposal.proposalId)?.candidateId ?? '',
         );
@@ -871,32 +976,20 @@ export function runP9PlanDrivenResearch(
     admissions,
   );
 
-  const planRelevant = (binding: P9ClaimEvidenceBinding): boolean =>
-    binding.subquestionIds.some((subquestionId) => {
-      const subquestion = plan.subquestions.find(
-        (entry) => entry.subquestionId === subquestionId,
-      );
-      return (
-        subquestion !== undefined &&
-        materialTerms(binding.proposal.statement).filter((term) =>
-          materialTerms(subquestion.question).includes(term),
-        ).length >= 2
-      );
-    });
-  const relevantAdmitted = admitted.filter(planRelevant);
   const admittedSubquestions = new Set(
-    relevantAdmitted.flatMap((binding) => binding.subquestionIds),
+    relevantAdmitted.flatMap((binding) => binding.evidence.subquestionIds),
   );
   const criticalGroups = new Map<string, Set<string>>();
-  for (const binding of admitted) {
-    const group = criticalGroups.get(binding.claimGroupId) ?? new Set<string>();
+  for (const binding of relevantAdmitted) {
+    const group =
+      criticalGroups.get(binding.evidence.claimGroupId) ?? new Set<string>();
     group.add(binding.evidence.sourceFamilyId);
-    criticalGroups.set(binding.claimGroupId, group);
+    criticalGroups.set(binding.evidence.claimGroupId, group);
   }
   const criticalGroupIds = new Set(
-    admitted
+    relevantAdmitted
       .filter((binding) => binding.proposal.critical)
-      .map((binding) => binding.claimGroupId),
+      .map((binding) => binding.evidence.claimGroupId),
   );
   const snapshot = authority.snapshot();
   const stopCriterionFindings: P9StopCriterionFinding[] =
@@ -927,7 +1020,7 @@ export function runP9PlanDrivenResearch(
           const uncorroborated = [...criticalGroupIds].filter(
             (groupId) =>
               (criticalGroups.get(groupId)?.size ?? 0) <
-              input.thresholds.minIndependentFamiliesPerCriticalClaim,
+              thresholds.minIndependentFamiliesPerCriticalClaim,
           );
           return {
             stopId: base.stopId,
@@ -941,9 +1034,7 @@ export function runP9PlanDrivenResearch(
         case 'section_admitted_claims': {
           const sectionId = base.sectionId ?? '';
           const count = relevantAdmitted.filter(
-            (binding) =>
-              claimsById.get(binding.proposal.proposalId)?.sectionId ===
-              sectionId,
+            (binding) => binding.evidence.reportSectionId === sectionId,
           ).length;
           return {
             stopId: base.stopId,
@@ -972,7 +1063,7 @@ export function runP9PlanDrivenResearch(
 
   const assessment = assessPlanCoverage({
     plan,
-    pack: input.pack,
+    pack,
     claims: bindings,
     attempts,
     reportSectionTexts: sections.map((section) => ({
@@ -980,12 +1071,12 @@ export function runP9PlanDrivenResearch(
       text: section.sentences.map((sentence) => sentence.text).join(' '),
     })),
     stopCriterionFindings,
-    thresholds: input.thresholds,
+    thresholds,
     assessedAt: now,
     assessmentId: `coverage:${executionId}`,
   });
 
-  const citations = admitted.map((binding) => {
+  const citations = relevantAdmitted.map((binding) => {
     const claim = claimsById.get(binding.proposal.proposalId);
     const attempt = attemptBySource.get(claim?.candidateId ?? '');
     if (!claim || !attempt) {
@@ -996,11 +1087,41 @@ export function runP9PlanDrivenResearch(
     }
     return {
       claimId: claim.claimId,
+      admissionId: binding.admission.admissionId,
+      verdictId: binding.admission.verdictId,
       attemptId: attempt.attemptId,
       requestedUrl: attempt.requestedUrl,
       sourceClass: binding.evidence.sourceClass,
       sourceFamilyId: binding.evidence.sourceFamilyId,
+      evidenceSpanId: binding.proposal.locator.evidenceSpanId,
+      snapshotDigest: binding.proposal.locator.snapshotDigest,
       quoteDigest: canonicalDigest(claim.quote),
+      coordinateSpace: binding.proposal.locator.coordinateSpace,
+      startOffset: binding.proposal.locator.startOffset,
+      endOffset: binding.proposal.locator.endOffset,
+    };
+  });
+  const contradictions = contradicted.map((binding) => {
+    const claim = claimsById.get(binding.proposal.proposalId);
+    if (!claim) {
+      throw new P9GenericResearchError(
+        'contradiction_provenance_missing',
+        `contradicted proposal ${binding.proposal.proposalId} lacks typed metadata`,
+      );
+    }
+    return {
+      proposalId: binding.proposal.proposalId,
+      admissionId: binding.admission.admissionId,
+      verdictId: binding.admission.verdictId,
+      attemptId: binding.evidence.attemptId,
+      contradictionIds: [...binding.evidence.contradictionIds],
+      statement: binding.proposal.statement,
+      evidenceSpanId: binding.proposal.locator.evidenceSpanId,
+      snapshotDigest: binding.proposal.locator.snapshotDigest,
+      quoteDigest: binding.proposal.locator.quoteDigest,
+      coordinateSpace: binding.proposal.locator.coordinateSpace,
+      startOffset: binding.proposal.locator.startOffset,
+      endOffset: binding.proposal.locator.endOffset,
     };
   });
   const manifestIdentity = {
@@ -1013,6 +1134,7 @@ export function runP9PlanDrivenResearch(
     coverageAssessmentDigest: assessment.assessmentDigest,
     sections,
     citations,
+    contradictions,
     compiledAt: now,
   };
   const manifest = P9ReportManifestSchema.parse({
@@ -1058,13 +1180,9 @@ export function runP9PlanDrivenResearch(
   };
 
   const artifacts: Record<string, string> = {
-    'research-plan-proposal.json': JSON.stringify(input.planProposal, null, 2),
+    'research-plan-proposal.json': JSON.stringify(planProposal, null, 2),
     'research-plan.json': JSON.stringify(plan, null, 2),
-    'plan-acceptance-receipt.json': JSON.stringify(
-      input.acceptanceReceipt,
-      null,
-      2,
-    ),
+    'plan-acceptance-receipt.json': JSON.stringify(acceptanceReceipt, null, 2),
     'retrieval-attempts.jsonl': toJsonLines(attempts),
     'budget-ledger.json': JSON.stringify(
       { snapshot, summary: budgetSummary },
@@ -1188,6 +1306,15 @@ function renderP9Report(
         sentence.kind === 'factual'
           ? `- ${sentence.text} [${sentence.claimIds.join(', ')}]`
           : `- ${sentence.text}`,
+      );
+    }
+    lines.push('');
+  }
+  if (manifest.contradictions.length > 0) {
+    lines.push('## Preserved contradictions', '');
+    for (const contradiction of manifest.contradictions) {
+      lines.push(
+        `- Proposal ${contradiction.proposalId} was contradicted under ${contradiction.contradictionIds.join(', ')} (verdict ${contradiction.verdictId}; locator ${contradiction.evidenceSpanId}; snapshot ${contradiction.snapshotDigest}).`,
       );
     }
     lines.push('');

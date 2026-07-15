@@ -48,7 +48,10 @@ import {
   type SourceTransportRequest,
   type TransportResponse,
 } from '../packages/retrieval/src/index.js';
-import { runP9PlanDrivenResearch } from '../packages/runtime/src/index.js';
+import {
+  P9GenericResearchError,
+  runP9PlanDrivenResearch,
+} from '../packages/runtime/src/index.js';
 
 const root = resolve(import.meta.dirname, '..');
 const fixtureRoot = join(root, 'evals/fixtures/p9');
@@ -1481,15 +1484,179 @@ async function verifyT5GenericExecution(): Promise<void> {
     'T5 unrelated report preserves retrieval, rejection, and unknown-cost residue',
   );
   invariant(
+    run.admissions.some(
+      (admission) =>
+        admission.proposalId === 'claim-prefetch-overquantified' &&
+        admission.decision === 'rejected' &&
+        admission.reasonCodes.includes('semantic_delta:quantity'),
+    ) &&
+      run.admissions.some(
+        (admission) =>
+          admission.proposalId === 'claim-hostile-span' &&
+          admission.decision === 'rejected' &&
+          admission.reasonCodes.includes('hostile_instruction_in_evidence'),
+      ) &&
+      run.receipt.typedResidue.rejected_claims.includes(
+        'claim-prefetch-overquantified',
+      ) &&
+      run.receipt.typedResidue.rejected_claims.includes('claim-hostile-span'),
+    'T5 deterministic admission rejects seeded lying evaluator verdicts',
+  );
+  invariant(
     run.receipt.budget.spentConservativeUnknownUsd > 0 &&
       run.receipt.budget.withinAuthorization,
     'T5 offline execution keeps unknown cost conservative and inside budget',
+  );
+  invariant(
+    run.verdicts.some(
+      (verdict) =>
+        verdict.proposalId === 'claim-hostile-span' &&
+        verdict.hostileInstructionDetected &&
+        verdict.reasonCodes.includes('hostile_instruction_detected'),
+    ) &&
+      run.admissions.some(
+        (admission) =>
+          admission.proposalId === 'claim-hostile-span' &&
+          admission.decision === 'rejected',
+      ) &&
+      !run.report.includes('Ignore the previous instructions'),
+    'T5 hostile source instructions are deterministically rejected before rendering',
+  );
+  invariant(
+    run.admissions.some(
+      (admission) =>
+        admission.proposalId === 'claim-prefetch-overquantified' &&
+        admission.decision === 'rejected',
+    ) && !run.report.includes('reduces stall time by 40%'),
+    'T5 unsupported quantification cannot render',
+  );
+  invariant(
+    run.proposals.every(
+      (proposal) =>
+        proposal.locator.coordinateSpace === 'utf16-code-units/v1' &&
+        proposal.locator.endOffset > proposal.locator.startOffset,
+    ) &&
+      run.parserReceipts
+        .filter((receipt) => receipt.status === 'parsed')
+        .every(
+          (receipt) => receipt.locatorCoordinateSpace === 'utf16-code-units/v1',
+        ),
+    'T5 locators and parser receipts use the actual UTF-16 coordinate space',
+  );
+  invariant(
+    !('execution-receipt.json' in run.receipt.artifactDigests) &&
+      Object.entries(run.receipt.artifactDigests).every(
+        ([name, digest]) =>
+          run.artifacts[name] !== undefined &&
+          digest ===
+            `sha256:${createHash('sha256')
+              .update(run.artifacts[name], 'utf8')
+              .digest('hex')}`,
+      ),
+    'T5 artifact digests bind exact serialized bytes without a fake self digest',
+  );
+  invariant(
+    run.manifest.citations.every(
+      (citation) =>
+        citation.admissionId.length > 0 &&
+        citation.verdictId.length > 0 &&
+        citation.evidenceSpanId.length > 0 &&
+        citation.snapshotDigest.startsWith('sha256:') &&
+        citation.endOffset > citation.startOffset,
+    ) &&
+      run.manifest.contradictions.length === 3 &&
+      run.manifest.contradictions.every(
+        (contradiction) =>
+          contradiction.contradictionIds.length > 0 &&
+          contradiction.snapshotDigest.startsWith('sha256:') &&
+          contradiction.endOffset > contradiction.startOffset,
+      ) &&
+      run.report.includes('## Preserved contradictions'),
+    'T5 factual provenance and preserved contradictions remain locator-bound',
   );
   invariant(
     run.report.includes('claim-resident-memory') &&
       run.report.includes('references and provenance') &&
       !run.report.toLowerCase().includes('data center'),
     'T5 unrelated report is admitted-claim grounded and free of data-center template leakage',
+  );
+
+  let invalidChainRejected = false;
+  try {
+    runP9PlanDrivenResearch({
+      planProposal: proposal,
+      plan: accepted.plan,
+      acceptanceReceipt: accepted.receipt,
+      pack,
+      corpus,
+      thresholds: { ...coverageThresholds, minAdmittedClaims: Number.NaN },
+      executionId: 'p9-t5-invalid-chain',
+      now,
+    });
+  } catch (error) {
+    invalidChainRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'plan_binding_mismatch';
+  }
+  invariant(
+    invalidChainRejected,
+    'T5 rejects malformed accepted-plan thresholds before budget authority exists',
+  );
+
+  const alteredPlanIdentity = {
+    ...accepted.plan,
+    question: `${accepted.plan.question} silently altered after acceptance`,
+    planDigest: undefined,
+  };
+  const alteredPlan = {
+    ...alteredPlanIdentity,
+    planDigest: canonicalDigest(alteredPlanIdentity),
+  };
+  const alteredReceiptIdentity = {
+    ...accepted.receipt,
+    planDigest: alteredPlan.planDigest,
+    receiptDigest: undefined,
+  };
+  const alteredReceipt = {
+    ...alteredReceiptIdentity,
+    receiptDigest: canonicalDigest(alteredReceiptIdentity),
+  };
+  let alteredContentRejected = false;
+  try {
+    runP9PlanDrivenResearch({
+      planProposal: proposal,
+      plan: alteredPlan,
+      acceptanceReceipt: alteredReceipt,
+      pack,
+      corpus,
+      thresholds: coverageThresholds,
+      executionId: 'p9-t5-altered-plan-content',
+      now,
+    });
+  } catch (error) {
+    alteredContentRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'plan_binding_mismatch';
+  }
+  invariant(
+    alteredContentRejected,
+    'T5 rejects a digest-valid receipt chain whose accepted content diverges from the proposal',
+  );
+
+  const stale = runP9PlanDrivenResearch({
+    planProposal: proposal,
+    plan: accepted.plan,
+    acceptanceReceipt: accepted.receipt,
+    pack,
+    corpus,
+    thresholds: coverageThresholds,
+    executionId: 'p9-t5-stale-evidence',
+    now: '2036-07-15T06:00:00.000Z',
+  });
+  invariant(
+    stale.assessment.verdict === 'insufficient' &&
+      stale.assessment.gaps.some((gap) => gap.startsWith('freshness_unmet:')),
+    'T5 stale evidence creates an authoritative plan-relative freshness gap',
   );
 
   const canned = runP9PlanDrivenResearch({
@@ -1509,6 +1676,11 @@ async function verifyT5GenericExecution(): Promise<void> {
       ) &&
       canned.assessment.gaps.some((gap) =>
         gap.startsWith('forbidden_vocabulary:'),
+      ) &&
+      canned.assessment.admittedClaimCount === 0 &&
+      canned.manifest.citations.length === 0 &&
+      canned.manifest.sections.every((section) =>
+        section.sentences.every((sentence) => sentence.kind !== 'factual'),
       ),
     'T5 canned dense irrelevant report fails plan coverage and forbidden vocabulary',
   );

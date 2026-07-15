@@ -28,16 +28,41 @@ export const P9_PLAN_COVERAGE_POLICY_ID = 'p9-plan-relative-coverage/v1';
 /** Minimum material subquestion terms a claim must share to count as coverage. */
 export const P9_MIN_SHARED_SUBQUESTION_TERMS = 2;
 
-const CoverageEvidenceSchema = z
+export const P9CoverageEvidenceRecordSchema = z
   .object({
+    candidateId: z.string().min(1),
     attemptId: z.string().min(1),
+    attemptDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
     snapshotDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+    subquestionIds: z.array(z.string().min(1)).min(1),
     sourceClass: z.string().min(1),
     sourceFamilyId: z.string().min(1),
+    claimGroupId: z.string().min(1),
+    contradictionIds: z.array(z.string().min(1)),
+    reportSectionId: z.string().min(1),
     evidenceDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
   })
   .strict()
   .superRefine((evidence, context) => {
+    if (
+      new Set(evidence.subquestionIds).size !== evidence.subquestionIds.length
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['subquestionIds'],
+        message: 'coverage evidence subquestion identities must be unique',
+      });
+    }
+    if (
+      new Set(evidence.contradictionIds).size !==
+      evidence.contradictionIds.length
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['contradictionIds'],
+        message: 'coverage evidence contradiction identities must be unique',
+      });
+    }
     const identity = { ...evidence, evidenceDigest: undefined };
     if (evidence.evidenceDigest !== canonicalDigest(identity)) {
       context.addIssue({
@@ -46,15 +71,15 @@ const CoverageEvidenceSchema = z
       });
     }
   });
+export type P9CoverageEvidenceRecord = z.infer<
+  typeof P9CoverageEvidenceRecordSchema
+>;
 
 export interface P9ClaimEvidenceBinding {
   readonly proposal: P9ClaimProposal;
   readonly admission: P9ClaimAdmission;
-  readonly subquestionIds: readonly string[];
-  readonly claimGroupId: string;
-  readonly contradictionIds: readonly string[];
-  /** Immutable retrieval record; coverage derives source labels from this record. */
-  readonly evidence: z.infer<typeof CoverageEvidenceSchema>;
+  /** Immutable validated record; every coverage label derives from this object. */
+  readonly evidence: P9CoverageEvidenceRecord;
 }
 
 export interface P9StopCriterionFinding {
@@ -69,6 +94,27 @@ export interface PlanCoverageThresholds {
   readonly minIndependentFamiliesPerCriticalClaim: number;
   readonly minMandatorySourceClassCoverageRatio: number;
 }
+
+export const PlanCoverageThresholdsSchema = z
+  .object({
+    minAdmittedClaims: z
+      .number()
+      .int()
+      .nonnegative()
+      .refine(Number.isSafeInteger),
+    minCriticalClaims: z
+      .number()
+      .int()
+      .nonnegative()
+      .refine(Number.isSafeInteger),
+    minIndependentFamiliesPerCriticalClaim: z
+      .number()
+      .int()
+      .nonnegative()
+      .refine(Number.isSafeInteger),
+    minMandatorySourceClassCoverageRatio: z.number().finite().min(0).max(1),
+  })
+  .strict();
 
 export interface PlanCoverageInput {
   readonly plan: ResearchPlan;
@@ -92,6 +138,31 @@ function sharedMaterialTermCount(statement: string, question: string): number {
   ).length;
 }
 
+export function isClaimRelevantToSubquestion(
+  binding: P9ClaimEvidenceBinding,
+  subquestionId: string,
+  question: string,
+): boolean {
+  return (
+    binding.evidence.subquestionIds.includes(subquestionId) &&
+    sharedMaterialTermCount(binding.proposal.statement, question) >=
+      P9_MIN_SHARED_SUBQUESTION_TERMS
+  );
+}
+
+export function isClaimRelevantToPlan(
+  binding: P9ClaimEvidenceBinding,
+  plan: ResearchPlan,
+): boolean {
+  return plan.subquestions.some((subquestion) =>
+    isClaimRelevantToSubquestion(
+      binding,
+      subquestion.subquestionId,
+      subquestion.question,
+    ),
+  );
+}
+
 /**
  * Verifies executed research against the accepted plan itself: claims only
  * count toward a coverage requirement when they are admitted, mapped to the
@@ -112,23 +183,16 @@ export function assessPlanCoverage(
       'coverage assessment requires the exact accepted plan domain pack',
     );
   }
-  const thresholds = input.thresholds;
-  if (
-    !Number.isSafeInteger(thresholds.minAdmittedClaims) ||
-    thresholds.minAdmittedClaims < 0 ||
-    !Number.isSafeInteger(thresholds.minCriticalClaims) ||
-    thresholds.minCriticalClaims < 0 ||
-    !Number.isSafeInteger(thresholds.minIndependentFamiliesPerCriticalClaim) ||
-    thresholds.minIndependentFamiliesPerCriticalClaim < 0 ||
-    !Number.isFinite(thresholds.minMandatorySourceClassCoverageRatio) ||
-    thresholds.minMandatorySourceClassCoverageRatio < 0 ||
-    thresholds.minMandatorySourceClassCoverageRatio > 1
-  ) {
+  const thresholdsResult = PlanCoverageThresholdsSchema.safeParse(
+    input.thresholds,
+  );
+  if (!thresholdsResult.success) {
     throw new GovernanceError(
       'coverage_invalid_thresholds',
       'coverage thresholds must be finite non-negative bounds',
     );
   }
+  const thresholds = thresholdsResult.data;
   const claims = input.claims.map((binding) => ({
     ...binding,
     proposal: P9ClaimProposalSchema.parse(binding.proposal),
@@ -148,6 +212,15 @@ export function assessPlanCoverage(
   const attempts = input.attempts.map((attempt) =>
     RetrievalAttemptSchema.parse(attempt),
   );
+  if (
+    new Set(attempts.map((attempt) => attempt.attemptId)).size !==
+    attempts.length
+  ) {
+    throw new GovernanceError(
+      'coverage_duplicate_attempt',
+      'coverage requires unique retrieval attempt identities',
+    );
+  }
   const attemptsById = new Map(
     attempts.map((attempt) => [attempt.attemptId, attempt]),
   );
@@ -165,11 +238,22 @@ export function assessPlanCoverage(
     }
     proposalIds.add(binding.proposal.proposalId);
     admissionIds.add(binding.admission.admissionId);
-    const evidence = CoverageEvidenceSchema.parse(binding.evidence);
+    const evidenceResult = P9CoverageEvidenceRecordSchema.safeParse(
+      binding.evidence,
+    );
+    if (!evidenceResult.success) {
+      throw new GovernanceError(
+        'coverage_evidence_binding_mismatch',
+        'coverage requires a digest-bound immutable evidence record',
+      );
+    }
+    const evidence = evidenceResult.data;
     const attempt = attemptsById.get(evidence.attemptId);
     if (
       !attempt ||
       attempt.status !== 'admitted' ||
+      evidence.candidateId !== attempt.candidateId ||
+      evidence.attemptDigest !== canonicalDigest(attempt) ||
       evidence.snapshotDigest !== binding.proposal.locator.snapshotDigest
     ) {
       throw new GovernanceError(
@@ -180,7 +264,9 @@ export function assessPlanCoverage(
   }
   const gaps = new Set<string>();
   const admitted = claims.filter(
-    (binding) => binding.admission.decision === 'admitted',
+    (binding) =>
+      binding.admission.decision === 'admitted' &&
+      isClaimRelevantToPlan(binding, plan),
   );
   const contradicted = claims.filter(
     (binding) => binding.admission.decision === 'contradicted',
@@ -202,13 +288,12 @@ export function assessPlanCoverage(
         );
       }
       const supportingClaimIds = admitted
-        .filter(
-          (binding) =>
-            binding.subquestionIds.includes(requirement.subquestionId) &&
-            sharedMaterialTermCount(
-              binding.proposal.statement,
-              subquestion.question,
-            ) >= P9_MIN_SHARED_SUBQUESTION_TERMS,
+        .filter((binding) =>
+          isClaimRelevantToSubquestion(
+            binding,
+            requirement.subquestionId,
+            subquestion.question,
+          ),
         )
         .map((binding) => binding.proposal.proposalId)
         .sort();
@@ -269,7 +354,9 @@ export function assessPlanCoverage(
     plan.contradictionRequirements.map((requirement) => {
       const contradictedClaimIds = contradicted
         .filter((binding) =>
-          binding.contradictionIds.includes(requirement.contradictionId),
+          binding.evidence.contradictionIds.includes(
+            requirement.contradictionId,
+          ),
         )
         .map((binding) => binding.proposal.proposalId)
         .sort();
@@ -308,8 +395,13 @@ export function assessPlanCoverage(
         staleAttemptIds,
       };
     });
-  for (const status of freshnessStatuses) {
-    if (status.staleAttemptIds.length > 0) {
+  for (const [index, status] of freshnessStatuses.entries()) {
+    const requirement = plan.freshnessRequirements[index];
+    if (
+      status.staleAttemptIds.length > 0 ||
+      (requirement?.asOfDateRequired === true &&
+        status.knownPublicationDates === 0)
+    ) {
       gaps.add(`freshness_unmet:${status.freshnessId}`);
     }
   }
@@ -317,6 +409,12 @@ export function assessPlanCoverage(
   const findingsByStopId = new Map(
     input.stopCriterionFindings.map((finding) => [finding.stopId, finding]),
   );
+  if (findingsByStopId.size !== input.stopCriterionFindings.length) {
+    throw new GovernanceError(
+      'coverage_duplicate_stop_finding',
+      'coverage requires unique stop-criterion findings',
+    );
+  }
   const stopCriterionStatuses: StopCriterionStatus[] = plan.stopCriteria.map(
     (criterion) => {
       const finding = findingsByStopId.get(criterion.stopId);
@@ -341,10 +439,10 @@ export function assessPlanCoverage(
 
   const criticalGroups = new Map<string, P9ClaimEvidenceBinding[]>();
   for (const binding of admitted) {
-    if (!criticalGroups.has(binding.claimGroupId)) {
-      criticalGroups.set(binding.claimGroupId, []);
+    if (!criticalGroups.has(binding.evidence.claimGroupId)) {
+      criticalGroups.set(binding.evidence.claimGroupId, []);
     }
-    criticalGroups.get(binding.claimGroupId)?.push(binding);
+    criticalGroups.get(binding.evidence.claimGroupId)?.push(binding);
   }
   const criticalClaimCorroborations: CriticalClaimCorroboration[] = [
     ...criticalGroups.entries(),
