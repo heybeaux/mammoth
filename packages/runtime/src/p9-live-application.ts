@@ -206,7 +206,7 @@ export function verifyP9LiveBundle(
   if (
     Date.parse(executionReceipt.startedAt) <
       Date.parse(authorityReceipt.notBeforeAt) ||
-    Date.parse(executionReceipt.finishedAt) >
+    Date.parse(executionReceipt.finishedAt) >=
       Date.parse(authorityReceipt.expiresAt)
   ) {
     throw new Error(
