@@ -1,4 +1,8 @@
-import type { P9ObservedUsage, ResearchPlan } from '@mammoth/domain';
+import {
+  P9SemanticDeltaSchema,
+  type P9ObservedUsage,
+  type ResearchPlan,
+} from '@mammoth/domain';
 import { z } from 'zod';
 import type {
   P9LiveClaimSeed,
@@ -40,8 +44,8 @@ const ClaimSeedSchema = z.object({
 const EvaluatorFindingSchema = z.object({
   claimId: z.string().min(1),
   verdict: z.enum(['entailed', 'contradicted', 'insufficient']),
-  semanticDeltas: z.array(z.string()).default([]),
-  reasonCodes: z.array(z.string()).default([]),
+  semanticDeltas: z.array(P9SemanticDeltaSchema).default([]),
+  reasonCodes: z.array(z.string().min(1)).min(1),
 });
 
 const ClaimSeedResponseSchema = z.object({
@@ -159,7 +163,9 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'Quote identity alone does not prove support. Respond with ONLY a JSON',
         'object whose findings array contains objects with keys: claimId,',
         'verdict (one of entailed,',
-        'contradicted, insufficient), semanticDeltas, reasonCodes.',
+        'contradicted, insufficient), semanticDeltas, reasonCodes. Every',
+        'finding must include at least one non-empty reason code.',
+        `semanticDeltas may contain only: ${P9SemanticDeltaSchema.options.join(', ')}.`,
       ].join(' '),
       `${promptContext(request.plan, request.snapshots)}\n\nProposed claims:\n${JSON.stringify(request.claims)}`,
       this.input.evaluatorMaxOutputTokens,
@@ -300,8 +306,15 @@ function evaluatorResponseFormat(): object {
         type: 'string',
         enum: ['entailed', 'contradicted', 'insufficient'],
       },
-      semanticDeltas: { type: 'array', items: { type: 'string' } },
-      reasonCodes: { type: 'array', items: { type: 'string' } },
+      semanticDeltas: {
+        type: 'array',
+        items: { type: 'string', enum: [...P9SemanticDeltaSchema.options] },
+      },
+      reasonCodes: {
+        type: 'array',
+        minItems: 1,
+        items: { type: 'string', minLength: 1 },
+      },
     },
     required: ['claimId', 'verdict', 'semanticDeltas', 'reasonCodes'],
   });
