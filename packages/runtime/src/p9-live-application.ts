@@ -21,6 +21,7 @@ import {
   type P9ProviderProfile,
   type P9ModelWorkRef,
   type P9ObservedUsage,
+  type P9SemanticDelta,
   type ParserReceipt,
   type ResearchPlan,
   type ResearchPlanProposal,
@@ -119,7 +120,7 @@ export interface P9LiveModelOutcome<T> {
 export interface P9LiveEvaluatorFinding {
   readonly claimId: string;
   readonly verdict: 'entailed' | 'contradicted' | 'insufficient';
-  readonly semanticDeltas?: readonly string[] | undefined;
+  readonly semanticDeltas?: readonly P9SemanticDelta[] | undefined;
   readonly reasonCodes?: readonly string[] | undefined;
 }
 
