@@ -43,6 +43,7 @@ import {
   MemoryP9DurableJournalStore,
   P9DurableJournalRecordSchema,
   P9_DOMAIN_POLICY_PACKS,
+  isClaimRelevantToSubquestion,
   type P9BudgetAuthority,
   type P9BudgetReservation,
   type P9ClaimEvidenceBinding,
@@ -1462,7 +1463,39 @@ function stopCriterionFindings(
   const subquestions = new Set(
     admitted.flatMap((binding) => binding.evidence.subquestionIds),
   );
-  const hasCritical = admitted.some((binding) => binding.proposal.critical);
+  const upstreamQuestion = plan.subquestions.find(
+    (subquestion) => subquestion.subquestionId === 'sq-upstream',
+  );
+  const experimentQuestion = plan.subquestions.find(
+    (subquestion) => subquestion.subquestionId === 'sq-experiment',
+  );
+  const boundedChangeClaims = upstreamQuestion
+    ? admitted.filter(
+        (binding) =>
+          binding.proposal.critical &&
+          isClaimRelevantToSubquestion(
+            binding,
+            upstreamQuestion.subquestionId,
+            upstreamQuestion.question,
+          ),
+      )
+    : [];
+  const experimentClaims = experimentQuestion
+    ? admitted.filter((binding) =>
+        isClaimRelevantToSubquestion(
+          binding,
+          experimentQuestion.subquestionId,
+          experimentQuestion.question,
+        ),
+      )
+    : [];
+  const hasBoundedChangeAndExperiment = boundedChangeClaims.some(
+    (boundedChange) =>
+      experimentClaims.some(
+        (experiment) =>
+          experiment.proposal.proposalId !== boundedChange.proposal.proposalId,
+      ),
+  );
   const openReservations = snapshot.reservations.filter(
     (reservation) => reservation.state === 'reserved',
   );
@@ -1480,10 +1513,10 @@ function stopCriterionFindings(
     if (criterion.stopId === 'stop-bounded-change') {
       return {
         stopId: criterion.stopId,
-        met: hasCritical,
-        reason: hasCritical
-          ? 'at least one admitted critical claim supports the bounded-change decision'
-          : 'no admitted critical claim supports the bounded-change decision',
+        met: hasBoundedChangeAndExperiment,
+        reason: hasBoundedChangeAndExperiment
+          ? 'an admitted critical upstream claim supports the bounded-change decision and a distinct admitted claim supports its controlled experiment'
+          : 'the bounded-change stop requires both an admitted critical upstream claim and a distinct admitted experiment-relevant claim',
       };
     }
     return {

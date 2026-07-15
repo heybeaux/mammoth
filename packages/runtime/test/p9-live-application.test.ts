@@ -805,6 +805,28 @@ describe('P9 live application', () => {
     ).toThrow(/does not match journaled reservation/u);
   });
 
+  it('does not satisfy the bounded-change stop with a critical upstream claim alone', async () => {
+    const model = makeModel({ calls: 0 });
+    const run = await runP9LiveApplication(
+      makeInput({
+        model: {
+          ...model,
+          proposeClaims: () =>
+            Promise.resolve({
+              value: seeds.map((seed) => ({ ...seed, critical: true })),
+              usage: modelUsage,
+            }),
+        },
+      }),
+    );
+
+    expect(
+      run.assessment.stopCriterionStatuses.find(
+        (criterion) => criterion.stopId === 'stop-bounded-change',
+      ),
+    ).toMatchObject({ status: 'not_met' });
+  });
+
   it('treats environment-style flags as non-authority: a missing receipt blocks before any effect', async () => {
     const searchCounter = { calls: 0 };
     const modelCounter = { calls: 0 };
