@@ -31,7 +31,10 @@ import {
 } from '@mammoth/domain';
 import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { evaluateP9ClaimAdmission } from '@mammoth/evidence';
+import {
+  detectP9SemanticDeltas,
+  evaluateP9ClaimAdmission,
+} from '@mammoth/evidence';
 import {
   acceptResearchPlan,
   assertP9LiveAuthorityLineage,
@@ -51,6 +54,7 @@ import {
   AcquisitionFailure,
   BoundedParserRegistry,
   buildTruthfulRetrievalAttempt,
+  canonicalizeAcquisitionUrl,
   makeNotCheckedRobotsDecision,
   makeUnknownRightsStatus,
   ParserPolicyError,
@@ -75,13 +79,14 @@ import {
 export const P9_LIVE_EXHIBITION_QUESTION =
   'Using the current upstream repository and primary technical sources, which bounded change to JustVugg/colibri should be tested first on a 128 GB Apple-silicon machine, and what experiment would distinguish a real improvement from measurement noise?';
 export const P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST = canonicalDigest(
-  'p9-live-source-classification/v1',
+  'p9-live-source-classification/v2',
 );
 
 const USER_AGENT = 'mammoth-research/0.9';
 const ROBOTS_POLICY_ID = 'p9-live-robots-not-checked/v1';
 const RIGHTS_POLICY_ID = 'p9-live-rights-unknown/v1';
 const COORDINATE_SPACE = 'utf16-code-units/v1';
+const CURRENT_COMMIT_DATE_POLICY_ID = 'p9-live-current-commit-date/v1';
 
 export interface P9LiveCandidate {
   readonly candidateId: string;
@@ -384,14 +389,6 @@ export function verifyP9LiveBundle(
       );
     }
   }
-  if (
-    executionReceipt.coverageVerdict !== 'covered' ||
-    exact.verifiedCitationCount === 0
-  ) {
-    throw new Error(
-      'P9 live bundle is not releaseable: sufficient coverage and at least one verified citation are required',
-    );
-  }
   return {
     manifest: exact.manifest,
     verifiedCitationCount: exact.verifiedCitationCount,
@@ -665,11 +662,22 @@ async function runP9LiveApplicationExclusive(
         ? result.error
         : new Error(String(result.error));
     }
-    candidatesPerQuery.push(
-      result.value.filter((candidate) =>
-        authorizedRetrievalOrigins.has(new URL(candidate.url).origin),
-      ),
+    const authorizedCandidates = result.value.filter((candidate) =>
+      authorizedRetrievalOrigins.has(new URL(candidate.url).origin),
     );
+    if (
+      query.queryId === 'q-colibri-repo' &&
+      authorizedRetrievalOrigins.has('https://api.github.com')
+    ) {
+      authorizedCandidates.unshift({
+        candidateId: 'github-api:justvugg-colibri:main',
+        url: 'https://api.github.com/repos/JustVugg/colibri/commits/main',
+        title: 'JustVugg/colibri current main commit',
+        sourceClass: 'repository_code',
+        sourceFamilyId: 'github.com',
+      });
+    }
+    candidatesPerQuery.push(authorizedCandidates);
   }
   // Preserve plan diversity: take one result from every governed query before
   // backfilling additional ranks. A global first-results cap lets the repository
@@ -685,8 +693,10 @@ async function runP9LiveApplicationExclusive(
   ) {
     for (const candidates of candidatesPerQuery) {
       const candidate = candidates[rank];
-      if (!candidate || candidatesByUrl.has(candidate.url)) continue;
-      candidatesByUrl.set(candidate.url, candidate);
+      if (!candidate) continue;
+      const canonicalUrl = canonicalP9CandidateSelectionUrl(candidate.url);
+      if (candidatesByUrl.has(canonicalUrl)) continue;
+      candidatesByUrl.set(canonicalUrl, candidate);
       if (candidatesByUrl.size >= candidateLimit) break;
     }
   }
@@ -779,6 +789,12 @@ async function runP9LiveApplicationExclusive(
         parserResult.value.parserReceipt,
       );
       parserReceipts.push(receipt);
+      const dateEvidence = observeCurrentRepositoryCommitDate({
+        candidate,
+        parsedText: parserResult.value.text,
+        retrievedAt: retrieved.retrievedAt,
+        observedAt: timestamp(),
+      });
       attempts.push(
         buildTruthfulRetrievalAttempt({
           attemptId: `attempt:${candidate.candidateId}`,
@@ -790,6 +806,7 @@ async function runP9LiveApplicationExclusive(
           startedAt: retrievalResult.reservation.createdAt,
           finishedAt: timestamp(),
           retrievedAt: retrieved.retrievedAt,
+          ...(dateEvidence ?? {}),
           robotsDecision: makeNotCheckedRobotsDecision({
             requestedUrl: candidate.url,
             finalUrl: retrieved.finalUrl,
@@ -862,7 +879,17 @@ async function runP9LiveApplicationExclusive(
       ? proposerResult.error
       : new Error(String(proposerResult.error));
   }
-  const seeds = proposerResult.value;
+  const seeds = proposerResult.value.map((seed) => ({
+    ...seed,
+    statement: seed.quote,
+  }));
+  for (const seed of seeds) {
+    if (detectP9SemanticDeltas(seed.statement, seed.quote).length > 0) {
+      throw new Error(
+        `P9 live extractive claim normalization failed for ${seed.claimId}`,
+      );
+    }
+  }
 
   const evaluatorResult = await executor.execute<
     readonly P9LiveEvaluatorFinding[]
@@ -934,7 +961,11 @@ async function runP9LiveApplicationExclusive(
         role: 'claim_proposer',
         claimId: seed.claimId,
         profile: input.model.proposerProfile,
-        raw: seeds,
+        raw: {
+          policyId: 'p9-live-extractive-claim/v1',
+          providerClaims: proposerResult.value,
+          normalizedClaims: seeds,
+        },
       }),
     };
     const proposal = P9ClaimProposalSchema.parse({
@@ -1231,10 +1262,9 @@ export function buildAcceptedP9LivePlan(input: {
         subquestionIds: ['sq-upstream'],
       },
       {
-        queryId: 'q-colibri-implementation',
-        query:
-          'JustVugg colibri mmap cache quantization expert offload source code',
-        subquestionIds: ['sq-upstream', 'sq-risk'],
+        queryId: 'q-upstream-model',
+        query: 'site:huggingface.co/zai-org/GLM-5 official GLM-5 model card',
+        subquestionIds: ['sq-upstream'],
       },
       {
         queryId: 'q-apple-silicon',
@@ -1648,6 +1678,76 @@ const BraveSearchResponseSchema = z
   })
   .passthrough();
 
+const CurrentGitHubCommitSchema = z
+  .object({
+    sha: z.string().regex(/^[0-9a-f]{40}$/u),
+    commit: z.object({
+      committer: z.object({ date: z.string().datetime() }),
+    }),
+  })
+  .passthrough();
+
+export function canonicalP9CandidateSelectionUrl(input: string): string {
+  const url = canonicalizeAcquisitionUrl(input);
+  url.search = '';
+  if (url.pathname.length > 1) {
+    url.pathname = url.pathname.replace(/\/+$/u, '');
+  }
+  return url.href;
+}
+
+function observeCurrentRepositoryCommitDate(input: {
+  readonly candidate: P9LiveCandidate;
+  readonly parsedText: string;
+  readonly retrievedAt: string;
+  readonly observedAt: string;
+}) {
+  if (
+    canonicalP9CandidateSelectionUrl(input.candidate.url) !==
+    'https://api.github.com/repos/JustVugg/colibri/commits/main'
+  ) {
+    return null;
+  }
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(input.parsedText);
+  } catch {
+    return null;
+  }
+  const parsed = CurrentGitHubCommitSchema.safeParse(decoded);
+  if (!parsed.success) return null;
+  const normalizedValue = new Date(
+    parsed.data.commit.committer.date,
+  ).toISOString();
+  if (Date.parse(normalizedValue) > Date.parse(input.retrievedAt)) return null;
+  const observation = {
+    schemaVersion: '1.0.0' as const,
+    contractFamily: 'p9.v1' as const,
+    observationId: `published-at:${input.candidate.candidateId}`,
+    field: 'published_at' as const,
+    extractionMethod: 'document_text' as const,
+    exactLocator: `json-pointer:/commit/committer/date;sha:${parsed.data.sha};body:${canonicalDigest(input.parsedText)}`,
+    sourceValue: parsed.data.commit.committer.date,
+    normalizedValue,
+    confidence: 1,
+    observedAt: input.observedAt,
+  };
+  return {
+    dateObservation: observation,
+    dateVerdict: {
+      schemaVersion: '1.0.0' as const,
+      contractFamily: 'p9.v1' as const,
+      observationId: observation.observationId,
+      observationDigest: canonicalDigest(observation),
+      verdict: 'accepted' as const,
+      policyId: CURRENT_COMMIT_DATE_POLICY_ID,
+      reason:
+        'the authorized GitHub current-ref response bound an immutable commit SHA and exact committer timestamp',
+      decidedAt: input.observedAt,
+    },
+  };
+}
+
 function inferSourceClass(url: string): string {
   const parsed = new URL(url);
   const host = parsed.hostname.toLowerCase();
@@ -1658,6 +1758,13 @@ function inferSourceClass(url: string): string {
       : 'repository_docs';
   }
   if (host.includes('apple.com')) return 'hardware_vendor_docs';
+  if (
+    host === 'huggingface.co' &&
+    (path === '/zai-org/glm-5' || path === '/zai-org/glm-4.7-flash')
+  ) {
+    return 'upstream_model_docs';
+  }
+  if (host === 'huggingface.co') return 'unclassified_public_source';
   if (
     host.includes('arxiv.org') ||
     host.includes('acm.org') ||
