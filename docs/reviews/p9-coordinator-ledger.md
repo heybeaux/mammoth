@@ -412,8 +412,22 @@ handoff, integration commit, blockers, and replacement audit.
 - Worktree/branch/base: `/private/tmp/mammoth-p9-t6-evidence-replay`;
   `feat/p9-t6-evidence-replay`; rebased on main `21513a2`.
 - Reviewer: PR #71 plus independent adversarial re-review. The first review found
-  missing cross-artifact replay; the repaired head remains under review.
+  missing cross-artifact replay. The second review found unsupported rendered
+  prose, candidate-identity swaps, and accepted-plan artifacts were not fully
+  bound; the branch now enforces deterministic proposal/provenance sentences,
+  candidate-attempt identity, accepted proposal/plan/receipt continuity, and
+  includes resealed tamper cases for each bypass. Fresh re-review remains required.
 - Handoff/integration: pending PR #71.
+- Exact-bundle scope: serialized proposals, admissions, verdicts, attempts,
+  source metadata, snapshots, manifest, coverage assessment, report, and receipt
+  are parsed and cross-bound; resealed alias, admission/verdict, and source-byte
+  tampering must fail closed.
+- Current local results: format, lint, typecheck, full tests, build, `verify:p8`,
+  and `verify:p9` PASS; the P8 manifest digest remains
+  `sha256:d154c6e1df6bfdb41f5222643f33862fa4eb15531af75ce6194171150077298f`.
+- Compatibility: stricter required citation fields remain under `p9.v1` schema
+  `1.0.0` because P9 is unreleased and no P9 release artifact is compatibility
+  authority yet. The first released P9 bundle establishes that baseline.
 
 ## Release evidence
 
