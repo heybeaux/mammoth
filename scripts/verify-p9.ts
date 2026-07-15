@@ -51,6 +51,7 @@ import {
 import {
   P9GenericResearchError,
   runP9PlanDrivenResearch,
+  verifyP9ExactBundle,
 } from '../packages/runtime/src/index.js';
 
 const root = resolve(import.meta.dirname, '..');
@@ -65,6 +66,30 @@ async function json(path: string): Promise<Record<string, unknown>> {
 
 function invariant(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`P9_BASELINE_INVALID: ${message}`);
+}
+
+function resealP9Artifacts(artifacts: Record<string, string>): void {
+  const receipt = JSON.parse(
+    artifacts['execution-receipt.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  const artifactDigests = Object.fromEntries(
+    Object.entries(artifacts)
+      .filter(([name]) => name !== 'execution-receipt.json')
+      .map(([name, content]) => [
+        name,
+        `sha256:${createHash('sha256').update(content, 'utf8').digest('hex')}`,
+      ]),
+  );
+  const identity: Record<string, unknown> = {
+    ...receipt,
+    artifactDigests,
+  };
+  Reflect.deleteProperty(identity, 'receiptDigest');
+  artifacts['execution-receipt.json'] = JSON.stringify(
+    { ...identity, receiptDigest: canonicalDigest(identity) },
+    null,
+    2,
+  );
 }
 
 function hasZodIssue(error: unknown, message: string): boolean {
@@ -1445,6 +1470,114 @@ async function verifyT5GenericExecution(): Promise<void> {
     executionId: 'p9-t5-offline-technical-colibri',
     now,
   });
+  invariant(
+    verifyP9ExactBundle(run.artifacts).verifiedCitationCount ===
+      run.manifest.citations.length,
+    'T5 exact serialized bundle replays every factual citation chain',
+  );
+
+  const forgedAliases = { ...run.artifacts } as Record<string, string>;
+  const forgedManifest = JSON.parse(
+    forgedAliases['report-manifest.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  const forgedCitations = forgedManifest.citations as Record<string, unknown>[];
+  const forgedCitation = forgedCitations[0];
+  invariant(Boolean(forgedCitation), 'T5 fixture contains a citation to forge');
+  if (forgedCitation) {
+    const forgedDigest = canonicalDigest('forged-verdict');
+    forgedCitation.verdictId = 'verdict:forged';
+    forgedCitation.entailmentVerdictId = 'verdict:forged';
+    forgedCitation.verdictDigest = forgedDigest;
+    forgedCitation.entailmentVerdictDigest = forgedDigest;
+  }
+  const forgedManifestIdentity = { ...forgedManifest };
+  delete forgedManifestIdentity.manifestDigest;
+  forgedAliases['report-manifest.json'] = JSON.stringify(
+    {
+      ...forgedManifestIdentity,
+      manifestDigest: canonicalDigest(forgedManifestIdentity),
+    },
+    null,
+    2,
+  );
+  resealP9Artifacts(forgedAliases);
+  let forgedAliasesRejected = false;
+  try {
+    verifyP9ExactBundle(forgedAliases);
+  } catch (error) {
+    forgedAliasesRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    forgedAliasesRejected,
+    'T5 exact-bundle verifier rejects jointly forged citation aliases after manifest and receipt resealing',
+  );
+
+  const swappedAdmission = { ...run.artifacts } as Record<string, string>;
+  const entailmentLines = (swappedAdmission['entailment-verdicts.jsonl'] ?? '')
+    .trimEnd()
+    .split('\n')
+    .map((line) => JSON.parse(line) as Record<string, Record<string, unknown>>);
+  invariant(
+    entailmentLines.length >= 2,
+    'T5 fixture contains two entailment records for cross-record tampering',
+  );
+  const firstAdmission = entailmentLines[0]?.admission;
+  const secondVerdict = entailmentLines[1]?.verdict;
+  invariant(
+    Boolean(firstAdmission && secondVerdict),
+    'T5 entailment records contain admission and verdict identities',
+  );
+  if (firstAdmission && secondVerdict) {
+    firstAdmission.verdictId = secondVerdict.verdictId;
+    firstAdmission.verdictDigest = secondVerdict.verdictDigest;
+    const admissionIdentity = { ...firstAdmission };
+    delete admissionIdentity.admissionDigest;
+    firstAdmission.admissionDigest = canonicalDigest(admissionIdentity);
+  }
+  swappedAdmission['entailment-verdicts.jsonl'] = `${entailmentLines
+    .map((record) => JSON.stringify(record))
+    .join('\n')}\n`;
+  resealP9Artifacts(swappedAdmission);
+  let swappedAdmissionRejected = false;
+  try {
+    verifyP9ExactBundle(swappedAdmission);
+  } catch (error) {
+    swappedAdmissionRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    swappedAdmissionRejected,
+    'T5 exact-bundle verifier rejects a schema-valid swapped admission/verdict chain',
+  );
+
+  const alteredSnapshot = { ...run.artifacts } as Record<string, string>;
+  const firstSnapshot = Object.keys(alteredSnapshot).find((name) =>
+    name.startsWith('source-snapshots/'),
+  );
+  invariant(
+    Boolean(firstSnapshot),
+    'T5 exact bundle contains source snapshots',
+  );
+  if (firstSnapshot) {
+    alteredSnapshot[firstSnapshot] =
+      `${alteredSnapshot[firstSnapshot] ?? ''}\nforged source bytes`;
+  }
+  resealP9Artifacts(alteredSnapshot);
+  let alteredSnapshotRejected = false;
+  try {
+    verifyP9ExactBundle(alteredSnapshot);
+  } catch (error) {
+    alteredSnapshotRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    alteredSnapshotRejected,
+    'T5 exact-bundle verifier rejects altered source bytes after receipt resealing',
+  );
   const reportFixture = await json('non-data-center-report.json');
   const requiredSections = new Set(
     (reportFixture.requiredSections as readonly string[]).map(String),

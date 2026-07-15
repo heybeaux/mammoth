@@ -396,8 +396,10 @@ handoff, integration commit, blockers, and replacement audit.
 - Acceptance evidence for this subtask: P9 report-manifest citations require and
   verify admitted decision metadata, named admission policy, admission digest,
   entailment verdict/digest, exact UTF-16 locator, quote digest, and immutable
-  snapshot digest; `verify:p9` asserts the T5 unrelated offline report preserves
-  those bindings for every factual claim.
+  snapshot digest. The exact-bundle verifier independently parses serialized
+  proposals, admissions, verdicts, attempts, source metadata, snapshots,
+  manifest, coverage assessment, report, and receipt, then replays those
+  bindings for every factual claim.
 - Runtime identity: Scout primary session; no delegated worker, child session,
   live provider call, or external effect owns this subtask.
 - Worktree/branch/base: `/private/tmp/mammoth-p9-t6-evidence-replay`;
@@ -424,10 +426,21 @@ handoff, integration commit, blockers, and replacement audit.
   `pnpm verify:p9` PASS with `T5 generic_execution=pass` and `T6=blocked`.
   The known build-induced `packages/temporal-adapter/src/research-cli.ts` mode
   toggle was restored and remains unstaged.
-- Reviewer: pending PR review and CI for this T6-prep branch.
+- Reviewer: CodeRabbit reported no actionable comments on PR #71 exact head
+  `402cbaf`, but an independent adversarial review correctly found the first
+  implementation trusted in-memory producer output and did not replay serialized
+  artifacts. The branch now adds exact-bundle validation plus resealed tamper
+  cases for jointly forged citation aliases, swapped admission/verdict linkage,
+  and altered source bytes. Fresh review and exact-head CI are required for the
+  repaired head.
 - Registry/artifact proof: fresh worktree from exact origin/main, frozen install,
   attributable diff/tests, verifier output, and local git status.
-- Handoff/integration: pending PR.
+- Compatibility: the stricter required citation fields remain under `p9.v1`
+  schema `1.0.0` because P9 is explicitly unreleased and no P9 release artifact
+  is compatibility authority yet. This is a pre-release contract hardening, not
+  a migration claim; the first released P9 bundle establishes the compatibility
+  baseline.
+- Handoff/integration: pending PR #71.
 - Blockers: live exhibition and any metered provider call require a separate
   valid authorization check under `P9_PLAN.md`/`LOOP.md`; no T6 live authority has
   been proven in this worktree.

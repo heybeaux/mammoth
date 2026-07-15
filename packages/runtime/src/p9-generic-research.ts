@@ -5,11 +5,14 @@ import {
   PlanAcceptanceReceiptSchema,
   ResearchPlanProposalSchema,
   ResearchPlanSchema,
+  RetrievalAttemptSchema,
   ParserReceiptSchema,
+  P9ClaimAdmissionSchema,
   P9ClaimProposalSchema,
   P9EntailmentVerdictSchema,
   P9ExecutionReceiptSchema,
   P9ReportManifestSchema,
+  PlanCoverageAssessmentSchema,
   type DomainPolicyPack,
   type EffectRequestCeiling,
   type P9BudgetVector,
@@ -249,6 +252,30 @@ export interface P9GenericResearchRun {
   readonly report: string;
   readonly receipt: P9ExecutionReceipt;
   readonly artifacts: Readonly<Record<string, string>>;
+}
+
+const P9SerializedEvidenceSourceSchema = z
+  .object({
+    candidateId: z.string().min(1),
+    attemptId: z.string().min(1),
+    requestedUrl: z.string().url(),
+    sourceClass: z.string().min(1),
+    sourceFamilyId: z.string().min(1),
+    snapshotDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  })
+  .strict();
+
+const P9SerializedEntailmentRecordSchema = z
+  .object({
+    verdict: P9EntailmentVerdictSchema,
+    admission: P9ClaimAdmissionSchema,
+  })
+  .strict();
+
+export interface P9ExactBundleVerification {
+  readonly manifest: P9ReportManifest;
+  readonly receipt: P9ExecutionReceipt;
+  readonly verifiedCitationCount: number;
 }
 
 const RETRIEVAL_FAILURES: Readonly<Record<string, RetrievalFailure>> = {
@@ -1196,6 +1223,29 @@ export function runP9PlanDrivenResearch(
       .filter((sentence) => sentence.kind === 'factual').length,
   };
 
+  const evidenceSources = corpus.sources
+    .filter(
+      (source): source is typeof source & { body: string } =>
+        source.outcome === 'admitted' && source.body !== null,
+    )
+    .map((source) => {
+      const attempt = attemptBySource.get(source.candidateId);
+      if (!attempt || attempt.status !== 'admitted') {
+        throw new P9GenericResearchError(
+          'exact_bundle_source_missing',
+          `admitted source ${source.candidateId} lacks an admitted attempt`,
+        );
+      }
+      return {
+        candidateId: source.candidateId,
+        attemptId: attempt.attemptId,
+        requestedUrl: attempt.requestedUrl,
+        sourceClass: source.sourceClass,
+        sourceFamilyId: source.sourceFamilyId,
+        snapshotDigest: canonicalDigest(source.body),
+      };
+    });
+
   const artifacts: Record<string, string> = {
     'research-plan-proposal.json': JSON.stringify(planProposal, null, 2),
     'research-plan.json': JSON.stringify(plan, null, 2),
@@ -1207,16 +1257,25 @@ export function runP9PlanDrivenResearch(
       2,
     ),
     'parser-receipts.jsonl': toJsonLines(parserReceipts),
+    'claim-proposals.jsonl': toJsonLines(proposals),
     'entailment-verdicts.jsonl': toJsonLines(
       verdicts.map((verdict, index) => ({
         verdict,
         admission: admissions[index],
       })),
     ),
+    'evidence-sources.jsonl': toJsonLines(evidenceSources),
     'plan-coverage-assessment.json': JSON.stringify(assessment, null, 2),
     'report-manifest.json': JSON.stringify(manifest, null, 2),
     'report.md': report,
   };
+  for (const source of corpus.sources) {
+    if (source.outcome !== 'admitted' || source.body === null) continue;
+    const snapshotDigest = canonicalDigest(source.body);
+    artifacts[
+      `source-snapshots/${snapshotDigest.slice('sha256:'.length)}.txt`
+    ] = source.body;
+  }
   const artifactDigests = Object.fromEntries(
     Object.entries(artifacts).map(([name, content]) => [
       name,
@@ -1258,6 +1317,221 @@ export function runP9PlanDrivenResearch(
     report,
     receipt,
     artifacts,
+  };
+}
+
+/**
+ * Replays the serialized P9 bundle without trusting the in-memory producer.
+ * Every factual citation must resolve through proposal, admission, independent
+ * entailment verdict, retrieval attempt, source metadata, and immutable bytes.
+ */
+export function verifyP9ExactBundle(
+  artifacts: Readonly<Record<string, string>>,
+): P9ExactBundleVerification {
+  const required = (name: string): string => {
+    const content = artifacts[name];
+    if (content === undefined) {
+      throw new P9GenericResearchError(
+        'exact_bundle_artifact_missing',
+        `exact bundle is missing ${name}`,
+      );
+    }
+    return content;
+  };
+  const parseJson = <T>(name: string, schema: z.ZodType<T>): T => {
+    try {
+      return schema.parse(JSON.parse(required(name)));
+    } catch (error) {
+      throw new P9GenericResearchError(
+        'exact_bundle_artifact_invalid',
+        `${name} is invalid: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  };
+  const parseLines = <T>(name: string, schema: z.ZodType<T>): T[] => {
+    const lines = required(name)
+      .split('\n')
+      .filter((line) => line.length > 0);
+    try {
+      return lines.map((line) => schema.parse(JSON.parse(line)));
+    } catch (error) {
+      throw new P9GenericResearchError(
+        'exact_bundle_artifact_invalid',
+        `${name} is invalid: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  };
+  const uniqueMap = <T>(
+    records: readonly T[],
+    keyOf: (record: T) => string,
+    label: string,
+  ): Map<string, T> => {
+    const result = new Map<string, T>();
+    for (const record of records) {
+      const key = keyOf(record);
+      if (result.has(key)) {
+        throw new P9GenericResearchError(
+          'exact_bundle_identity_duplicate',
+          `${label} identity ${key} is duplicated`,
+        );
+      }
+      result.set(key, record);
+    }
+    return result;
+  };
+  const assert = (condition: boolean, message: string): void => {
+    if (!condition) {
+      throw new P9GenericResearchError('exact_bundle_chain_invalid', message);
+    }
+  };
+
+  const receipt = parseJson('execution-receipt.json', P9ExecutionReceiptSchema);
+  for (const [name, digest] of Object.entries(receipt.artifactDigests)) {
+    assert(
+      sha256Text(required(name)) === digest,
+      `${name} bytes do not match the execution receipt`,
+    );
+  }
+  for (const name of Object.keys(artifacts)) {
+    if (name === 'execution-receipt.json') continue;
+    assert(
+      receipt.artifactDigests[name] !== undefined,
+      `${name} is not covered by the execution receipt`,
+    );
+  }
+
+  const manifest = parseJson('report-manifest.json', P9ReportManifestSchema);
+  const assessment = parseJson(
+    'plan-coverage-assessment.json',
+    PlanCoverageAssessmentSchema,
+  );
+  assert(
+    receipt.planId === manifest.planId &&
+      receipt.planDigest === manifest.planDigest &&
+      receipt.coverageAssessmentDigest === manifest.coverageAssessmentDigest &&
+      assessment.assessmentDigest === manifest.coverageAssessmentDigest,
+    'receipt, manifest, and coverage assessment do not share one plan chain',
+  );
+  assert(
+    required('report.md') === renderP9Report(manifest, assessment),
+    'rendered report bytes do not match the verified manifest',
+  );
+
+  const proposals = uniqueMap(
+    parseLines('claim-proposals.jsonl', P9ClaimProposalSchema),
+    (record) => record.proposalId,
+    'proposal',
+  );
+  const entailmentRecords = parseLines(
+    'entailment-verdicts.jsonl',
+    P9SerializedEntailmentRecordSchema,
+  );
+  const verdicts = uniqueMap(
+    entailmentRecords.map((record) => record.verdict),
+    (record) => record.verdictId,
+    'verdict',
+  );
+  const admissions = uniqueMap(
+    entailmentRecords.map((record) => record.admission),
+    (record) => record.admissionId,
+    'admission',
+  );
+  const attempts = uniqueMap(
+    parseLines('retrieval-attempts.jsonl', RetrievalAttemptSchema),
+    (record) => record.attemptId,
+    'retrieval attempt',
+  );
+  const evidenceSources = uniqueMap(
+    parseLines('evidence-sources.jsonl', P9SerializedEvidenceSourceSchema),
+    (record) => record.attemptId,
+    'evidence source',
+  );
+
+  for (const citation of manifest.citations) {
+    const proposal = proposals.get(citation.claimId);
+    const admission = admissions.get(citation.admissionId);
+    const verdict = verdicts.get(citation.verdictId);
+    const attempt = attempts.get(citation.attemptId);
+    const source = evidenceSources.get(citation.attemptId);
+    assert(
+      Boolean(proposal),
+      `citation ${citation.claimId} lacks its proposal`,
+    );
+    assert(
+      Boolean(admission),
+      `citation ${citation.claimId} lacks its admission`,
+    );
+    assert(Boolean(verdict), `citation ${citation.claimId} lacks its verdict`);
+    assert(Boolean(attempt), `citation ${citation.claimId} lacks its attempt`);
+    assert(
+      Boolean(source),
+      `citation ${citation.claimId} lacks source metadata`,
+    );
+    if (!proposal || !admission || !verdict || !attempt || !source) continue;
+
+    assert(
+      admission.decision === 'admitted' && admission.independentProfile,
+      `citation ${citation.claimId} was not independently admitted`,
+    );
+    assert(
+      admission.proposalId === proposal.proposalId &&
+        admission.proposalDigest === proposal.proposalDigest &&
+        admission.verdictId === verdict.verdictId &&
+        admission.verdictDigest === verdict.verdictDigest &&
+        admission.policyId === citation.admissionPolicyId &&
+        admission.admissionDigest === citation.admissionDigest,
+      `citation ${citation.claimId} does not match its admission record`,
+    );
+    assert(
+      verdict.verdict === 'entailed' &&
+        verdict.proposalId === proposal.proposalId &&
+        verdict.proposalDigest === proposal.proposalDigest &&
+        verdict.verdictId === citation.entailmentVerdictId &&
+        verdict.verdictDigest === citation.entailmentVerdictDigest &&
+        canonicalDigest(verdict.locator) ===
+          canonicalDigest(citation.locator) &&
+        canonicalDigest(proposal.locator) === canonicalDigest(citation.locator),
+      `citation ${citation.claimId} does not match its entailment chain`,
+    );
+    assert(
+      attempt.status === 'admitted' &&
+        attempt.requestedUrl === citation.requestedUrl &&
+        source.requestedUrl === citation.requestedUrl &&
+        source.sourceClass === citation.sourceClass &&
+        source.sourceFamilyId === citation.sourceFamilyId &&
+        source.snapshotDigest === citation.snapshotDigest,
+      `citation ${citation.claimId} does not match its acquired source`,
+    );
+
+    const snapshotName = `source-snapshots/${citation.snapshotDigest.slice('sha256:'.length)}.txt`;
+    const snapshot = required(snapshotName);
+    assert(
+      canonicalDigest(snapshot) === citation.snapshotDigest,
+      `citation ${citation.claimId} snapshot bytes do not match its digest`,
+    );
+    const quote = snapshot.slice(
+      citation.locator.startOffset,
+      citation.locator.endOffset,
+    );
+    assert(
+      quote === verdict.evaluatedQuote &&
+        canonicalDigest(quote) === citation.quoteDigest,
+      `citation ${citation.claimId} locator does not select the evaluated quote`,
+    );
+    assert(
+      boundedSentenceContext(
+        snapshot,
+        citation.locator.startOffset,
+        citation.locator.endOffset,
+      ) === verdict.boundedContext,
+      `citation ${citation.claimId} bounded context does not match source bytes`,
+    );
+  }
+
+  return {
+    manifest,
+    receipt,
+    verifiedCitationCount: manifest.citations.length,
   };
 }
 
