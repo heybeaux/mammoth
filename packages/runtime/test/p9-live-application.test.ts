@@ -539,6 +539,52 @@ describe('P9 live application', () => {
     expect(plan.acceptanceReceipt.decision).toBe('accepted');
   });
 
+  it('searches every governed query before selecting candidates by rank across queries', async () => {
+    const searched: string[] = [];
+    const retrieved: string[] = [];
+    let candidateSequence = 0;
+    const search: P9LiveSearchAdapter = {
+      destinationOrigin: 'https://api.search.brave.com',
+      search: (query) => {
+        searched.push(query);
+        candidateSequence += 1;
+        const id = String(candidateSequence);
+        return Promise.resolve({
+          candidates: [
+            {
+              candidateId: `candidate-${id}`,
+              url: `https://github.com/JustVugg/colibri/blob/main/source-${id}.md`,
+              title: `source ${id}`,
+              sourceClass: 'repository_code',
+              sourceFamilyId: 'github.com',
+            },
+          ],
+          usage: {
+            requests: 1,
+            inputTokens: 0,
+            outputTokens: 0,
+            bytes: 100,
+            durationMs: 1,
+          },
+        });
+      },
+    };
+    const retrieve: typeof retrieveSource = (request) => {
+      retrieved.push(request.url);
+      return fakeRetrieve(request);
+    };
+
+    await runP9LiveApplication(
+      makeInput({ search, retrieve, maxCandidates: 2 }),
+    );
+
+    expect(searched).toHaveLength(5);
+    expect(retrieved).toEqual([
+      'https://github.com/JustVugg/colibri/blob/main/source-1.md',
+      'https://github.com/JustVugg/colibri/blob/main/source-2.md',
+    ]);
+  });
+
   it('precedes every outbound effect with a durable journaled reservation and settles observed usage', async () => {
     const journal = new MemoryP9DurableJournalStore();
     const catalog = makeCatalog();
@@ -617,12 +663,12 @@ describe('P9 live application', () => {
       'live-recovered-reservations.jsonl': `${run.recoveredReservations.map((value) => JSON.stringify(value)).join('\n')}${run.recoveredReservations.length ? '\n' : ''}`,
       'live-budget-journal.jsonl': `${journal.readLines().join('\n')}\n`,
     });
-    expect(
+    expect(() =>
       verifyP9LiveBundle(liveArtifacts, {
         expectedAuthorityDigest: run.authorizationReceipt.receiptDigest,
         trustedIssuerId: run.authorizationReceipt.issuerId,
       }),
-    ).toMatchObject({ effectReceiptCount: run.effectReceipts.length });
+    ).toThrow(/not releaseable/u);
 
     const forgedEffect = structuredClone(run.effectReceipts[0]);
     if (!forgedEffect) throw new Error('missing effect receipt to forge');

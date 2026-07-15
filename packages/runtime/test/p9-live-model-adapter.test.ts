@@ -105,6 +105,9 @@ describe('OpenAI-compatible P9 live model adapter', () => {
       });
       expect(JSON.stringify(request)).not.toContain('secret-not-for-output');
     }
+    expect(JSON.stringify(requests[0])).toContain(
+      'never mix a sourced fact with a recommendation',
+    );
     expect(requests[1]?.response_format).toMatchObject({
       json_schema: {
         schema: {
