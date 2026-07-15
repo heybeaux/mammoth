@@ -15,11 +15,12 @@ Never use a branch, worktree, or accepted spawn as proof that work is active.
 
 ## Ownership
 
-| Assignment | State     | Owner/runtime           | Worktree / branch                                    | Base             | Record                       | Next                             |
-| ---------- | --------- | ----------------------- | ---------------------------------------------------- | ---------------- | ---------------------------- | -------------------------------- |
-| `P9-PLAN`  | producing | Scout / primary session | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2` | `1de5b37`        | [P9-PLAN](#p9-plan-record)   | fix review, rerun CI, merge      |
-| `P9-T0`    | blocked   | unassigned              | fresh worktree required                              | later plan merge | [P9-T0](#p9-t0-record)       | claim after plan merge           |
-| `P9-T1-T6` | blocked   | unassigned              | fresh worktrees required                             | later T0 merge   | [P9-T1-T6](#p9-t1-t6-record) | claim highest unproved predicate |
+| Assignment | State   | Owner/runtime             | Worktree / branch                                                           | Base           | Record                       | Next                          |
+| ---------- | ------- | ------------------------- | --------------------------------------------------------------------------- | -------------- | ---------------------------- | ----------------------------- |
+| `P9-PLAN`  | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                        | `1de5b37`      | [P9-PLAN](#p9-plan-record)   | complete                      |
+| `P9-T0`    | merged  | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`         | `2aeb3db`      | [P9-T0](#p9-t0-record)       | complete                      |
+| `P9-T1`    | review  | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata` | `5db0fc9`      | [P9-T1](#p9-t1-record)       | resolve review; exact-head CI |
+| `P9-T2-T6` | blocked | unassigned                | fresh worktrees required                                                    | later T1 merge | [P9-T2-T6](#p9-t2-t6-record) | claim after accepted T1 merge |
 
 ## Required state fields for implementation lanes
 
@@ -53,29 +54,79 @@ handoff, integration commit, blockers, and replacement audit.
   resolution remain on PR #60.
 - Registry/artifact proof: no worker registry claim applies; Git head, PR #60,
   changed artifacts, local results, and GitHub checks are the proofs.
-- Handoff/integration commit: not yet available; branch head is the candidate.
-- Blockers: valid review findings and exact-head CI for their resolution.
+- Handoff/integration commit: merged by PR #60 as `2aeb3db`.
+- Blockers: none; merged-main CI `29381683709` passed.
 - Replacement audit: none; no replacement runtime or duplicate assignment.
 
 ### P9-T0 record
 
 - Objective: freeze P9 fixtures, thresholds, schemas, expected artifacts, rubric,
-  and the visible `verify:p9` skeleton before implementation.
-- Acceptance evidence, runtime identity, worktree/base, owned/prohibited paths,
-  allowed contract changes, dependencies, exact gates/results, reviewer,
-  registry/artifact proofs, handoff, integration commit, and replacement audit:
-  unassigned and therefore unavailable.
-- Blocker: `P9-PLAN` must merge and fresh default-branch CI must pass.
+  receipt schema, and the visible `verify:p9` skeleton before implementation.
+- Acceptance evidence: four canonical plans; unrelated report fixture; 21 hostile
+  cases; thresholds; expected artifacts; rubric; closed receipt schema; verifier
+  manifest; executable T0 baseline verifier.
+- Runtime identity: Scout cron continuation; no delegated worker or replacement
+  runtime owned the lane.
+- Worktree/branch/base: `/private/tmp/mammoth-p9-t0-baseline`;
+  `acceptance/p9-t0-baseline`; `2aeb3db`.
+- Owned paths: `evals/fixtures/p9`, `scripts/verify-p9.ts`, root verifier wiring,
+  CI verifier step, and this ledger.
+- Prohibited paths: T1-T6 runtime implementation, P8 fixtures, release receipts,
+  and unrelated changes.
+- Contracts changed: frozen `p9.v1` acceptance inputs and receipt schema only.
+- Dependencies: merged P9 plan and green main CI `29381683709`.
+- Verification: fresh frozen install plus format, lint, typecheck, test, build,
+  `pnpm verify:p9`, and PR CI passed at head `e254f8f`; merged-main CI
+  `29383000905` passed the complete ladder at `5db0fc9`.
+- Reviewer: CodeRabbit reported pass on PR #61; human merge authority merged it.
+- Registry/artifact proof: Git head, PR #61, frozen artifacts, verifier output,
+  and exact merged-main CI; no live worker claim remains.
+- Handoff/integration commit: PR #61 merged as `5db0fc9`.
+- Blocker: none.
+- Replacement audit: none.
 
-### P9-T1-T6 record
+### P9-T1 record
 
-- Objective: implement the highest unproved P9 predicate one accepted slice at a
-  time after T0.
-- Acceptance evidence, runtime identity, worktree/base, owned/prohibited paths,
-  allowed contract changes, dependencies, exact gates/results, reviewer,
-  registry/artifact proofs, handoff, integration commit, and replacement audit:
-  unassigned and therefore unavailable.
-- Blocker: `P9-T0` must merge and fresh default-branch CI must pass.
+- Objective: implement hard pre-transport budgets and truthful source metadata,
+  rights, robots, cost, and terminal retrieval residue without beginning T2.
+- Acceptance evidence: executable `verify:p9` T1 gate; focused domain,
+  governance, and retrieval tests for all eight frozen T1 hostile cases; exact
+  diff review; clean-checkout ladder; exact-head PR CI and review.
+- Runtime identity: Scout primary Telegram session; no delegated runtime, child
+  session, run, or model owns this assignment.
+- Worktree/branch/base: `/private/tmp/mammoth-p9-t1-budget-metadata`;
+  `feat/p9-t1-budget-metadata`; exact merged T0 `5db0fc9`.
+- Owned paths: P9 domain contracts; governance P9 budget authority and tests;
+  retrieval P9 metadata/residue and tests; `scripts/verify-p9.ts`; package/lock
+  dependency wiring; this ledger.
+- Prohibited paths: P8 live runtime behavior, T2 network/DNS/redirect/parser
+  implementation, T3 entailment, T4 planning, T5 composition, release/tag work,
+  frozen T0/P8 fixture contents, and unrelated changes.
+- Allowed contract changes: T1 subset of `p9.v1` only: cost bounds/catalogs,
+  source date/robots/rights observations, retrieval attempts/failures/residue.
+- Dependencies: merged T0 `5db0fc9`; merged-main CI `29383000905` passed.
+- Exact gates: focused package tests; format; lint; typecheck; full tests; build;
+  `pnpm verify:p8`; `pnpm verify:p9`; clean-checkout frozen install and repeat.
+- Current local results: focused T1 tests PASS (governance 11, retrieval 10);
+  format PASS; lint PASS; typecheck PASS; full workspace tests PASS; build PASS;
+  P8 regression PASS; `verify:p9` PASS with `T1_budget_metadata=pass` and
+  T2-T6 still blocked. Detached clean checkout at `08c5aac` passed a frozen
+  install and the same complete ladder with a clean worktree. A repeat at the
+  final review-fix head is pending.
+- Reviewer: PR #62. CodeRabbit reviewed `5530eb4` and posted nine actionable
+  findings; hardened implementation candidate `da9ada4` addresses them. Review
+  confirmation and exact-latest-head CI are pending.
+- Registry/artifact proof: current-session Git worktree, branch, diff, test output,
+  verifier output, PR head, and CI. No worker registry claim applies.
+- Handoff/integration candidate: `da9ada4`; PR #62; merge commit unavailable.
+- Blockers: review confirmation and exact-head CI remain pending.
+- Replacement audit: none.
+
+### P9-T2-T6 record
+
+- Objective: continue one accepted slice at a time after T1.
+- State: blocked and unassigned.
+- Blocker: P9 T1 must merge and fresh default-branch CI must pass.
 
 ## Release evidence
 

@@ -3,4 +3,5 @@ export * from './common.js';
 export * from './human-gates.js';
 export * from './local-store.js';
 export * from './model-egress.js';
+export * from './p9-budget-authority.js';
 export * from './revalidation.js';
