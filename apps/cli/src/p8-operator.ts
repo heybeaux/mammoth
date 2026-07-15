@@ -7,6 +7,7 @@ import {
   type P8ResearchAskInput,
 } from '@mammoth/runtime';
 import { P8DepthSchema } from '@mammoth/domain';
+import { evaluateP9LiveAuthority } from './p9-live-authority.js';
 
 export interface P8CliIo {
   readonly stdout: (value: string) => void;
@@ -79,6 +80,7 @@ export async function executeP8ResearchCli(
       return 0;
     }
     if (command === 'doctor') {
+      const p9LiveAuthority = evaluateP9LiveAuthority(process.env);
       const liveSearchCredential = process.env.MAMMOTH_SEARCH_BRAVE_API_KEY;
       const liveBillingAuthorization =
         process.env.MAMMOTH_SEARCH_BRAVE_BILLING_AUTHORIZATION;
@@ -111,6 +113,7 @@ export async function executeP8ResearchCli(
             liveModelBaseUrl && liveModel
               ? 'OpenAI-compatible P8 synthesis provider configured'
               : 'MAMMOTH_P8_PROVIDER_BASE_URL and MAMMOTH_P8_PROVIDER_MODEL required for live synthesis',
+          p9LiveAuthority,
         }),
       );
       return 0;
