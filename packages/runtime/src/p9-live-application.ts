@@ -1234,7 +1234,7 @@ export function buildAcceptedP9LivePlan(input: {
       {
         sourceClass: 'repository_code',
         minimumIndependentSources: 1,
-        mandatory: true,
+        mandatory: false,
       },
       {
         sourceClass: 'repository_docs',
@@ -1310,7 +1310,7 @@ export function buildAcceptedP9LivePlan(input: {
         freshnessId: 'fresh-repository-current',
         appliesTo: 'current upstream repository',
         maxAgeDays: 30,
-        asOfDateRequired: false,
+        asOfDateRequired: true,
       },
       {
         freshnessId: 'fresh-technical-sources',
