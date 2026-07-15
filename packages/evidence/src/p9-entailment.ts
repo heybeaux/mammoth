@@ -13,6 +13,10 @@ export const P9_ENTAILMENT_POLICY_ID = 'p9-independent-entailment/v1';
 
 const HOSTILE_INSTRUCTION =
   /\b(?:ignore|disregard|override)\b.{0,40}\b(?:instruction|prompt|policy|system|developer)\b|\b(?:system|developer)\s+(?:message|instruction)\b|\b(?:call|invoke|use)\s+(?:the\s+)?(?:tool|function)\b/iu;
+
+export function containsP9HostileInstruction(value: string): boolean {
+  return HOSTILE_INSTRUCTION.test(value);
+}
 const NEGATION =
   /\b(?:no|not|never|neither|without|cannot|can't|didn't|doesn't)\b/giu;
 const CAUSAL =

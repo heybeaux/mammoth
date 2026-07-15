@@ -239,14 +239,67 @@ export type P9ReportSection = z.infer<typeof P9ReportSectionSchema>;
 export const P9ReportCitationSchema = z
   .object({
     claimId: z.string().min(1),
+    admissionId: z.string().min(1),
+    verdictId: z.string().min(1),
     attemptId: z.string().min(1),
     requestedUrl: z.string().url(),
     sourceClass: z.string().min(1),
     sourceFamilyId: z.string().min(1),
+    evidenceSpanId: z.string().min(1),
+    snapshotDigest: DigestSchema,
     quoteDigest: DigestSchema,
+    coordinateSpace: z.string().min(1),
+    startOffset: NonNegativeIntegerSchema,
+    endOffset: PositiveIntegerSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((citation, context) => {
+    if (citation.endOffset <= citation.startOffset) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endOffset'],
+        message: 'report citation must select a non-empty evidence span',
+      });
+    }
+  });
 export type P9ReportCitation = z.infer<typeof P9ReportCitationSchema>;
+
+export const P9ReportContradictionSchema = z
+  .object({
+    proposalId: z.string().min(1),
+    admissionId: z.string().min(1),
+    verdictId: z.string().min(1),
+    attemptId: z.string().min(1),
+    contradictionIds: z.array(z.string().min(1)).min(1),
+    statement: z.string().min(1),
+    evidenceSpanId: z.string().min(1),
+    snapshotDigest: DigestSchema,
+    quoteDigest: DigestSchema,
+    coordinateSpace: z.string().min(1),
+    startOffset: NonNegativeIntegerSchema,
+    endOffset: PositiveIntegerSchema,
+  })
+  .strict()
+  .superRefine((contradiction, context) => {
+    if (
+      new Set(contradiction.contradictionIds).size !==
+      contradiction.contradictionIds.length
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['contradictionIds'],
+        message: 'contradiction identities must be unique',
+      });
+    }
+    if (contradiction.endOffset <= contradiction.startOffset) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endOffset'],
+        message: 'report contradiction must bind a non-empty evidence span',
+      });
+    }
+  });
+export type P9ReportContradiction = z.infer<typeof P9ReportContradictionSchema>;
 
 export const P9ReportManifestSchema = z
   .object({
@@ -259,6 +312,7 @@ export const P9ReportManifestSchema = z
     coverageAssessmentDigest: DigestSchema,
     sections: z.array(P9ReportSectionSchema).min(1),
     citations: z.array(P9ReportCitationSchema),
+    contradictions: z.array(P9ReportContradictionSchema),
     compiledAt: z.string().datetime(),
     manifestDigest: DigestSchema,
   })
@@ -285,6 +339,13 @@ export const P9ReportManifestSchema = z
     const citedClaims = new Set(
       manifest.citations.map((citation) => citation.claimId),
     );
+    if (citedClaims.size !== manifest.citations.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['citations'],
+        message: 'report citations must bind unique admitted claim identities',
+      });
+    }
     for (const section of manifest.sections) {
       for (const sentence of section.sentences) {
         for (const claimId of sentence.claimIds) {
@@ -343,6 +404,16 @@ export const P9ExecutionBudgetSummarySchema = z
   .strict()
   .superRefine((budget, context) => {
     if (
+      new Set(budget.unknownCostReservationIds).size !==
+      budget.unknownCostReservationIds.length
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['unknownCostReservationIds'],
+        message: 'unknown-cost reservation identities must be unique',
+      });
+    }
+    if (
       budget.unknownCostReservationIds.length > 0 &&
       budget.spentConservativeUnknownUsd <= 0
     ) {
@@ -384,6 +455,28 @@ export const P9ExecutionCountsSchema = z
   })
   .strict()
   .superRefine((counts, context) => {
+    if (counts.selectedCandidates !== counts.terminalAttempts) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'every selected candidate requires one terminal attempt',
+      });
+    }
+    if (
+      counts.terminalAttempts !==
+      counts.admittedSources + counts.retrievalFailures
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'terminal attempts must equal admitted sources and retrieval failures',
+      });
+    }
+    if (counts.parserFailures > counts.parserReceipts) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'parser failures cannot exceed parser receipts',
+      });
+    }
     if (
       counts.claimProposals !==
       counts.admittedClaims + counts.rejectedClaims + counts.contradictedClaims
@@ -444,6 +537,14 @@ export const P9ExecutionReceiptSchema = z
           message: `execution receipt must bind required artifact ${artifact}`,
         });
       }
+    }
+    if ('execution-receipt.json' in receipt.artifactDigests) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['artifactDigests'],
+        message:
+          'execution receipt cannot publish a self-referential artifact digest',
+      });
     }
     const counts = receipt.counts;
     const residue = receipt.typedResidue;
