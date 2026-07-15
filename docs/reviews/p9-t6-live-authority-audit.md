@@ -44,10 +44,52 @@ T6 is unblocked past the T5 merge/CI prerequisite but blocked before live effect
 No P8 credential, P8 billing flag, prior live exhibition, or offline verifier
 result is treated as P9 live authority.
 
+## Offline preparation update
+
+After merged-main CI `29433309477` passed at
+`21513a22a03cbfdd329f18ecc91ba0dfd4e56654`, the offline-prep candidate
+`/private/tmp/mammoth-p9-t6-continue` preserved the remaining valid
+manifest-level factual-grounding hardening and added a P9-specific live authority
+gate. The gate checks only local environment/configuration state and performs no
+search, provider, billing, tag, release, or network effect.
+
+Required P9 authority inputs are distinct from P8 authority:
+
+- `MAMMOTH_P9_LIVE_RESEARCH=authorized`;
+- `MAMMOTH_P9_LIVE_BILLING_AUTHORIZATION=authorized`;
+- positive finite `MAMMOTH_P9_LIVE_BUDGET_USD`;
+- `MAMMOTH_SEARCH_BRAVE_API_KEY`;
+- `MAMMOTH_P9_PROVIDER_BASE_URL`;
+- `MAMMOTH_P9_PROVIDER_MODEL`;
+- `MAMMOTH_P9_PROVIDER_API_KEY_ENV` naming a populated provider key variable.
+
+Local evidence at this candidate:
+
+- `pnpm install --frozen-lockfile` PASS;
+- `pnpm --filter @mammoth/domain test -- p9-execution.test.ts` PASS;
+- `pnpm --filter @mammoth/runtime test` PASS;
+- `pnpm --filter @mammoth/cli test -- p9-live-authority.test.ts` PASS;
+- `pnpm --filter @mammoth/cli typecheck` PASS;
+- `pnpm format:check` PASS;
+- `pnpm lint` PASS;
+- `pnpm typecheck` PASS;
+- `pnpm test` PASS;
+- `pnpm build` PASS;
+- `pnpm verify:p2` PASS after setting a short local
+  `MAMMOTH_PROFILE_ROOT=/tmp/mmp2-p9t6`, local test `MAMMOTH_PG_PASSWORD`, and
+  `MAMMOTH_PG_PORT=55442`;
+- `pnpm verify:p3` PASS;
+- `pnpm verify:p4` PASS;
+- `pnpm verify:p5` PASS;
+- `pnpm verify:p6` PASS;
+- `pnpm verify:p7` PASS;
+- `pnpm verify:p8` PASS;
+- `pnpm verify:p9` PASS with
+  `T6 live_authority_gate=pass blocked_pending_authorization`.
+
 The next valid task is either:
 
-1. add a P9 live-readiness authority gate that proves explicit credential and
-   billing authorization without performing effects; or
+1. finish review/CI/merge of the offline-prep gate and provenance hardening; or
 2. after explicit authorization exists, run the frozen T6 live exhibition and
    record the exact bundle, independent editorial and entailment audits, cost,
    latency, failures, code/security review, tag, release receipt, and final

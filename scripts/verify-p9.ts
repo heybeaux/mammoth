@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join, resolve } from 'node:path';
+import { evaluateP9LiveAuthority } from '../apps/cli/src/p9-live-authority.js';
 import {
   canonicalDigest,
   P9ClaimProposalSchema,
@@ -1583,6 +1584,29 @@ async function verifyT5GenericExecution(): Promise<void> {
       !run.report.toLowerCase().includes('data center'),
     'T5 unrelated report is admitted-claim grounded and free of data-center template leakage',
   );
+  const citationsByClaim = new Map(
+    run.manifest.citations.map((citation) => [citation.claimId, citation]),
+  );
+  const factualClaimIds = run.manifest.sections.flatMap((section) =>
+    section.sentences
+      .filter((sentence) => sentence.kind === 'factual')
+      .flatMap((sentence) => sentence.claimIds),
+  );
+  invariant(
+    factualClaimIds.every((claimId) => {
+      const citation = citationsByClaim.get(claimId);
+      return (
+        citation !== undefined &&
+        citation.admissionPolicyId.length > 0 &&
+        citation.admissionDigest.startsWith('sha256:') &&
+        citation.entailmentVerdictDigest.startsWith('sha256:') &&
+        citation.snapshotDigest === citation.locator.snapshotDigest &&
+        citation.quoteDigest === citation.locator.quoteDigest &&
+        citation.locator.coordinateSpace === 'utf16-code-units/v1'
+      );
+    }),
+    'T5 factual citations bind admission, entailment, exact locator, and immutable snapshot metadata',
+  );
 
   let invalidChainRejected = false;
   try {
@@ -1689,12 +1713,51 @@ async function verifyT5GenericExecution(): Promise<void> {
   );
 }
 
+function verifyT6LiveAuthorityGate(): void {
+  const blocked = evaluateP9LiveAuthority({});
+  invariant(
+    blocked.status === 'blocked_live_exhibition' && !blocked.safeForEffects,
+    'T6 live authority gate fails closed without explicit P9 authorization',
+  );
+
+  const p8Only = evaluateP9LiveAuthority({
+    MAMMOTH_P8_LIVE_RESEARCH: 'authorized',
+    MAMMOTH_SEARCH_BRAVE_API_KEY: 'fixture-search-secret',
+    MAMMOTH_SEARCH_BRAVE_BILLING_AUTHORIZATION: 'authorized',
+    MAMMOTH_P8_PROVIDER_BASE_URL: 'https://provider.example.test/v1',
+    MAMMOTH_P8_PROVIDER_MODEL: 'fixture-live',
+  });
+  invariant(
+    p8Only.status === 'blocked_live_exhibition' &&
+      !p8Only.safeForEffects &&
+      p8Only.liveAuthorization.includes('MAMMOTH_P9_LIVE_RESEARCH') &&
+      p8Only.liveBilling.includes('MAMMOTH_P9_LIVE_BILLING_AUTHORIZATION'),
+    'T6 authority gate does not treat P8 live flags as P9 authorization',
+  );
+
+  const ready = evaluateP9LiveAuthority({
+    MAMMOTH_P9_LIVE_RESEARCH: 'authorized',
+    MAMMOTH_SEARCH_BRAVE_API_KEY: 'fixture-search-secret',
+    MAMMOTH_P9_LIVE_BILLING_AUTHORIZATION: 'authorized',
+    MAMMOTH_P9_LIVE_BUDGET_USD: '5',
+    MAMMOTH_P9_PROVIDER_BASE_URL: 'https://provider.example.test/v1',
+    MAMMOTH_P9_PROVIDER_MODEL: 'fixture-live',
+    MAMMOTH_P9_PROVIDER_API_KEY_ENV: 'MAMMOTH_P9_PROVIDER_API_KEY',
+    MAMMOTH_P9_PROVIDER_API_KEY: 'fixture-provider-secret',
+  });
+  invariant(
+    ready.status === 'ready' && ready.safeForEffects,
+    'T6 authority gate recognizes complete explicit P9 live authority',
+  );
+}
+
 await verifyT1BudgetAndMetadata();
 await verifyT2AcquisitionAndParsers();
 verifyT3IndependentEntailment();
 await verifyT4QuestionDerivedPlanning();
 await verifyT5GenericExecution();
+verifyT6LiveAuthorityGate();
 
 console.log(
-  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5 generic_execution=pass; T6=blocked',
+  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5 generic_execution=pass; T6 live_authority_gate=pass blocked_pending_authorization',
 );

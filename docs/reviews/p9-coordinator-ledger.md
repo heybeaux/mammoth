@@ -24,7 +24,7 @@ Never use a branch, worktree, or accepted spawn as proof that work is active.
 | `P9-T3`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38` | [P9-T3](#p9-t3-record)     | complete                |
 | `P9-T4`    | merged  | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f` | [P9-T4](#p9-t4-record)     | complete                |
 | `P9-T5`    | merged  | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t5-review-remediation` / `fix/p9-t5-review-remediation`      | `86f5c30` | [P9-T5](#p9-t5-record)     | complete                |
-| `P9-T6`    | blocked | Scout / primary session   | `/private/tmp/mammoth-p9-t6-live-authority` / `feat/p9-t6-live-authority`             | `fe0c96f` | [P9-T6](#p9-t6-record)     | explicit live authority |
+| `P9-T6`    | blocked | Scout / primary session   | `/private/tmp/mammoth-p9-t6-continue` / `feat/p9-t6-offline-prep`                     | `21513a2` | [P9-T6](#p9-t6-record)     | explicit live authority |
 
 ## Required state fields for implementation lanes
 
@@ -366,6 +366,11 @@ handoff, integration commit, blockers, and replacement audit.
 - Blockers: none for T5. The 16 original findings and their immutable body
   digests remain individually enumerated in
   `docs/reviews/p9-t5-remediation-evidence.md` for auditability.
+- Follow-up provenance hardening: the residual manifest-level concern from
+  finding `3588636176` is carried by the T6 offline-prep candidate. It requires
+  admitted decisions, named admission policy, independent entailed verdict,
+  exact locator, quote digest, and immutable snapshot digest on every factual
+  citation before the live exhibition can begin.
 - Replacement audit: previous model attempt failed/timed out after creating a
   dirty `/private/tmp/mammoth-p9-t5-generic` worktree with partial T5 files. This
   retry did not reuse that branch/worktree, copied only useful uncommitted
@@ -374,20 +379,51 @@ handoff, integration commit, blockers, and replacement audit.
 
 ### P9-T6 record
 
-- Objective: live exhibition and release sequencing after T5 merge.
+- Objective: continue T6 offline/reversible preparation after T5 merge by
+  preserving residual factual-citation provenance hardening, adding a P9-specific
+  live authority gate, and keeping live execution blocked until explicit P9
+  credential and billing authority exists.
+- Acceptance evidence for this subtask: report-manifest citations require
+  admitted decision metadata, named admission policy, independent entailed verdict
+  identity/digest, exact locator, quote digest, and immutable snapshot digest;
+  the P9 CLI readiness evaluator refuses to treat P8 live flags as P9 authority
+  and `verify:p9` exercises both blocked and complete-authority paths without
+  performing effects.
 - Runtime identity: Scout primary session in fresh worktree
-  `/private/tmp/mammoth-p9-t6-live-authority`, branch
-  `feat/p9-t6-live-authority`, exact base
-  `fe0c96f646d6a5821a43dff814affe53dadf621e`.
-- Owned paths for this audit slice: this ledger and
-  `docs/reviews/p9-t6-live-authority-audit.md`.
+  `/private/tmp/mammoth-p9-t6-continue`, branch `feat/p9-t6-offline-prep`, exact
+  base `21513a22a03cbfdd329f18ecc91ba0dfd4e56654`.
+- Owned paths for this offline-prep slice: `apps/cli/src/p9-live-authority.ts`,
+  `apps/cli/src/p8-operator.ts`, `apps/cli/src/index.ts`,
+  `apps/cli/test/p9-live-authority.test.ts`,
+  `packages/domain/src/p9-execution.ts`,
+  `packages/domain/test/p9-execution.test.ts`,
+  `packages/runtime/src/p9-generic-research.ts`, `scripts/verify-p9.ts`, this
+  ledger, and `docs/reviews/p9-t6-live-authority-audit.md`.
 - Prohibited paths: live provider execution, release/tag work, receipt-only PR,
-  code changes beyond authority evidence, unrelated user changes, and external
-  repositories.
-- Contracts changed: none; this is a coordination and authority-evidence update.
-- Dependencies: T5 PR #70 merged; default-branch CI run `29432359193` passed at
-  `fe0c96f646d6a5821a43dff814affe53dadf621e`.
-- State: blocked on explicit T6 live credential and billing authorization.
+  T0/P8 fixture semantics, unrelated user changes, external repositories, and
+  future solver execution.
+- Contracts changed: additive T6-prep hardening to `P9ReportCitation`; additive
+  P9 live-readiness environment contract only. No live exhibition, provider, tag,
+  or release receipt contract is claimed.
+- Dependencies: T5 PR #70 merged; T6 audit PR #72 merged; default-branch CI run
+  `29433309477` passed at `21513a22a03cbfdd329f18ecc91ba0dfd4e56654`.
+- Current local results: `pnpm install --frozen-lockfile` PASS; focused
+  `pnpm --filter @mammoth/domain test -- p9-execution.test.ts` PASS (5);
+  `pnpm --filter @mammoth/runtime test` PASS (51);
+  `pnpm --filter @mammoth/cli test -- p9-live-authority.test.ts` PASS (4);
+  `pnpm --filter @mammoth/cli typecheck` PASS; `pnpm format:check` PASS;
+  `pnpm lint` PASS; `pnpm typecheck` PASS; `pnpm test` PASS; `pnpm build` PASS;
+  `pnpm verify:p8` PASS with manifest digest
+  `sha256:d154c6e1df6bfdb41f5222643f33862fa4eb15531af75ce6194171150077298f`;
+  `pnpm verify:p9` PASS with
+  `T6 live_authority_gate=pass blocked_pending_authorization`; `pnpm verify:p3`,
+  `verify:p4`, `verify:p5`, `verify:p6`, and `verify:p7` PASS. `pnpm verify:p2`
+  first failed closed without `MAMMOTH_PG_PASSWORD`, then failed with a deep
+  worktree Unix-socket path; rerun with short local profile root, local test
+  password, and `MAMMOTH_PG_PORT=55442` PASS. Exact-head PR CI, review, and
+  merged-main CI remain pending for this candidate.
+- State: offline-prep active; live execution blocked on explicit T6 live
+  credential and billing authorization.
 - Blocker: T6 live exhibition and any metered provider call still require a
   separate valid authorization check under `P9_PLAN.md`/`LOOP.md`. At
   2026-07-15T16:31:33Z, repository search found no P9 live-exhibition
@@ -399,6 +435,13 @@ handoff, integration commit, blockers, and replacement audit.
 - Handoff recipient: P9 coordinator after explicit credential and billing
   authorization is provided, or after a code slice adds a P9 live-readiness gate
   without making live effects.
+- Offline-prep candidate: `/private/tmp/mammoth-p9-t6-continue` on
+  `feat/p9-t6-offline-prep`, based on exact audited main `21513a2`, reconciles
+  the residual factual-citation provenance enforcement and adds the P9-specific
+  authority gate without performing live provider, search, billing, tag, or
+  release effects. It must pass focused, full, P8, P9, exact-head, and
+  merged-main gates before the authorization gate is considered the only
+  remaining blocker.
 
 ## Release evidence
 
