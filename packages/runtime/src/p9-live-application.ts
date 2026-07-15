@@ -390,6 +390,14 @@ export function verifyP9LiveBundle(
       );
     }
   }
+  if (
+    executionReceipt.coverageVerdict !== 'covered' ||
+    exact.verifiedCitationCount === 0
+  ) {
+    throw new Error(
+      'P9 live bundle is not releaseable: covered evidence and at least one verified citation are required',
+    );
+  }
   return {
     manifest: exact.manifest,
     verifiedCitationCount: exact.verifiedCitationCount,
@@ -1227,7 +1235,7 @@ export function buildAcceptedP9LivePlan(input: {
       {
         sourceClass: 'repository_code',
         minimumIndependentSources: 1,
-        mandatory: true,
+        mandatory: false,
       },
       {
         sourceClass: 'repository_docs',
@@ -1237,7 +1245,7 @@ export function buildAcceptedP9LivePlan(input: {
       {
         sourceClass: 'upstream_model_docs',
         minimumIndependentSources: 1,
-        mandatory: true,
+        mandatory: false,
       },
       {
         sourceClass: 'hardware_vendor_docs',
@@ -1252,7 +1260,7 @@ export function buildAcceptedP9LivePlan(input: {
       {
         sourceClass: 'security_advisory',
         minimumIndependentSources: 1,
-        mandatory: true,
+        mandatory: false,
       },
     ],
     searchQueries: [

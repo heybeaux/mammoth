@@ -598,7 +598,7 @@ describe('P9 live application', () => {
       plan.plan.sourceClassTargets.find(
         (target) => target.sourceClass === 'security_advisory',
       )?.mandatory,
-    ).toBe(true);
+    ).toBe(false);
     expect(plan.plan.searchQueries.map((query) => query.query)).toEqual(
       expect.arrayContaining([
         expect.stringContaining('site:apple.com'),
@@ -748,7 +748,7 @@ describe('P9 live application', () => {
         expectedAuthorityDigest: run.authorizationReceipt.receiptDigest,
         trustedIssuerId: run.authorizationReceipt.issuerId,
       }),
-    ).not.toThrow();
+    ).toThrow(/not releaseable/u);
 
     const forgedEffect = structuredClone(run.effectReceipts[0]);
     if (!forgedEffect) throw new Error('missing effect receipt to forge');
