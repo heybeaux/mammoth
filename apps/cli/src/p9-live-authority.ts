@@ -38,25 +38,12 @@ export function evaluateP9LiveAuthority(
     ? nonEmpty(env[providerApiKeyEnv])
     : '';
   const budget = parsePositiveBudget(env.MAMMOTH_P9_LIVE_BUDGET_USD);
-  const ready =
-    explicitAuthorization &&
-    Boolean(searchCredential) &&
-    billingAuthorization &&
-    budget !== null &&
-    Boolean(providerBaseUrl) &&
-    Boolean(proposerModel) &&
-    Boolean(evaluatorModel) &&
-    proposerModel !== evaluatorModel &&
-    Boolean(distinctProfileFamilies) &&
-    Boolean(providerApiKeyEnv) &&
-    Boolean(providerApiKey);
-
   return {
-    status: ready ? 'ready' : 'blocked_live_exhibition',
+    status: 'blocked_live_exhibition',
     localProfile: 'ok',
-    safeForEffects: ready,
+    safeForEffects: false,
     liveAuthorization: explicitAuthorization
-      ? 'MAMMOTH_P9_LIVE_RESEARCH=authorized'
+      ? 'P9 environment flag present, but immutable scoped human authorization receipt is missing'
       : 'MAMMOTH_P9_LIVE_RESEARCH=authorized missing; P9 live exhibition remains blocked',
     liveSearch: searchCredential
       ? 'brave-search/v1 credential present'

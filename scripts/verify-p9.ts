@@ -1997,6 +1997,301 @@ async function verifyT5GenericExecution(): Promise<void> {
     alteredPlanRejected,
     'T5 exact-bundle verifier rejects a fully resealed plan outside its accepted proposal content',
   );
+
+  const forgedAcceptancePolicy = { ...run.artifacts } as Record<string, string>;
+  const forgedPolicyPlan = JSON.parse(
+    forgedAcceptancePolicy['research-plan.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  forgedPolicyPlan.acceptancePolicyId = 'p9-plan-acceptance/forged';
+  const forgedPolicyPlanIdentity = { ...forgedPolicyPlan };
+  delete forgedPolicyPlanIdentity.planDigest;
+  forgedPolicyPlan.planDigest = canonicalDigest(forgedPolicyPlanIdentity);
+  forgedAcceptancePolicy['research-plan.json'] = JSON.stringify(
+    forgedPolicyPlan,
+    null,
+    2,
+  );
+  const forgedPolicyAcceptance = JSON.parse(
+    forgedAcceptancePolicy['plan-acceptance-receipt.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  forgedPolicyAcceptance.acceptancePolicyId = 'p9-plan-acceptance/forged';
+  forgedPolicyAcceptance.planDigest = forgedPolicyPlan.planDigest;
+  const forgedPolicyAcceptanceIdentity = { ...forgedPolicyAcceptance };
+  delete forgedPolicyAcceptanceIdentity.receiptDigest;
+  forgedPolicyAcceptance.receiptDigest = canonicalDigest(
+    forgedPolicyAcceptanceIdentity,
+  );
+  forgedAcceptancePolicy['plan-acceptance-receipt.json'] = JSON.stringify(
+    forgedPolicyAcceptance,
+    null,
+    2,
+  );
+  const forgedPolicyAssessment = JSON.parse(
+    forgedAcceptancePolicy['plan-coverage-assessment.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  forgedPolicyAssessment.planDigest = forgedPolicyPlan.planDigest;
+  const forgedPolicyAssessmentIdentity = { ...forgedPolicyAssessment };
+  delete forgedPolicyAssessmentIdentity.assessmentDigest;
+  forgedPolicyAssessment.assessmentDigest = canonicalDigest(
+    forgedPolicyAssessmentIdentity,
+  );
+  forgedAcceptancePolicy['plan-coverage-assessment.json'] = JSON.stringify(
+    forgedPolicyAssessment,
+    null,
+    2,
+  );
+  const forgedPolicyManifest = JSON.parse(
+    forgedAcceptancePolicy['report-manifest.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  forgedPolicyManifest.planDigest = forgedPolicyPlan.planDigest;
+  forgedPolicyManifest.coverageAssessmentDigest =
+    forgedPolicyAssessment.assessmentDigest;
+  const forgedPolicyManifestIdentity = { ...forgedPolicyManifest };
+  delete forgedPolicyManifestIdentity.manifestDigest;
+  forgedPolicyManifest.manifestDigest = canonicalDigest(
+    forgedPolicyManifestIdentity,
+  );
+  forgedAcceptancePolicy['report-manifest.json'] = JSON.stringify(
+    forgedPolicyManifest,
+    null,
+    2,
+  );
+  forgedAcceptancePolicy['report.md'] = (
+    forgedAcceptancePolicy['report.md'] ?? ''
+  ).replace(accepted.plan.planDigest, String(forgedPolicyPlan.planDigest));
+  const forgedPolicyExecution = JSON.parse(
+    forgedAcceptancePolicy['execution-receipt.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  forgedPolicyExecution.planDigest = forgedPolicyPlan.planDigest;
+  forgedPolicyExecution.coverageAssessmentDigest =
+    forgedPolicyAssessment.assessmentDigest;
+  forgedAcceptancePolicy['execution-receipt.json'] = JSON.stringify(
+    forgedPolicyExecution,
+    null,
+    2,
+  );
+  resealP9Artifacts(forgedAcceptancePolicy);
+  let forgedAcceptancePolicyRejected = false;
+  try {
+    verifyP9ExactBundle(forgedAcceptancePolicy);
+  } catch (error) {
+    forgedAcceptancePolicyRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    forgedAcceptancePolicyRejected,
+    'T5 exact-bundle verifier rejects a fully resealed forged acceptance policy across plan, receipt, and downstream digests',
+  );
+
+  const forgedBudget = { ...run.artifacts } as Record<string, string>;
+  const forgedBudgetLedger = JSON.parse(
+    forgedBudget['budget-ledger.json'] ?? '{}',
+  ) as { snapshot?: Record<string, unknown>; summary?: unknown };
+  invariant(
+    forgedBudgetLedger.snapshot !== undefined,
+    'T5 budget attack fixture contains a serialized authority snapshot',
+  );
+  forgedBudgetLedger.snapshot.programId = 'forged-execution';
+  forgedBudget['budget-ledger.json'] = JSON.stringify(
+    forgedBudgetLedger,
+    null,
+    2,
+  );
+  resealP9Artifacts(forgedBudget);
+  let forgedBudgetRejected = false;
+  try {
+    verifyP9ExactBundle(forgedBudget);
+  } catch (error) {
+    forgedBudgetRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    forgedBudgetRejected,
+    'T5 exact-bundle verifier rejects a fully resealed budget ledger attributed to another execution',
+  );
+
+  const breachedBudget = { ...run.artifacts } as Record<string, string>;
+  const originalBudgetLedger = JSON.parse(
+    breachedBudget['budget-ledger.json'] ?? '{}',
+  ) as { snapshot?: unknown };
+  const originalBudgetSnapshot = P9BudgetAuthority.restore(
+    originalBudgetLedger.snapshot,
+  ).snapshot();
+  const originalReservation = originalBudgetSnapshot.reservations[0];
+  invariant(
+    originalReservation !== undefined,
+    'T5 breach attack fixture contains a priced reservation',
+  );
+  const breachedAuthority = new P9BudgetAuthority(
+    {
+      accountId: 'p9-t5-breach-attack',
+      programId: run.receipt.executionId,
+      catalog: originalBudgetSnapshot.catalog,
+      limit: originalBudgetSnapshot.limit,
+    },
+    () => now,
+  );
+  const breachedReservation = breachedAuthority.reserve({
+    reservationId: 'reservation:forged-breach',
+    workItemId: 'work:forged-breach',
+    effectId: 'effect:forged-breach',
+    idempotencyKey: 'idem:forged-breach',
+    catalogEntryId: originalReservation.bound.catalogEntryId,
+    ceiling: originalReservation.bound.ceiling,
+    actorId: 'p9-t5-verifier',
+  });
+  breachedAuthority.markTransportStarted(
+    breachedReservation.id,
+    'p9-t5-verifier',
+  );
+  try {
+    breachedAuthority.settle(breachedReservation.id, {
+      costState: 'known',
+      actual: {
+        currencyUsd: run.receipt.budget.authorizedUsd + 1,
+        requests: 1,
+        inputTokens: 0,
+        outputTokens: 0,
+        bytes: 0,
+        durationMs: 1,
+      },
+      actorId: 'p9-t5-verifier',
+    });
+  } catch (error) {
+    invariant(
+      error instanceof GovernanceError &&
+        error.code === 'provider_bound_breached',
+      'T5 breach attack creates an authoritative breached reservation',
+    );
+  }
+  const forgedUnderstatedSummary = {
+    authorizedUsd: run.receipt.budget.authorizedUsd,
+    reservedOpenUsd: 0,
+    spentKnownUsd: 0,
+    spentConservativeUnknownUsd: 0,
+    unknownCostReservationIds: [],
+    unknownCostSerializedAsZero: false,
+    withinAuthorization: true,
+  };
+  breachedBudget['budget-ledger.json'] = JSON.stringify(
+    {
+      snapshot: breachedAuthority.snapshot(),
+      summary: forgedUnderstatedSummary,
+    },
+    null,
+    2,
+  );
+  const breachedExecutionReceipt = JSON.parse(
+    breachedBudget['execution-receipt.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  breachedExecutionReceipt.budget = forgedUnderstatedSummary;
+  breachedBudget['execution-receipt.json'] = JSON.stringify(
+    breachedExecutionReceipt,
+    null,
+    2,
+  );
+  resealP9Artifacts(breachedBudget);
+  let breachedBudgetRejected = false;
+  try {
+    verifyP9ExactBundle(breachedBudget);
+  } catch (error) {
+    breachedBudgetRejected = error instanceof P9GenericResearchError;
+  }
+  invariant(
+    breachedBudgetRejected,
+    'T5 exact-bundle verifier rejects a fully resealed breached budget hidden as zero spend',
+  );
+
+  const unrecognizedAdmissionPolicy = { ...run.artifacts } as Record<
+    string,
+    string
+  >;
+  const forgedEntailmentRecords = (
+    unrecognizedAdmissionPolicy['entailment-verdicts.jsonl'] ?? ''
+  )
+    .split('\n')
+    .filter(Boolean)
+    .map(
+      (line) =>
+        JSON.parse(line) as {
+          verdict: Record<string, unknown>;
+          admission: Record<string, unknown>;
+        },
+    );
+  const rejectedAdmissionRecord = forgedEntailmentRecords.find(
+    (record) => record.admission.decision === 'rejected',
+  );
+  invariant(
+    rejectedAdmissionRecord !== undefined,
+    'T5 policy attack fixture contains a rejected admission outside the citation set',
+  );
+  rejectedAdmissionRecord.admission.policyId =
+    'p9-independent-entailment/forged';
+  const forgedAdmissionIdentity = { ...rejectedAdmissionRecord.admission };
+  delete forgedAdmissionIdentity.admissionDigest;
+  rejectedAdmissionRecord.admission.admissionDigest = canonicalDigest(
+    forgedAdmissionIdentity,
+  );
+  unrecognizedAdmissionPolicy['entailment-verdicts.jsonl'] =
+    `${forgedEntailmentRecords
+      .map((record) => JSON.stringify(record))
+      .join('\n')}\n`;
+  resealP9Artifacts(unrecognizedAdmissionPolicy);
+  let unrecognizedAdmissionPolicyRejected = false;
+  try {
+    verifyP9ExactBundle(unrecognizedAdmissionPolicy);
+  } catch (error) {
+    unrecognizedAdmissionPolicyRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    unrecognizedAdmissionPolicyRejected,
+    'T5 exact-bundle verifier rejects a fully resealed unrecognized admission policy identity',
+  );
+
+  const forgedReportSection = { ...run.artifacts } as Record<string, string>;
+  const forgedClaimEvidence = (
+    forgedReportSection['claim-evidence.jsonl'] ?? ''
+  )
+    .split('\n')
+    .filter(Boolean)
+    .map(
+      (line) =>
+        JSON.parse(line) as {
+          proposalId: string;
+          evidence: Record<string, unknown>;
+        },
+    );
+  const misplacedEvidence = forgedClaimEvidence[0];
+  invariant(
+    misplacedEvidence !== undefined,
+    'T5 section attack fixture contains serialized claim evidence',
+  );
+  misplacedEvidence.evidence.reportSectionId = 'forged_unaccepted_section';
+  const forgedEvidenceIdentity = { ...misplacedEvidence.evidence };
+  delete forgedEvidenceIdentity.evidenceDigest;
+  misplacedEvidence.evidence.evidenceDigest = canonicalDigest(
+    forgedEvidenceIdentity,
+  );
+  forgedReportSection['claim-evidence.jsonl'] = `${forgedClaimEvidence
+    .map((record) => JSON.stringify(record))
+    .join('\n')}\n`;
+  resealP9Artifacts(forgedReportSection);
+  let forgedReportSectionRejected = false;
+  try {
+    verifyP9ExactBundle(forgedReportSection);
+  } catch (error) {
+    forgedReportSectionRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    forgedReportSectionRejected,
+    'T5 exact-bundle verifier rejects fully resealed claim evidence targeting an unaccepted report section',
+  );
   const reportFixture = await json('non-data-center-report.json');
   const requiredSections = new Set(
     (reportFixture.requiredSections as readonly string[]).map(String),
@@ -2286,7 +2581,7 @@ function verifyT6LiveAuthorityGate(): void {
     'T6 authority gate does not treat P8 live flags as P9 authorization',
   );
 
-  const ready = evaluateP9LiveAuthority({
+  const configuredButUnauthorized = evaluateP9LiveAuthority({
     MAMMOTH_P9_LIVE_RESEARCH: 'authorized',
     MAMMOTH_SEARCH_BRAVE_API_KEY: 'fixture-search-secret',
     MAMMOTH_P9_LIVE_BILLING_AUTHORIZATION: 'authorized',
@@ -2298,8 +2593,12 @@ function verifyT6LiveAuthorityGate(): void {
     MAMMOTH_P9_PROVIDER_API_KEY: 'fixture-provider-secret',
   });
   invariant(
-    ready.status === 'ready' && ready.safeForEffects,
-    'T6 authority gate recognizes complete explicit P9 live authority',
+    configuredButUnauthorized.status === 'blocked_live_exhibition' &&
+      !configuredButUnauthorized.safeForEffects &&
+      configuredButUnauthorized.liveAuthorization.includes(
+        'immutable scoped human authorization receipt is missing',
+      ),
+    'T6 authority gate refuses environment-only self-authorization',
   );
 
   const acceptedLivePlan = buildAcceptedP9LivePlan({
@@ -2332,5 +2631,5 @@ await verifyT5GenericExecution();
 verifyT6LiveAuthorityGate();
 
 console.log(
-  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5 generic_execution=pass; T6 live_authority_gate=pass blocked_pending_authorization',
+  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5 generic_execution=pass; T6 live_authority_gate=pass live_effects=not_run',
 );

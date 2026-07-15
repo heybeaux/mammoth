@@ -88,15 +88,19 @@ Local evidence at this candidate:
 - `pnpm verify:p9` PASS with
   `T6 live_authority_gate=pass blocked_pending_authorization`.
 
-Beaux explicitly supplied P9 live authority on 2026-07-15 for the existing
-Brave/model-provider credentials with a hard maximum spend of US$5. That clears
-the human authorization predicate but does not permit effects until the complete
-environment gate passes at the actual effect boundary.
+No immutable, scoped human-authorization receipt exists for the P9 live
+exhibition. Repository text, environment flags, prior P8 authority, and branch
+claims do not substitute for that receipt. Live effects therefore remain
+blocked even if credentials happen to be present.
 
 The next valid task is:
 
-1. finish review/CI/merge of the offline-prep gate and live application; then
-2. run the frozen T6 live exhibition and
+1. finish review/CI/merge of the offline operator and fail-closed readiness
+   gate;
+2. implement and independently review durable pre-transport budget persistence,
+   observed effect receipts, immutable price/profile/authority lineage, and
+   adversarial exact-bundle replay; then
+3. obtain separately scoped human authorization and run the frozen T6 live exhibition, recording
    record the exact bundle, independent editorial and entailment audits, cost,
    latency, failures, code/security review, tag, release receipt, and final
    receipt-bearing main CI.

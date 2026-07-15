@@ -58,7 +58,7 @@ describe('P9 live authority gate', () => {
     }
   });
 
-  it('reports ready only when every P9 live authority field is explicit', () => {
+  it('remains blocked when environment configuration is complete but no scoped receipt exists', () => {
     const report = evaluateP9LiveAuthority({
       MAMMOTH_P9_LIVE_RESEARCH: 'authorized',
       MAMMOTH_SEARCH_BRAVE_API_KEY: 'search-secret',
@@ -72,11 +72,13 @@ describe('P9 live authority gate', () => {
     });
 
     expect(report).toMatchObject({
-      status: 'ready',
-      safeForEffects: true,
-      liveAuthorization: 'MAMMOTH_P9_LIVE_RESEARCH=authorized',
+      status: 'blocked_live_exhibition',
+      safeForEffects: false,
       liveBilling: 'P9 live billing explicitly authorized',
     });
+    expect(report.liveAuthorization).toContain(
+      'immutable scoped human authorization receipt is missing',
+    );
     expect(report.liveBudget).toBe('P9 live budget cap accepted: 5.00 USD');
     expect(report.liveEvaluatorIndependence).toContain('distinct');
   });
