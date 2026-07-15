@@ -90,6 +90,7 @@ const RIGHTS_POLICY_ID = 'p9-live-rights-unknown/v1';
 const COORDINATE_SPACE = 'utf16-code-units/v1';
 const CURRENT_COMMIT_DATE_POLICY_ID = 'p9-live-current-commit-date/v1';
 const P9_LIVE_PARSER_CLASS = 'mammoth-deterministic-text';
+const P9_LIVE_COLIBRI_COMMIT_SHA = '550ddcba83afd27a892dba92c587bfcc1d30f020';
 
 export interface P9LiveCandidate {
   readonly candidateId: string;
@@ -109,14 +110,14 @@ export interface P9LiveCandidate {
 const P9_LIVE_MANDATORY_SOURCE_CANDIDATES: readonly P9LiveCandidate[] = [
   {
     candidateId: 'pinned:colibri-metal-source',
-    url: 'https://raw.githubusercontent.com/JustVugg/colibri/main/c/backend_metal.mm',
+    url: `https://raw.githubusercontent.com/JustVugg/colibri/${P9_LIVE_COLIBRI_COMMIT_SHA}/c/backend_metal.mm`,
     title: 'JustVugg/colibri Metal backend source',
     sourceClass: 'repository_code',
     sourceFamilyId: 'github.com',
   },
   {
     candidateId: 'pinned:colibri-repository-docs',
-    url: 'https://github.com/JustVugg/colibri',
+    url: `https://raw.githubusercontent.com/JustVugg/colibri/${P9_LIVE_COLIBRI_COMMIT_SHA}/README.md`,
     title: 'JustVugg/colibri repository documentation',
     sourceClass: 'repository_docs',
     sourceFamilyId: 'github.com',
@@ -143,9 +144,9 @@ const P9_LIVE_MANDATORY_SOURCE_CANDIDATES: readonly P9LiveCandidate[] = [
     sourceFamilyId: 'arxiv.org',
   },
   {
-    candidateId: 'pinned:cisa-memory-bounds-advisory',
-    url: 'https://www.cisa.gov/news-events/ics-advisories/icsa-24-205-03',
-    title: 'CISA memory-bounds vulnerability advisory',
+    candidateId: 'pinned:cisa-memory-safety-guidance',
+    url: 'https://www.cisa.gov/resources-tools/resources/case-memory-safe-roadmaps',
+    title: 'CISA memory-safe coding guidance',
     sourceClass: 'security_advisory',
     sourceFamilyId: 'cisa.gov',
   },
@@ -880,6 +881,9 @@ async function runP9LiveApplicationExclusive(
         parsedText: parserResult.value.text,
         retrievedAt: retrieved.retrievedAt,
         observedAt: timestamp(),
+        ...(input.includeMandatorySourceTargets === true
+          ? { expectedCommitSha: P9_LIVE_COLIBRI_COMMIT_SHA }
+          : {}),
       });
       attempts.push(
         buildTruthfulRetrievalAttempt({
@@ -1280,7 +1284,7 @@ export function buildAcceptedP9LivePlan(input: {
       {
         subquestionId: 'sq-risk',
         question:
-          'Which memory buffer bounds vulnerability or security risks could falsify a bounded colibri change?',
+          'Which memory safety guidance applies to security risks in a bounded colibri code change?',
         mandatory: true,
       },
     ],
@@ -1371,8 +1375,7 @@ export function buildAcceptedP9LivePlan(input: {
       },
       {
         queryId: 'q-security',
-        query:
-          'site:cisa.gov memory buffer bounds vulnerability security advisory',
+        query: 'site:cisa.gov C C++ memory safety secure coding guidance',
         subquestionIds: ['sq-risk'],
       },
     ],
@@ -1838,6 +1841,7 @@ function observeCurrentRepositoryCommitDate(input: {
   readonly parsedText: string;
   readonly retrievedAt: string;
   readonly observedAt: string;
+  readonly expectedCommitSha?: string;
 }) {
   if (
     canonicalP9CandidateSelectionUrl(input.candidate.url) !==
@@ -1853,6 +1857,14 @@ function observeCurrentRepositoryCommitDate(input: {
   }
   const parsed = CurrentGitHubCommitSchema.safeParse(decoded);
   if (!parsed.success) return null;
+  if (
+    input.expectedCommitSha !== undefined &&
+    parsed.data.sha !== input.expectedCommitSha
+  ) {
+    throw new Error(
+      `current Colibri commit ${parsed.data.sha} does not match pinned source commit ${input.expectedCommitSha}`,
+    );
+  }
   const normalizedValue = new Date(
     parsed.data.commit.committer.date,
   ).toISOString();

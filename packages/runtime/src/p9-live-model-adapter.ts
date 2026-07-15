@@ -49,7 +49,7 @@ const EvaluatorFindingSchema = z.object({
 });
 
 const ClaimSeedResponseSchema = z.object({
-  claims: z.array(ClaimSeedSchema),
+  claims: z.array(ClaimSeedSchema).min(6),
 });
 
 const EvaluatorResponseSchema = z.object({

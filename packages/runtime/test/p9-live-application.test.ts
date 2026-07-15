@@ -334,7 +334,7 @@ const fakeRetrieve: typeof retrieveSource = (request) => {
   const currentCommit = request.url.startsWith('https://api.github.com/');
   const body = currentCommit
     ? JSON.stringify({
-        sha: '0123456789abcdef0123456789abcdef01234567',
+        sha: '550ddcba83afd27a892dba92c587bfcc1d30f020',
         commit: { committer: { date: '2026-07-10T12:00:00.000Z' } },
       })
     : SOURCE_BODY;
@@ -738,18 +738,45 @@ describe('P9 live application', () => {
     );
 
     expect(retrieved).toEqual([
-      'https://raw.githubusercontent.com/JustVugg/colibri/main/c/backend_metal.mm',
-      'https://github.com/JustVugg/colibri',
+      'https://raw.githubusercontent.com/JustVugg/colibri/550ddcba83afd27a892dba92c587bfcc1d30f020/c/backend_metal.mm',
+      'https://raw.githubusercontent.com/JustVugg/colibri/550ddcba83afd27a892dba92c587bfcc1d30f020/README.md',
       'https://huggingface.co/zai-org/GLM-5',
       'https://www.apple.com/newsroom/2024/10/apple-introduces-m4-pro-and-m4-max/',
       'https://arxiv.org/html/2509.24086v1',
-      'https://www.cisa.gov/news-events/ics-advisories/icsa-24-205-03',
+      'https://www.cisa.gov/resources-tools/resources/case-memory-safe-roadmaps',
     ]);
     expect(
       JSON.parse(run.artifacts['execution-receipt.json'] ?? '{}') as {
         counts?: { selectedCandidates?: number };
       },
     ).toMatchObject({ counts: { selectedCandidates: 6 } });
+  });
+
+  it('does not count an unrelated product advisory as a Colibri risk claim', () => {
+    const plan = buildAcceptedP9LivePlan({
+      budgetUsd: 5,
+      now: now().toISOString(),
+      proposerProfile: makeModel({ calls: 0 }).proposerProfile,
+    }).plan;
+    const risk = plan.subquestions.find(
+      (subquestion) => subquestion.subquestionId === 'sq-risk',
+    );
+    if (!risk) throw new Error('missing risk subquestion');
+    const unrelated = {
+      proposal: {
+        statement:
+          'Improper Restriction of Operations within the Bounds of a Memory Buffer',
+      },
+      evidence: { subquestionIds: ['sq-risk'] },
+    } as Parameters<typeof isClaimRelevantToSubquestion>[0];
+
+    expect(
+      isClaimRelevantToSubquestion(
+        unrelated,
+        risk.subquestionId,
+        risk.question,
+      ),
+    ).toBe(false);
   });
 
   it('precedes every outbound effect with a durable journaled reservation and settles observed usage', async () => {
@@ -834,7 +861,7 @@ describe('P9 live application', () => {
     );
     expect(currentCommitAttempt?.publishedAt).toBe('2026-07-10T12:00:00.000Z');
     expect(currentCommitAttempt?.dateObservation?.exactLocator).toContain(
-      'sha:0123456789abcdef0123456789abcdef01234567',
+      'sha:550ddcba83afd27a892dba92c587bfcc1d30f020',
     );
     expect(currentCommitAttempt?.dateVerdict?.verdict).toBe('accepted');
     expect(proposedSnapshotIds).not.toContain(
