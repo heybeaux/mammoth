@@ -44,15 +44,18 @@ function harness(
   const options: RuntimeOptions = {
     rootDirectory,
     charter: structuredClone(baseCharter),
-    transport: () => {
-      retrievalEffects += 1;
-      return Promise.resolve({
-        status: 200,
-        headers: new Headers({ 'content-type': 'text/plain' }),
-        body: new Response(source).body,
-      });
+    transport: {
+      request: ({ approvedAddress }) => {
+        retrievalEffects += 1;
+        return Promise.resolve({
+          status: 200,
+          headers: { 'content-type': 'text/plain' },
+          body: new TextEncoder().encode(source),
+          connectedAddress: approvedAddress,
+        });
+      },
     },
-    resolveHost: () => Promise.resolve(['203.0.113.10']),
+    resolveHost: () => Promise.resolve(['93.184.216.34']),
     now: () => instant,
     verifyEntailment: ({ claim }) => ({
       entails: claim.id === 'claim-1',

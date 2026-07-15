@@ -40,12 +40,15 @@ const charter: RuntimeCharter = {
   ],
 };
 
-const transport = async () =>
-  Promise.resolve({
-    status: 200,
-    headers: new Headers({ 'content-type': 'text/plain' }),
-    body: new Response(source).body,
-  });
+const transport = {
+  request: ({ approvedAddress }: { approvedAddress: string }) =>
+    Promise.resolve({
+      status: 200,
+      headers: { 'content-type': 'text/plain' },
+      body: new TextEncoder().encode(source),
+      connectedAddress: approvedAddress,
+    }),
+};
 
 const verifyEntailment = ({
   claim,
@@ -70,7 +73,7 @@ describe('local evidence-first runtime', () => {
       charter,
       transport,
       verifyEntailment,
-      resolveHost: () => Promise.resolve(['203.0.113.10']),
+      resolveHost: () => Promise.resolve(['93.184.216.34']),
       now: () => now,
     });
 
@@ -152,7 +155,7 @@ describe('local evidence-first runtime', () => {
         charter,
         transport,
         verifyEntailment,
-        resolveHost: () => Promise.resolve(['203.0.113.10']),
+        resolveHost: () => Promise.resolve(['93.184.216.34']),
         now: () => now,
         onStage,
       }),
@@ -163,7 +166,7 @@ describe('local evidence-first runtime', () => {
       charter,
       transport,
       verifyEntailment,
-      resolveHost: () => Promise.resolve(['203.0.113.10']),
+      resolveHost: () => Promise.resolve(['93.184.216.34']),
       now: () => now,
       onStage,
     });

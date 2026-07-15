@@ -233,6 +233,123 @@ export const SourceRightsStatusSchema = z
   });
 export type SourceRightsStatus = z.infer<typeof SourceRightsStatusSchema>;
 
+export const MediaSupportDecisionSchema = z
+  .object({
+    schemaVersion: z.literal('1.0.0'),
+    contractFamily: z.literal(P9_CONTRACT_FAMILY),
+    decisionId: z.string().min(1),
+    declaredMediaType: z.string().min(1),
+    sniffedMediaType: z.string().min(1).nullable(),
+    fileExtension: z.string().min(1).nullable(),
+    status: z.enum(['supported', 'unsupported', 'ambiguous']),
+    parserId: z.string().min(1).nullable(),
+    parserVersion: z.string().min(1).nullable(),
+    parserDigest: DigestSchema.nullable(),
+    policyId: z.string().min(1),
+    reasonCode: z.string().min(1),
+    decidedAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((decision, context) => {
+    const parserIdentity = [
+      decision.parserId,
+      decision.parserVersion,
+      decision.parserDigest,
+    ];
+    if (
+      decision.status === 'supported' &&
+      parserIdentity.some((value) => value === null)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'supported media requires a complete pinned parser identity',
+      });
+    }
+    if (
+      decision.status !== 'supported' &&
+      parserIdentity.some((value) => value !== null)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'unsupported or ambiguous media cannot select a parser',
+      });
+    }
+  });
+export type MediaSupportDecision = z.infer<typeof MediaSupportDecisionSchema>;
+
+export const ParserReceiptSchema = z
+  .object({
+    schemaVersion: z.literal('1.0.0'),
+    contractFamily: z.literal(P9_CONTRACT_FAMILY),
+    receiptId: z.string().min(1),
+    decisionId: z.string().min(1),
+    inputDigest: DigestSchema,
+    parserId: z.string().min(1),
+    parserVersion: z.string().min(1),
+    parserDigest: DigestSchema,
+    mediaType: z.string().min(1),
+    limits: z
+      .object({
+        maximumInputBytes: PositiveIntegerSchema,
+        maximumOutputCharacters: PositiveIntegerSchema,
+        timeoutMs: PositiveIntegerSchema,
+        maximumMemoryBytes: PositiveIntegerSchema,
+        maximumProcesses: PositiveIntegerSchema,
+      })
+      .strict(),
+    status: z.enum(['parsed', 'rejected', 'failed', 'timed_out', 'cancelled']),
+    outputDigest: DigestSchema.nullable(),
+    outputCharacters: NonNegativeIntegerSchema,
+    locatorCoordinateSpace: z.string().min(1).nullable(),
+    failureCode: z.string().min(1).nullable(),
+    startedAt: z.string().datetime(),
+    finishedAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((receipt, context) => {
+    if (
+      receipt.status === 'parsed' &&
+      (!receipt.outputDigest || !receipt.locatorCoordinateSpace)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'parsed receipt requires output digest and locator space',
+      });
+    }
+    if (receipt.status !== 'parsed' && receipt.failureCode === null) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'non-parsed receipt requires a typed failure code',
+      });
+    }
+  });
+export type ParserReceipt = z.infer<typeof ParserReceiptSchema>;
+
+export const NetworkHopReceiptSchema = z
+  .object({
+    schemaVersion: z.literal('1.0.0'),
+    contractFamily: z.literal(P9_CONTRACT_FAMILY),
+    policyId: z.string().min(1),
+    hop: NonNegativeIntegerSchema,
+    canonicalUrl: z.string().url(),
+    origin: z.string().url(),
+    approvedAddresses: z.array(z.string().min(1)).min(1),
+    connectedAddress: z.string().min(1),
+    resolvedAt: z.string().datetime(),
+    responseStatus: NonNegativeIntegerSchema,
+    redirectLocation: z.string().min(1).nullable(),
+  })
+  .strict()
+  .superRefine((receipt, context) => {
+    if (!receipt.approvedAddresses.includes(receipt.connectedAddress)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'network receipt must bind the actual connected address',
+      });
+    }
+  });
+export type NetworkHopReceipt = z.infer<typeof NetworkHopReceiptSchema>;
+
 export const RetrievalTerminalStatusSchema = z.enum([
   'admitted',
   'rejected',

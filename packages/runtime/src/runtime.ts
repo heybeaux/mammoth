@@ -225,7 +225,7 @@ async function executePipeline(
       execute: async (idempotencyKey) => ({
         providerReceiptId: `local:${canonicalDigest(idempotencyKey)}`,
         result: await snapshotSource({ url: charter.sourceUrl }, contentStore, {
-          transport: options.transport,
+          ...(options.transport ? { transport: options.transport } : {}),
           ...(options.resolveHost ? { resolveHost: options.resolveHost } : {}),
           ...(options.now ? { now: options.now } : {}),
         }),

@@ -10,19 +10,27 @@ import {
   ResearchBriefSchema,
   type ClaimProposalV1,
   type EvidenceSpanV1,
+  type MediaSupportDecision,
+  type NetworkHopReceipt,
   type P8Depth,
+  type ParserReceipt,
   type QuestionCharter,
   type ReportBlockV1,
   type ReportManifestV1,
   type ResearchBrief,
 } from '@mammoth/domain';
+import {
+  AcquisitionFailure,
+  BoundedParserRegistry,
+  ParserPolicyError,
+  retrieveSource,
+} from '@mammoth/retrieval';
 
 const GENERATED_AT = '2026-07-01T00:00:00.000Z';
 const POLICY_ID = 'p8.v1-evidence-admission-policy';
 const PARSER_ID = 'p8-fixture-parser';
 const PARSER_VERSION = '1.0.0';
-const LIVE_PARSER_ID = 'p8-live-text-parser';
-const LIVE_PARSER_VERSION = '1.0.0';
+const LIVE_PARSER_REGISTRY = new BoundedParserRegistry();
 const REPORT_GOLDEN_QUESTION =
   'What impacts do data centers have on the communities and environment around them?';
 const EXPLORE_MODE_NOT_SHIPPED =
@@ -50,12 +58,35 @@ interface LiveSourceRecord extends SourceRecord {
   readonly retrievedAt: string;
   readonly robots: string;
   readonly httpStatus: number;
+  readonly parserId: string;
+  readonly parserVersion: string;
+  readonly mediaSupportDecision: MediaSupportDecision;
+  readonly parserReceipt: ParserReceipt;
+  readonly networkReceipts: readonly NetworkHopReceipt[];
 }
+
+interface LiveAcquisitionFailureRecord {
+  readonly candidateUrl: string;
+  readonly title: string;
+  readonly category: string;
+  readonly topics: readonly string[];
+  readonly status: 'rejected';
+  readonly failureCode: string;
+  readonly networkReceipts: readonly NetworkHopReceipt[];
+  readonly mediaSupportDecision: MediaSupportDecision | null;
+  readonly parserReceipt: ParserReceipt | null;
+}
+
+type LiveAcquisitionOutcome =
+  | { readonly source: LiveSourceRecord; readonly failure: null }
+  | { readonly source: null; readonly failure: LiveAcquisitionFailureRecord };
 
 interface SourceTextRecord extends SourceRecord {
   readonly title: string;
   readonly parsedText: string;
   readonly parsedDigest: string;
+  readonly parserId?: string;
+  readonly parserVersion?: string;
 }
 
 interface P8SpanDraft {
@@ -331,6 +362,7 @@ async function runP8LiveResearch(
     },
   ] as const;
   const liveSources: LiveSourceRecord[] = [];
+  const acquisitionResidue: LiveAcquisitionFailureRecord[] = [];
   let searchRequests = 0;
   let retrievalRequests = 0;
   let bytes = 0;
@@ -346,13 +378,26 @@ async function runP8LiveResearch(
         plan.category,
         outputDirectory,
       );
-      if (!source) continue;
-      liveSources.push(source);
       retrievalRequests += 1;
-      bytes += source.bytes;
+      if (!source.source) {
+        acquisitionResidue.push(source.failure);
+        continue;
+      }
+      liveSources.push(source.source);
+      bytes += source.source.bytes;
       if (liveSources.length >= 16) break;
     }
   }
+  await writeFile(
+    join(outputDirectory, 'live-acquisition-residue.json'),
+    `${canonicalJson({
+      schemaVersion: '1.0.0',
+      contractFamily: 'p9.v1',
+      attempted: retrievalRequests,
+      admitted: liveSources.length,
+      rejected: acquisitionResidue,
+    })}\n`,
+  );
   if (liveSources.length < 8)
     throw new Error('live exhibition acquired too little admissible evidence');
   const spans = makeEvidenceSpansFromText(liveSources);
@@ -638,17 +683,13 @@ function makeEvidenceSpansFromText(
         sourceId: source.id,
         rawSnapshotDigest: source.rawDigest,
         parsedArtifactDigest: canonicalDigest({
-          parserId: source.id.startsWith('live-') ? LIVE_PARSER_ID : PARSER_ID,
-          parserVersion: source.id.startsWith('live-')
-            ? LIVE_PARSER_VERSION
-            : PARSER_VERSION,
+          parserId: source.parserId ?? PARSER_ID,
+          parserVersion: source.parserVersion ?? PARSER_VERSION,
           rawDigest: source.rawDigest,
           normalizedTextDigest: source.parsedDigest,
         }),
-        parserId: source.id.startsWith('live-') ? LIVE_PARSER_ID : PARSER_ID,
-        parserVersion: source.id.startsWith('live-')
-          ? LIVE_PARSER_VERSION
-          : PARSER_VERSION,
+        parserId: source.parserId ?? PARSER_ID,
+        parserVersion: source.parserVersion ?? PARSER_VERSION,
         locator: {
           coordinateSpace,
           version: '1.0.0' as const,
@@ -1553,42 +1594,82 @@ async function acquireLiveResult(
   topics: readonly string[],
   category: string,
   outputDirectory: string,
-): Promise<LiveSourceRecord | undefined> {
+): Promise<LiveAcquisitionOutcome> {
+  let observedNetworkReceipts: readonly NetworkHopReceipt[] = [];
   try {
-    const response = await fetch(result.url, {
-      redirect: 'follow',
-      signal: AbortSignal.timeout(60_000),
-      headers: {
-        'User-Agent': 'MammothP8Research/0.8',
-        Accept:
-          'text/html,text/plain,application/json,application/pdf;q=0.8,*/*;q=0.1',
+    const retrieved = await retrieveSource(
+      {
+        url: result.url,
+        headers: {
+          'User-Agent': 'MammothP8Research/0.8',
+          Accept:
+            'text/html,text/plain,application/json,application/pdf;q=0.8,*/*;q=0.1',
+        },
       },
-    });
-    if (!response.ok) return undefined;
-    const mediaType =
-      (response.headers.get('content-type') ?? 'text/plain')
-        .split(';')[0]
-        ?.trim()
-        .toLowerCase() ?? 'text/plain';
-    if (
-      ![
-        'text/html',
-        'text/plain',
-        'application/json',
-        'application/pdf',
-      ].includes(mediaType)
-    )
-      return undefined;
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength === 0 || bytes.byteLength > 33_554_432)
-      return undefined;
-    const rawDigest = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
-    const parsedText = normalizeLiveText(
-      mediaType,
-      new TextDecoder('utf-8', { fatal: false }).decode(bytes),
+      {
+        policy: {
+          allowedSchemes: ['https:', 'http:'],
+          allowedPorts: [443, 80],
+          allowedMediaTypes: [
+            'text/html',
+            'text/plain',
+            'application/json',
+            'application/pdf',
+          ],
+          maxBytes: 33_554_432,
+          timeoutMs: 60_000,
+        },
+        policyId: 'p9-public-network/v1',
+      },
     );
-    if (parsedText.length < 240) return undefined;
-    const finalUrl = response.url;
+    observedNetworkReceipts = retrieved.networkReceipts;
+    const parsed = LIVE_PARSER_REGISTRY.parse(
+      retrieved.bytes,
+      retrieved.mediaType,
+      {
+        sourceUrl: retrieved.finalUrl,
+        policyId: 'p9-media-support/v1',
+      },
+    );
+    if (!parsed.mediaSupportDecision || !parsed.parserReceipt) {
+      throw new Error('P9 parser omitted its decision or receipt');
+    }
+    const bytes = retrieved.bytes;
+    if (bytes.byteLength === 0) {
+      return {
+        source: null,
+        failure: {
+          candidateUrl: result.url,
+          title: result.title,
+          category,
+          topics,
+          status: 'rejected',
+          failureCode: 'empty_response',
+          networkReceipts: retrieved.networkReceipts,
+          mediaSupportDecision: parsed.mediaSupportDecision,
+          parserReceipt: parsed.parserReceipt,
+        },
+      };
+    }
+    const rawDigest = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+    const parsedText = normalizeLiveText('text/plain', parsed.text);
+    if (parsedText.length < 240) {
+      return {
+        source: null,
+        failure: {
+          candidateUrl: result.url,
+          title: result.title,
+          category,
+          topics,
+          status: 'rejected',
+          failureCode: 'insufficient_parsed_text',
+          networkReceipts: retrieved.networkReceipts,
+          mediaSupportDecision: parsed.mediaSupportDecision,
+          parserReceipt: parsed.parserReceipt,
+        },
+      };
+    }
+    const finalUrl = retrieved.finalUrl;
     const sourceFamily = new URL(finalUrl).hostname
       .replace(/^www\./u, '')
       .split('.')
@@ -1602,27 +1683,59 @@ async function acquireLiveResult(
       parsedText,
     );
     return {
-      id,
-      title: stripLiveText(result.title).slice(0, 160) || sourceFamily,
-      file: `${id}.txt`,
-      mediaType,
-      category,
-      sourceFamily,
-      publishedDate: new Date().toISOString().slice(0, 10),
-      topics,
-      seededRole: 'live_admitted',
-      url: result.url,
-      finalUrl,
-      bytes: bytes.byteLength,
-      rawDigest,
-      parsedDigest: canonicalDigest(parsedText),
-      parsedText,
-      retrievedAt: new Date().toISOString(),
-      robots: 'recorded_no_disallow_found',
-      httpStatus: response.status,
+      source: {
+        id,
+        title: stripLiveText(result.title).slice(0, 160) || sourceFamily,
+        file: `${id}.txt`,
+        mediaType: retrieved.mediaType,
+        category,
+        sourceFamily,
+        publishedDate: new Date().toISOString().slice(0, 10),
+        topics,
+        seededRole: 'live_admitted',
+        url: result.url,
+        finalUrl,
+        bytes: bytes.byteLength,
+        rawDigest,
+        parsedDigest: canonicalDigest(parsedText),
+        parsedText,
+        retrievedAt: retrieved.retrievedAt,
+        robots: 'recorded_no_disallow_found',
+        httpStatus: retrieved.status,
+        parserId: parsed.parserId,
+        parserVersion: parsed.parserVersion,
+        mediaSupportDecision: parsed.mediaSupportDecision,
+        parserReceipt: parsed.parserReceipt,
+        networkReceipts: retrieved.networkReceipts,
+      },
+      failure: null,
     };
-  } catch {
-    return undefined;
+  } catch (error: unknown) {
+    return {
+      source: null,
+      failure: {
+        candidateUrl: result.url,
+        title: result.title,
+        category,
+        topics,
+        status: 'rejected',
+        failureCode:
+          error instanceof AcquisitionFailure ||
+          error instanceof ParserPolicyError
+            ? error.code
+            : error instanceof Error
+              ? error.message
+              : 'unknown_acquisition_failure',
+        networkReceipts:
+          error instanceof AcquisitionFailure
+            ? error.networkReceipts
+            : observedNetworkReceipts,
+        mediaSupportDecision:
+          error instanceof ParserPolicyError ? error.decision : null,
+        parserReceipt:
+          error instanceof ParserPolicyError ? error.receipt : null,
+      },
+    };
   }
 }
 
@@ -1687,6 +1800,11 @@ async function writeLiveProvenance(
       retrievedAt: source.retrievedAt,
       robots: source.robots,
       httpStatus: source.httpStatus,
+      parserId: source.parserId,
+      parserVersion: source.parserVersion,
+      mediaSupportDecision: source.mediaSupportDecision,
+      parserReceipt: source.parserReceipt,
+      networkReceipts: source.networkReceipts,
       admitted: true,
     })),
   };

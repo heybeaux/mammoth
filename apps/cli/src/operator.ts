@@ -268,30 +268,33 @@ export function nodeRuntimeFactory(): RuntimeFactory {
         return await runResearchProgram({
           rootDirectory: request.root,
           charter: request.charter,
-          transport: sourceFixture
-            ? async (url) => {
-                if (url.href !== request.charter.sourceUrl)
-                  throw new CliError(
-                    'FIXTURE_URL_MISMATCH',
-                    'unexpected fixture URL',
-                  );
-                const bytes = await readFile(sourceFixture.path);
-                if (sha256(bytes) !== sourceFixture.digest)
-                  throw new CliError(
-                    'FIXTURE_DIGEST_MISMATCH',
-                    'fixture digest mismatch',
-                  );
-                return {
-                  status: 200,
-                  headers: new Headers({
-                    'content-type': sourceFixture.mediaType,
-                  }),
-                  body: new Response(bytes).body,
-                };
-              }
-            : (url, init) => fetch(url, { ...init, redirect: 'manual' }),
           ...(sourceFixture
-            ? { resolveHost: () => Promise.resolve(['203.0.113.10']) }
+            ? {
+                transport: {
+                  request: async ({ url, approvedAddress }) => {
+                    if (url.href !== request.charter.sourceUrl)
+                      throw new CliError(
+                        'FIXTURE_URL_MISMATCH',
+                        'unexpected fixture URL',
+                      );
+                    const bytes = await readFile(sourceFixture.path);
+                    if (sha256(bytes) !== sourceFixture.digest)
+                      throw new CliError(
+                        'FIXTURE_DIGEST_MISMATCH',
+                        'fixture digest mismatch',
+                      );
+                    return {
+                      status: 200,
+                      headers: { 'content-type': sourceFixture.mediaType },
+                      body: bytes,
+                      connectedAddress: approvedAddress,
+                    };
+                  },
+                },
+              }
+            : {}),
+          ...(sourceFixture
+            ? { resolveHost: () => Promise.resolve(['93.184.216.34']) }
             : {}),
           ...(request.retrievalUsage
             ? { retrievalUsage: request.retrievalUsage }

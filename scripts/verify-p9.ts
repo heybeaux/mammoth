@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
+import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { join, resolve } from 'node:path';
 import {
   canonicalDigest,
@@ -13,9 +16,17 @@ import {
 } from '../packages/governance/src/index.js';
 import {
   buildTruthfulRetrievalAttempt,
+  AcquisitionFailure,
+  BoundedParserRegistry,
   makeNotCheckedRobotsDecision,
   makeUnknownRightsStatus,
+  NodePinnedSourceTransport,
+  ParserPolicyError,
   P9RetrievalResidueLedger,
+  retrieveSource,
+  type SourceTransport,
+  type SourceTransportRequest,
+  type TransportResponse,
 } from '../packages/retrieval/src/index.js';
 
 const root = resolve(import.meta.dirname, '..');
@@ -124,6 +135,17 @@ for (const required of [
 ]) {
   invariant(hostileIds.has(required), `T1 hostile fixture ${required}`);
 }
+for (const required of [
+  'network-obfuscated-loopback',
+  'network-ipv6-mapped-private',
+  'network-rebinding',
+  'network-public-private-redirect',
+  'network-env-proxy-bypass',
+  'parser-binary-pdf-as-text',
+  'parser-bomb-malformed-encrypted',
+]) {
+  invariant(hostileIds.has(required), `T2 hostile fixture ${required}`);
+}
 
 const expected = await json('expected-artifacts.json');
 invariant(
@@ -140,9 +162,10 @@ const receipt = await json('receipt-schema.json');
 invariant(receipt.additionalProperties === false, 'closed receipt schema');
 
 await verifyT1BudgetAndMetadata();
+await verifyT2AcquisitionAndParsers();
 
 console.log(
-  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2-T6=blocked',
+  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3-T6=blocked',
 );
 
 function budgetVector(currencyUsd: number): P9BudgetVector {
@@ -387,4 +410,200 @@ async function verifyT1BudgetAndMetadata(): Promise<void> {
       complete.missingSourceClasses.includes('security_audit'),
     'T1 terminal retrieval residue distinguishes acquisition from coverage gaps',
   );
+}
+
+async function verifyT2AcquisitionAndParsers(): Promise<void> {
+  const publicAddress = '93.184.216.34';
+  const now = () => new Date('2026-07-15T03:30:00.000Z');
+  const encoder = new TextEncoder();
+  const response = (
+    input: SourceTransportRequest,
+    options: {
+      status?: number;
+      headers?: Readonly<Record<string, string>>;
+      connectedAddress?: string;
+    } = {},
+  ): TransportResponse => ({
+    status: options.status ?? 200,
+    headers: { 'content-type': 'text/plain', ...options.headers },
+    body: encoder.encode('evidence'),
+    connectedAddress: options.connectedAddress ?? input.approvedAddress,
+  });
+  const transport = (
+    handler: (input: SourceTransportRequest) => TransportResponse,
+  ): SourceTransport => ({
+    request: (input) => Promise.resolve(handler(input)),
+  });
+
+  for (const url of [
+    'https://127.0.0.1/secret',
+    'https://2130706433/secret',
+    'https://0x7f000001/secret',
+  ]) {
+    let connected = false;
+    try {
+      await retrieveSource(
+        { url },
+        {
+          resolveHost: () => Promise.resolve(['127.0.0.1']),
+          transport: transport((input) => {
+            connected = true;
+            return response(input);
+          }),
+        },
+      );
+      throw new Error('obfuscated loopback unexpectedly connected');
+    } catch (error: unknown) {
+      invariant(
+        error instanceof AcquisitionFailure && !connected,
+        'T2 obfuscated loopback is blocked before connect',
+      );
+    }
+  }
+
+  let mappedConnected = false;
+  try {
+    await retrieveSource(
+      { url: 'https://mapped.example/secret' },
+      {
+        resolveHost: () => Promise.resolve(['::ffff:127.0.0.1']),
+        transport: transport((input) => {
+          mappedConnected = true;
+          return response(input);
+        }),
+      },
+    );
+    throw new Error('mapped private address unexpectedly connected');
+  } catch (error: unknown) {
+    invariant(
+      error instanceof AcquisitionFailure && !mappedConnected,
+      'T2 IPv6-mapped private address is blocked before connect',
+    );
+  }
+
+  let resolutions = 0;
+  try {
+    await retrieveSource(
+      { url: 'https://example.com/start' },
+      {
+        resolveHost: () =>
+          Promise.resolve([resolutions++ === 0 ? publicAddress : '8.8.8.8']),
+        transport: transport((input) =>
+          response(input, { status: 302, headers: { location: '/finish' } }),
+        ),
+        now,
+      },
+    );
+    throw new Error('DNS answer change unexpectedly accepted');
+  } catch (error: unknown) {
+    invariant(
+      error instanceof AcquisitionFailure &&
+        error.code === 'DNS_ANSWER_CHANGED' &&
+        error.networkReceipts.length === 1,
+      'T2 DNS rebinding is blocked with redirect residue',
+    );
+  }
+
+  try {
+    await retrieveSource(
+      { url: 'https://public.example/start' },
+      {
+        resolveHost: (hostname) =>
+          Promise.resolve(
+            hostname === 'public.example' ? [publicAddress] : ['10.0.0.2'],
+          ),
+        transport: transport((input) =>
+          response(input, {
+            status: 302,
+            headers: { location: 'https://private.example/secret' },
+          }),
+        ),
+        now,
+      },
+    );
+    throw new Error('public-to-private redirect unexpectedly accepted');
+  } catch (error: unknown) {
+    invariant(
+      error instanceof AcquisitionFailure &&
+        error.code === 'REDIRECT_ORIGIN_NOT_ALLOWED' &&
+        error.networkReceipts.length === 1,
+      'T2 public-to-private redirect is blocked with chain retained',
+    );
+  }
+
+  const server = createServer((request, outgoing) => {
+    outgoing.writeHead(200, { 'content-type': 'text/plain' });
+    outgoing.end(
+      request.headers.host?.startsWith('source.invalid') ? 'direct' : 'bad',
+    );
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const port = (server.address() as AddressInfo).port;
+  const previousProxy = process.env.HTTPS_PROXY;
+  process.env.HTTPS_PROXY = 'http://127.0.0.1:1';
+  try {
+    const direct = await new NodePinnedSourceTransport().request({
+      url: new URL(`http://source.invalid:${String(port)}/evidence`),
+      approvedAddress: '127.0.0.1',
+      headers: {},
+      signal: new AbortController().signal,
+      maximumResponseBytes: 100,
+    });
+    invariant(
+      new TextDecoder().decode(direct.body) === 'direct' &&
+        direct.connectedAddress === '127.0.0.1',
+      'T2 pinned transport ignores ambient proxy routing',
+    );
+  } finally {
+    if (previousProxy === undefined) delete process.env.HTTPS_PROXY;
+    else process.env.HTTPS_PROXY = previousProxy;
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+  }
+
+  const registry = new BoundedParserRegistry();
+  for (const bytes of [
+    encoder.encode('%PDF-1.7\nencrypted'),
+    Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 1, 2]),
+  ]) {
+    try {
+      registry.parse(bytes, 'text/plain', { now });
+      throw new Error('binary bytes unexpectedly decoded as text');
+    } catch (error: unknown) {
+      invariant(
+        error instanceof ParserPolicyError &&
+          error.code === 'PARSER_MEDIA_TYPE_CONFLICT',
+        'T2 binary or PDF bytes cannot enter the text parser',
+      );
+    }
+  }
+  try {
+    registry.parse(encoder.encode('%PDF-1.7\nmalformed'), 'application/pdf', {
+      now,
+    });
+    throw new Error('unsupported PDF unexpectedly parsed');
+  } catch (error: unknown) {
+    invariant(
+      error instanceof ParserPolicyError &&
+        error.code === 'PARSER_UNSUPPORTED_PDF' &&
+        error.decision.reasonCode === 'pdf_explicitly_unsupported',
+      'T2 unsupported PDF has an explicit media decision',
+    );
+  }
+  try {
+    registry.parse(encoder.encode('{not-json'), 'application/json', { now });
+    throw new Error('malformed JSON unexpectedly parsed');
+  } catch (error: unknown) {
+    invariant(
+      error instanceof ParserPolicyError &&
+        error.receipt?.status === 'failed' &&
+        error.receipt.failureCode === 'parser_malformed_input',
+      'T2 malformed parser input retains typed failure receipt',
+    );
+  }
 }
