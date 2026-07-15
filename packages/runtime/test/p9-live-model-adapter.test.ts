@@ -39,7 +39,9 @@ describe('OpenAI-compatible P9 live model adapter', () => {
       if (typeof init?.body !== 'string') {
         throw new Error('expected a serialized JSON request body');
       }
-      requestUrls.push(String(url));
+      requestUrls.push(
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url,
+      );
       requests.push(JSON.parse(init.body) as Record<string, unknown>);
       const content = responses.shift();
       return Promise.resolve(
