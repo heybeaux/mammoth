@@ -48,6 +48,7 @@ import {
   type SourceTransportRequest,
   type TransportResponse,
 } from '../packages/retrieval/src/index.js';
+import { runP9PlanDrivenResearch } from '../packages/runtime/src/index.js';
 
 const root = resolve(import.meta.dirname, '..');
 const fixtureRoot = join(root, 'evals/fixtures/p9');
@@ -1364,11 +1365,161 @@ async function verifyT4QuestionDerivedPlanning(): Promise<void> {
   );
 }
 
+async function verifyT5GenericExecution(): Promise<void> {
+  const now = '2026-07-15T06:00:00.000Z';
+  const thresholdsFixture = await json('thresholds.json');
+  const planning = thresholdsFixture.planning as Record<string, number>;
+  const reportThresholds = thresholdsFixture.report as Record<string, number>;
+  const budgetLimits = thresholdsFixture.budget as Record<string, number>;
+  const acceptanceThresholds: PlanAcceptanceThresholds = {
+    minSubquestions: fixtureNumber(
+      planning,
+      'minSubquestions',
+      'T5 minSubquestions threshold',
+    ),
+    minSourceClasses: fixtureNumber(
+      planning,
+      'minSourceClasses',
+      'T5 minSourceClasses threshold',
+    ),
+    minContradictionRequirements: fixtureNumber(
+      planning,
+      'minContradictionRequirements',
+      'T5 minContradictionRequirements threshold',
+    ),
+    maxAuthorizedUsd: fixtureNumber(
+      budgetLimits,
+      'maxAuthorizedUsd',
+      'T5 maxAuthorizedUsd threshold',
+    ),
+    minQuestionDerivedTerms: 4,
+  };
+  const coverageThresholds = {
+    minAdmittedClaims: fixtureNumber(
+      reportThresholds,
+      'minAdmittedClaims',
+      'T5 minAdmittedClaims threshold',
+    ),
+    minCriticalClaims: fixtureNumber(
+      reportThresholds,
+      'minCriticalClaims',
+      'T5 minCriticalClaims threshold',
+    ),
+    minIndependentFamiliesPerCriticalClaim: fixtureNumber(
+      reportThresholds,
+      'minIndependentFamiliesPerCriticalClaim',
+      'T5 critical independence threshold',
+    ),
+    minMandatorySourceClassCoverageRatio: fixtureNumber(
+      reportThresholds,
+      'minRequiredSourceClassCoverageRatio',
+      'T5 source-class ratio threshold',
+    ),
+  };
+  const technicalFixture = await json('plans/technical-colibri.json');
+  const proposal = planProposalFromFixture(technicalFixture, {
+    proposalId: 'proposal-technical-t5-offline',
+  });
+  const accepted = acceptResearchPlan({
+    proposal,
+    thresholds: acceptanceThresholds,
+    decidedAt: now,
+    actorId: 'p9-t5-verifier',
+  });
+  invariant(
+    accepted.receipt.decision === 'accepted' && accepted.plan !== null,
+    'T5 technical plan accepted before execution',
+  );
+  const pack = P9_DOMAIN_POLICY_PACKS[accepted.plan.domainPackId];
+  const corpus = await json('report-corpus/technical-colibri-corpus.json');
+  const run = runP9PlanDrivenResearch({
+    planProposal: proposal,
+    plan: accepted.plan,
+    acceptanceReceipt: accepted.receipt,
+    pack,
+    corpus,
+    thresholds: coverageThresholds,
+    executionId: 'p9-t5-offline-technical-colibri',
+    now,
+  });
+  const reportFixture = await json('non-data-center-report.json');
+  const requiredSections = new Set(
+    (reportFixture.requiredSections as readonly string[]).map(String),
+  );
+  invariant(
+    run.assessment.verdict === 'covered' &&
+      run.receipt.coverageVerdict === 'covered' &&
+      run.receipt.counts.admittedClaims >=
+        coverageThresholds.minAdmittedClaims &&
+      run.receipt.counts.criticalClaims >= coverageThresholds.minCriticalClaims,
+    'T5 unrelated offline report passes plan-relative coverage',
+  );
+  invariant(
+    run.manifest.sections.every((section) =>
+      requiredSections.has(section.sectionId),
+    ) && requiredSections.size === run.manifest.sections.length,
+    'T5 offline report emits the frozen required section set',
+  );
+  invariant(
+    run.receipt.typedResidue.retrieval_failures.length ===
+      Number(
+        (reportFixture.seededOutcomes as Record<string, unknown>)
+          .retrievalResidue,
+      ) &&
+      run.receipt.typedResidue.rejected_claims.length ===
+        Number(
+          (reportFixture.seededOutcomes as Record<string, unknown>)
+            .rejectedClaims,
+        ) &&
+      run.receipt.typedResidue.parser_failures.length === 1 &&
+      run.parserReceipts.some(
+        (receipt) =>
+          receipt.status === 'failed' &&
+          receipt.failureCode === 'parser_output_invalid',
+      ) &&
+      run.receipt.typedResidue.unknown_costs.length === 1,
+    'T5 unrelated report preserves retrieval, rejection, and unknown-cost residue',
+  );
+  invariant(
+    run.receipt.budget.spentConservativeUnknownUsd > 0 &&
+      run.receipt.budget.withinAuthorization,
+    'T5 offline execution keeps unknown cost conservative and inside budget',
+  );
+  invariant(
+    run.report.includes('claim-resident-memory') &&
+      run.report.includes('references and provenance') &&
+      !run.report.toLowerCase().includes('data center'),
+    'T5 unrelated report is admitted-claim grounded and free of data-center template leakage',
+  );
+
+  const canned = runP9PlanDrivenResearch({
+    planProposal: proposal,
+    plan: accepted.plan,
+    acceptanceReceipt: accepted.receipt,
+    pack,
+    corpus: await json('report-corpus/canned-dense-data-center.json'),
+    thresholds: coverageThresholds,
+    executionId: 'p9-t5-canned-negative',
+    now,
+  });
+  invariant(
+    canned.assessment.verdict === 'insufficient' &&
+      canned.assessment.gaps.some((gap) =>
+        gap.startsWith('coverage_unsupported:'),
+      ) &&
+      canned.assessment.gaps.some((gap) =>
+        gap.startsWith('forbidden_vocabulary:'),
+      ),
+    'T5 canned dense irrelevant report fails plan coverage and forbidden vocabulary',
+  );
+}
+
 await verifyT1BudgetAndMetadata();
 await verifyT2AcquisitionAndParsers();
 verifyT3IndependentEntailment();
 await verifyT4QuestionDerivedPlanning();
+await verifyT5GenericExecution();
 
 console.log(
-  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5-T6=blocked',
+  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5 generic_execution=pass; T6=blocked',
 );

@@ -1,0 +1,214 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p9.v1",
+  "corpusId": "canned-dense-data-center/v1",
+  "planFixture": "plans/technical-colibri.json",
+  "corpusPolicy": "Canned dense data-center prose. Every claim passes entailment against its quote, yet none answers the accepted plan. It must fail plan-relative coverage.",
+  "sources": [
+    {
+      "candidateId": "cand-canned-news",
+      "sourceClass": "secondary_reporting",
+      "sourceFamilyId": "family-canned-news",
+      "url": "https://fixtures.mammoth.invalid/canned/regional-news.html",
+      "mediaType": "text/plain",
+      "outcome": "admitted",
+      "publishedAt": null,
+      "body": "Regional reporting (synthetic fixture). Hyperscale data centers consume large volumes of municipal water for evaporative cooling. Data center electricity demand can strain regional grids during summer peaks. Communities near data centers report constant low-frequency noise from cooling fans. Tax abatements for data center campuses reduce county revenue for a decade."
+    },
+    {
+      "candidateId": "cand-canned-brochure",
+      "sourceClass": "industry_marketing",
+      "sourceFamilyId": "family-canned-vendor",
+      "url": "https://fixtures.mammoth.invalid/canned/operator-brochure.html",
+      "mediaType": "text/plain",
+      "outcome": "admitted",
+      "publishedAt": null,
+      "body": "Operator brochure (synthetic fixture). Data centers create few permanent jobs relative to their land footprint. Diesel backup generators at data centers emit particulates during testing. Water usage by data centers is often reported only in aggregate by operators. Grid operators warn that data center interconnection queues are growing."
+    },
+    {
+      "candidateId": "cand-canned-blog",
+      "sourceClass": "general_web",
+      "sourceFamilyId": "family-canned-blog",
+      "url": "https://fixtures.mammoth.invalid/canned/community-blog.html",
+      "mediaType": "text/plain",
+      "outcome": "admitted",
+      "publishedAt": null,
+      "body": "Community blog (synthetic fixture). Data center construction raises local wages temporarily during the build phase. Data center campuses can raise land prices near residential neighborhoods. Cooling towers at data centers rely on evaporative water loss in dry climates. Data center noise complaints have prompted new municipal zoning rules."
+    }
+  ],
+  "claims": [
+    {
+      "claimId": "claim-canned-water",
+      "candidateId": "cand-canned-news",
+      "subquestionIds": ["sq-1"],
+      "claimGroupId": "group-canned-water",
+      "critical": false,
+      "sectionId": "executive_summary",
+      "quote": "Hyperscale data centers consume large volumes of municipal water for evaporative cooling.",
+      "statement": "Hyperscale data centers consume large volumes of municipal water for evaporative cooling.",
+      "evaluatorVerdict": "entailed",
+      "contradictionIds": [],
+      "rejectionSeed": null
+    },
+    {
+      "claimId": "claim-canned-electricity",
+      "candidateId": "cand-canned-news",
+      "subquestionIds": ["sq-1"],
+      "claimGroupId": "group-canned-electricity",
+      "critical": false,
+      "sectionId": "system_model",
+      "quote": "Data center electricity demand can strain regional grids during summer peaks.",
+      "statement": "Data center electricity demand can strain regional grids during summer peaks.",
+      "evaluatorVerdict": "entailed",
+      "contradictionIds": [],
+      "rejectionSeed": null
+    },
+    {
+      "claimId": "claim-canned-noise",
+      "candidateId": "cand-canned-news",
+      "subquestionIds": ["sq-1"],
+      "claimGroupId": "group-canned-noise",
+      "critical": false,
+      "sectionId": "system_model",
+      "quote": "Communities near data centers report constant low-frequency noise from cooling fans.",
+      "statement": "Communities near data centers report constant low-frequency noise from cooling fans.",
+      "evaluatorVerdict": "entailed",
+      "contradictionIds": [],
+      "rejectionSeed": null
+    },
+    {
+      "claimId": "claim-canned-tax",
+      "candidateId": "cand-canned-news",
+      "subquestionIds": ["sq-2"],
+      "claimGroupId": "group-canned-tax",
+      "critical": false,
+      "sectionId": "evidence",
+      "quote": "Tax abatements for data center campuses reduce county revenue for a decade.",
+      "statement": "Tax abatements for data center campuses reduce county revenue for a decade.",
+      "evaluatorVerdict": "entailed",
+      "contradictionIds": [],
+      "rejectionSeed": null
+    },
+    {
+      "claimId": "claim-canned-jobs",
+      "candidateId": "cand-canned-brochure",
+      "subquestionIds": ["sq-2"],
+      "claimGroupId": "group-canned-jobs",
+      "critical": false,
+      "sectionId": "evidence",
+      "quote": "Data centers create few permanent jobs relative to their land footprint.",
+      "statement": "Data centers create few permanent jobs relative to their land footprint.",
+      "evaluatorVerdict": "entailed",
+      "contradictionIds": [],
+      "rejectionSeed": null
+    },
+    {
+      "claimId": "claim-canned-diesel",
+      "candidateId": "cand-canned-brochure",
+      "subquestionIds": ["sq-2"],
+      "claimGroupId": "group-canned-diesel",
+      "critical": false,
+      "sectionId": "bottlenecks",
+      "quote": "Diesel backup generators at data centers emit particulates during testing.",
+      "statement": "Diesel backup generators at data centers emit particulates during testing.",
+      "evaluatorVerdict": "entailed",
+      "contradictionIds": [],
+      "rejectionSeed": null
+    },
+    {
+      "claimId": "claim-canned-aggregate",
+      "candidateId": "cand-canned-brochure",
+      "subquestionIds": ["sq-3"],
+      "claimGroupId": "group-canned-aggregate",
+      "critical": false,
+      "sectionId": "bottlenecks",
+      "quote": "Water usage by data centers is often reported only in aggregate by operators.",
+      "statement": "Water usage by data centers is often reported only in aggregate by operators.",
+      "evaluatorVerdict": "entailed",
+      "contradictionIds": [],
+      "rejectionSeed": null
+    },
+    {
+      "claimId": "claim-canned-queues",
+      "candidateId": "cand-canned-brochure",
+      "subquestionIds": ["sq-3"],
+      "claimGroupId": "group-canned-queues",
+      "critical": false,
+      "sectionId": "candidate_hypotheses",
+      "quote": "Grid operators warn that data center interconnection queues are growing.",
+      "statement": "Grid operators warn that data center interconnection queues are growing.",
+      "evaluatorVerdict": "entailed",
+      "contradictionIds": [],
+      "rejectionSeed": null
+    },
+    {
+      "claimId": "claim-canned-wages",
+      "candidateId": "cand-canned-blog",
+      "subquestionIds": ["sq-3"],
+      "claimGroupId": "group-canned-wages",
+      "critical": false,
+      "sectionId": "experiment_plan",
+      "quote": "Data center construction raises local wages temporarily during the build phase.",
+      "statement": "Data center construction raises local wages temporarily during the build phase.",
+      "evaluatorVerdict": "entailed",
+      "contradictionIds": [],
+      "rejectionSeed": null
+    },
+    {
+      "claimId": "claim-canned-land",
+      "candidateId": "cand-canned-blog",
+      "subquestionIds": ["sq-4"],
+      "claimGroupId": "group-canned-land",
+      "critical": false,
+      "sectionId": "security_and_risks",
+      "quote": "Data center campuses can raise land prices near residential neighborhoods.",
+      "statement": "Data center campuses can raise land prices near residential neighborhoods.",
+      "evaluatorVerdict": "entailed",
+      "contradictionIds": [],
+      "rejectionSeed": null
+    },
+    {
+      "claimId": "claim-canned-cooling",
+      "candidateId": "cand-canned-blog",
+      "subquestionIds": ["sq-5"],
+      "claimGroupId": "group-canned-cooling",
+      "critical": false,
+      "sectionId": "uncertainties",
+      "quote": "Cooling towers at data centers rely on evaporative water loss in dry climates.",
+      "statement": "Cooling towers at data centers rely on evaporative water loss in dry climates.",
+      "evaluatorVerdict": "entailed",
+      "contradictionIds": [],
+      "rejectionSeed": null
+    },
+    {
+      "claimId": "claim-canned-zoning",
+      "candidateId": "cand-canned-blog",
+      "subquestionIds": ["sq-5"],
+      "claimGroupId": "group-canned-zoning",
+      "critical": false,
+      "sectionId": "recommendation",
+      "quote": "Data center noise complaints have prompted new municipal zoning rules.",
+      "statement": "Data center noise complaints have prompted new municipal zoning rules.",
+      "evaluatorVerdict": "entailed",
+      "contradictionIds": [],
+      "rejectionSeed": null
+    }
+  ],
+  "stopCriterionBases": [
+    {
+      "stopId": "all_subquestions_accounted",
+      "basis": "subquestions_accounted"
+    },
+    {
+      "stopId": "two_independent_families_for_critical_claims",
+      "basis": "critical_corroboration"
+    },
+    {
+      "stopId": "leading_hypothesis_has_falsification_test",
+      "basis": "section_admitted_claims",
+      "sectionId": "experiment_plan"
+    },
+    { "stopId": "budget_exhausted_honestly", "basis": "budget_terminal" }
+  ],
+  "unknownCostCandidateId": null
+}

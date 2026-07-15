@@ -19,7 +19,8 @@
     "@mammoth/report-compiler": "workspace:*",
     "@mammoth/retrieval": "workspace:*",
     "@mammoth/work-queue": "workspace:*",
-    "@mammoth/workflow": "workspace:*"
+    "@mammoth/workflow": "workspace:*",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
