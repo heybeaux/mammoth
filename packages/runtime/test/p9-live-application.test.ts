@@ -12,6 +12,7 @@ import {
   P9_LIVE_EXHIBITION_QUESTION,
   P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
   BraveP9LiveSearchAdapter,
+  boundedP9SentenceContext,
   buildAcceptedP9LivePlan,
   resealP9LiveArtifacts,
   runP9LiveApplication,
@@ -424,6 +425,13 @@ function records(journal: MemoryP9DurableJournalStore): JournalRecord[] {
 }
 
 describe('P9 live application', () => {
+  it('stops bounded context at punctuation selected by the quote', () => {
+    const body = 'First sentence. Second sentence.';
+    const quote = 'First sentence.';
+
+    expect(boundedP9SentenceContext(body, 0, quote.length)).toBe(quote);
+  });
+
   it('serializes concurrent Brave fetch starts across a rejected request', async () => {
     let monotonicMs = 10_000;
     const sleeps: number[] = [];
