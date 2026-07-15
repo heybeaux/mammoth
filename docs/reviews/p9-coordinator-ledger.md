@@ -295,10 +295,13 @@ handoff, integration commit, blockers, and replacement audit.
   `T5 generic_execution=pass`.
 - Runtime identity: Scout OpenClaw subagent session
   `agent:scout:subagent:acb0ab44-1153-4ce8-86b3-131f2c9b23d5`; requester
-  session `agent:scout:telegram:direct:8274834197`; resolved model identity is
-  not exposed to the repository runtime. This retry inspected the prior dirty
-  `/private/tmp/mammoth-p9-t5-generic` worktree and preserved useful partial
-  artifacts into a fresh worktree before editing.
+  session `agent:scout:telegram:direct:8274834197`; initial coordinator run
+  `570424fd-2fe3-4686-ad56-3c00cf4db71c`; review-remediation restart run
+  `e73860fa-989a-4999-b5ea-52801a195193`; recorded model
+  `openai-codex/gpt-5.5`. The focused review-fix worker was Codex-native task
+  `/root/p9_t5_review_fix`; its runtime exposes no separate stable run or
+  resolved model identifier, so none is asserted. Exact source and runtime
+  evidence is frozen in `docs/reviews/p9-t5-remediation-evidence.md`.
 - Worktree/branch/base: `/private/tmp/mammoth-p9-t5-generic-retry`;
   `feat/p9-t5-generic-execution-retry`; exact `origin/main`
   `ff034823cc460d774642dbe9144c5ecd0ace35d5`.
@@ -333,20 +336,32 @@ handoff, integration commit, blockers, and replacement audit.
   `29428355569` passed every lane and the aggregate check at
   `9448ce70ff86661c929c8d514a560b0fd331de0d`. Merged-main CI remains to be run
   after merge.
+- Review-remediation claim `P9-T5-REMEDIATION-001`: commits
+  `e679d129ead3459166ec9c2e58fcab43cccb6508`, `0c18531`, and
+  `a5bf21cf9a16b4db82af8474e49c64dcebe3fc0e` reconcile all 16 actionable
+  findings in code and executable tests. At candidate `a5bf21c`, fail-fast
+  local format, lint, typecheck, full tests, build, `verify:p8`, and
+  `verify:p9` all passed. Exact source-comment digests, finding-to-test mapping,
+  command-result digests, and remaining external gates are recorded in
+  `docs/reviews/p9-t5-remediation-evidence.md`. This is attributable local
+  evidence, not independent review approval or exact-head CI.
 - Reviewer: PR #68. CodeRabbit posted 16 actionable inline findings against
-  `50596212634ecfbd7eabb3d0ce01c763e8dece1c`; no PASS claim, merge decision,
-  or T5 acceptance evidence is valid until every finding is reconciled at a new
-  exact head, command-result artifacts are recorded, and CI/review evidence is
-  refreshed. The prior rate-limit summary is not an independent approval.
+  `50596212634ecfbd7eabb3d0ce01c763e8dece1c`. All 16 now have code and
+  executable-evidence reconciliation under `P9-T5-REMEDIATION-001`, but the
+  remote threads and original review do not become an independent PASS by
+  implication. A fresh review and exact-head CI are still required after push.
+  The prior rate-limit summary is not an independent approval.
 - Registry/artifact proof: fresh worktree from exact origin/main, frozen install,
   inspected prior dirty T5 worktree, attributable diff, focused tests, and
   verifier output.
-- Handoff/integration: pending review remediation and fresh exact-head evidence.
-- Blockers: CodeRabbit findings `3588636058`, `3588636066`, `3588636100`,
-  `3588636106`, `3588636113`, `3588636118`, `3588636125`, `3588636132`,
-  `3588636140`, `3588636152`, `3588636158`, `3588636167`, `3588636176`,
-  `3588636181`, `3588636186`, and `3588636196` must be individually resolved
-  with code or evidence before merge.
+- Handoff/integration: push the local remediation commits; request fresh
+  independent review; require exact-head PR CI and detached clean-checkout
+  verification before merge; require fresh default-branch CI after merge.
+- Blockers: no known unreconciled local code finding. External blockers are the
+  unpushed exact head, fresh independent review/thread disposition, exact-head
+  PR CI, and detached clean-checkout verification. The 16 original findings and
+  their immutable body digests remain individually enumerated in
+  `docs/reviews/p9-t5-remediation-evidence.md` for auditability.
 - Replacement audit: previous model attempt failed/timed out after creating a
   dirty `/private/tmp/mammoth-p9-t5-generic` worktree with partial T5 files. This
   retry did not reuse that branch/worktree, copied only useful uncommitted
