@@ -451,6 +451,12 @@ handoff, integration commit, blockers, and replacement audit.
   `a59be64` for P8/P9 routing ambiguity, an unconstrained injectable live
   callback, incomplete accepted-plan cross-binding, rejected-revision overwrite,
   symlink-unsafe bundle writes, and overstated documentation.
+- Review continuation: independent re-review of remediation head `d825e55` found
+  one remaining blocker: exact-bundle inspection duplicated weaker plan checks
+  instead of invoking the authoritative accepted-plan-chain validator, allowing
+  jointly forged and fully resealed plan/receipt acceptance-policy IDs. The
+  verifier now invokes the shared validator with the authoritative domain pack,
+  and `verify:p9` includes the fully resealed downstream-digest attack.
 - Remediation evidence: format check, lint, workspace typecheck, all 30 CLI tests,
   workspace build, `verify:p8`, and `verify:p9` pass. Focused adversarial tests
   cover P8 black-box routing, absent live callback authority, resealed plan-chain

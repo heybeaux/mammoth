@@ -1994,6 +1994,92 @@ async function verifyT5GenericExecution(): Promise<void> {
     alteredPlanRejected,
     'T5 exact-bundle verifier rejects a fully resealed plan outside its accepted proposal content',
   );
+
+  const forgedAcceptancePolicy = { ...run.artifacts } as Record<string, string>;
+  const forgedPolicyPlan = JSON.parse(
+    forgedAcceptancePolicy['research-plan.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  forgedPolicyPlan.acceptancePolicyId = 'p9-plan-acceptance/forged';
+  const forgedPolicyPlanIdentity = { ...forgedPolicyPlan };
+  delete forgedPolicyPlanIdentity.planDigest;
+  forgedPolicyPlan.planDigest = canonicalDigest(forgedPolicyPlanIdentity);
+  forgedAcceptancePolicy['research-plan.json'] = JSON.stringify(
+    forgedPolicyPlan,
+    null,
+    2,
+  );
+  const forgedPolicyAcceptance = JSON.parse(
+    forgedAcceptancePolicy['plan-acceptance-receipt.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  forgedPolicyAcceptance.acceptancePolicyId = 'p9-plan-acceptance/forged';
+  forgedPolicyAcceptance.planDigest = forgedPolicyPlan.planDigest;
+  const forgedPolicyAcceptanceIdentity = { ...forgedPolicyAcceptance };
+  delete forgedPolicyAcceptanceIdentity.receiptDigest;
+  forgedPolicyAcceptance.receiptDigest = canonicalDigest(
+    forgedPolicyAcceptanceIdentity,
+  );
+  forgedAcceptancePolicy['plan-acceptance-receipt.json'] = JSON.stringify(
+    forgedPolicyAcceptance,
+    null,
+    2,
+  );
+  const forgedPolicyAssessment = JSON.parse(
+    forgedAcceptancePolicy['plan-coverage-assessment.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  forgedPolicyAssessment.planDigest = forgedPolicyPlan.planDigest;
+  const forgedPolicyAssessmentIdentity = { ...forgedPolicyAssessment };
+  delete forgedPolicyAssessmentIdentity.assessmentDigest;
+  forgedPolicyAssessment.assessmentDigest = canonicalDigest(
+    forgedPolicyAssessmentIdentity,
+  );
+  forgedAcceptancePolicy['plan-coverage-assessment.json'] = JSON.stringify(
+    forgedPolicyAssessment,
+    null,
+    2,
+  );
+  const forgedPolicyManifest = JSON.parse(
+    forgedAcceptancePolicy['report-manifest.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  forgedPolicyManifest.planDigest = forgedPolicyPlan.planDigest;
+  forgedPolicyManifest.coverageAssessmentDigest =
+    forgedPolicyAssessment.assessmentDigest;
+  const forgedPolicyManifestIdentity = { ...forgedPolicyManifest };
+  delete forgedPolicyManifestIdentity.manifestDigest;
+  forgedPolicyManifest.manifestDigest = canonicalDigest(
+    forgedPolicyManifestIdentity,
+  );
+  forgedAcceptancePolicy['report-manifest.json'] = JSON.stringify(
+    forgedPolicyManifest,
+    null,
+    2,
+  );
+  forgedAcceptancePolicy['report.md'] = (
+    forgedAcceptancePolicy['report.md'] ?? ''
+  ).replace(accepted.plan.planDigest, String(forgedPolicyPlan.planDigest));
+  const forgedPolicyExecution = JSON.parse(
+    forgedAcceptancePolicy['execution-receipt.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  forgedPolicyExecution.planDigest = forgedPolicyPlan.planDigest;
+  forgedPolicyExecution.coverageAssessmentDigest =
+    forgedPolicyAssessment.assessmentDigest;
+  forgedAcceptancePolicy['execution-receipt.json'] = JSON.stringify(
+    forgedPolicyExecution,
+    null,
+    2,
+  );
+  resealP9Artifacts(forgedAcceptancePolicy);
+  let forgedAcceptancePolicyRejected = false;
+  try {
+    verifyP9ExactBundle(forgedAcceptancePolicy);
+  } catch (error) {
+    forgedAcceptancePolicyRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    forgedAcceptancePolicyRejected,
+    'T5 exact-bundle verifier rejects a fully resealed forged acceptance policy across plan, receipt, and downstream digests',
+  );
   const reportFixture = await json('non-data-center-report.json');
   const requiredSections = new Set(
     (reportFixture.requiredSections as readonly string[]).map(String),
