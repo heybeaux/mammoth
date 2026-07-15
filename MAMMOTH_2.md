@@ -20,6 +20,10 @@ It has two programs over one epistemic core:
    designs and executes bounded experiments, and returns solution candidates with
    measured evidence, uncertainty, and reproducible artifacts.
 
+`mammoth lab solve` is future P11/P12 scope. It is not implemented or released,
+and P9 does not authorize solver execution, repository mutation, or arbitrary
+tool use. P9 may define forward-compatible vocabulary only.
+
 Mammoth is not a generic autonomous coding agent. Models propose plans,
 hypotheses, experiments, patches, proofs, and interpretations. Deterministic
 services validate contracts, enforce authority and budgets, execute tools inside
@@ -85,6 +89,10 @@ The verifier evaluates the accepted plan and its resulting bundle. It does not
 look for vocabulary from one hard-coded domain.
 
 ## `lab solve`
+
+This section defines the future P11/P12 lifecycle. It is not an executable P9
+contract: P9 permits no solver execution, repository mutation, package-manager,
+compiler, shell, GPU, or code-running authority.
 
 The solver program accepts a `ProblemContract` containing:
 

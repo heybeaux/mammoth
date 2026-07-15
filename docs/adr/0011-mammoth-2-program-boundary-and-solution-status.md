@@ -61,6 +61,10 @@ The closed solution states are:
 Promotion requires a named deterministic policy over admitted evidence and exact
 experiment/formal-verification receipts. Model agreement, self-review, prose,
 confidence, test count, or benchmark improvement alone cannot promote status.
+Every promotion record includes `policyId` and `policyVersion`, plus the exact
+`receiptId`, `verifierId`, and `verifierVersion` where applicable. These
+identifiers bind the transition to the policy and verifier that authorized it so
+later policy or verifier changes cannot reinterpret an existing status.
 
 Proxy evidence records why it is a proxy and which target validation remains.
 Mathematical formal verification records exact checker, version, imports, axioms,

@@ -345,11 +345,13 @@ a compatibility facade during migration and cannot remain the policy owner.
 
 ### T0 — entry plan and acceptance baseline
 
-Merge this plan, `MAMMOTH_2.md`, ADR 0011, active loop/ledger, and reconciled
-roadmap. Then merge a distinct acceptance-baseline PR with the four plan fixtures,
-one non-data-center report fixture, hostile cases, thresholds, expected artifacts,
-rubric, receipt schema, and a visible `verify:p9` skeleton that fails until each
-required implementation gate exists.
+Merge this plan, `MAMMOTH_2.md`, ADR 0011, `AGENTS.md`, `LOOP.md`,
+`docs/reviews/p9-coordinator-ledger.md`, and the reconciled roadmap. Those
+governance artifacts are part of the entry-plan gate and must remain merged and
+consistent before any lane setup. Then merge a distinct acceptance-baseline PR
+with the four plan fixtures, one non-data-center report fixture, hostile cases,
+thresholds, expected artifacts, rubric, receipt schema, and a visible
+`verify:p9` skeleton that fails until each required implementation gate exists.
 
 Gate: implementation cannot claim progress before the acceptance baseline is
 mechanically measurable.
