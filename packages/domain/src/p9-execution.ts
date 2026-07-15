@@ -382,7 +382,25 @@ export const P9ExecutionCountsSchema = z
     criticalClaims: NonNegativeIntegerSchema,
     factualSentences: NonNegativeIntegerSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((counts, context) => {
+    if (
+      counts.claimProposals !==
+      counts.admittedClaims + counts.rejectedClaims + counts.contradictedClaims
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'claim proposals must equal admitted, rejected, and contradicted claims',
+      });
+    }
+    if (counts.criticalClaims > counts.admittedClaims) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'critical claims cannot exceed admitted claims',
+      });
+    }
+  });
 export type P9ExecutionCounts = z.infer<typeof P9ExecutionCountsSchema>;
 
 export const P9_REQUIRED_EXECUTION_ARTIFACTS = [
@@ -440,14 +458,28 @@ export const P9ExecutionReceiptSchema = z
         message: 'typed residue must match the declared execution counts',
       });
     }
+    const unknownReservationIds = new Set(
+      receipt.budget.unknownCostReservationIds,
+    );
+    const unknownResidueIds = new Set(residue.unknown_costs);
     if (
-      receipt.budget.unknownCostReservationIds.length !==
-      residue.unknown_costs.length
+      unknownReservationIds.size !==
+        receipt.budget.unknownCostReservationIds.length ||
+      unknownResidueIds.size !== residue.unknown_costs.length ||
+      unknownReservationIds.size !== unknownResidueIds.size ||
+      [...unknownReservationIds].some((id) => !unknownResidueIds.has(id))
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['typedResidue', 'unknown_costs'],
         message: 'unknown cost residue must match unknown settlements',
+      });
+    }
+    if (Date.parse(receipt.finishedAt) < Date.parse(receipt.startedAt)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['finishedAt'],
+        message: 'execution cannot finish before it starts',
       });
     }
     if (

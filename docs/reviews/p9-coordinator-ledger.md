@@ -318,7 +318,8 @@ handoff, integration commit, blockers, and replacement audit.
   full tests; build; `pnpm verify:p8`; `pnpm verify:p9`; detached clean-checkout
   frozen install and repeat before merge recommendation; exact-head PR CI and
   merged-main CI.
-- Current local results: `pnpm --filter @mammoth/domain test` PASS (56);
+- Prior local results (candidate `9448ce70ff86661c929c8d514a560b0fd331de0d`,
+  before the current CodeRabbit review): `pnpm --filter @mammoth/domain test` PASS (56);
   `pnpm --filter @mammoth/governance test` PASS (40);
   `pnpm --filter @mammoth/runtime test` PASS (51); `pnpm format:check` PASS;
   `pnpm lint` PASS; `pnpm typecheck` PASS; full `pnpm test` PASS; `pnpm build`
@@ -332,13 +333,20 @@ handoff, integration commit, blockers, and replacement audit.
   `29428355569` passed every lane and the aggregate check at
   `9448ce70ff86661c929c8d514a560b0fd331de0d`. Merged-main CI remains to be run
   after merge.
-- Reviewer: PR #68. CodeRabbit completed with pass and no line findings at the
-  exact PR head.
+- Reviewer: PR #68. CodeRabbit posted 16 actionable inline findings against
+  `50596212634ecfbd7eabb3d0ce01c763e8dece1c`; no PASS claim, merge decision,
+  or T5 acceptance evidence is valid until every finding is reconciled at a new
+  exact head, command-result artifacts are recorded, and CI/review evidence is
+  refreshed. The prior rate-limit summary is not an independent approval.
 - Registry/artifact proof: fresh worktree from exact origin/main, frozen install,
   inspected prior dirty T5 worktree, attributable diff, focused tests, and
   verifier output.
-- Handoff/integration: pending.
-- Blockers: none for T5 implementation.
+- Handoff/integration: pending review remediation and fresh exact-head evidence.
+- Blockers: CodeRabbit findings `3588636058`, `3588636066`, `3588636100`,
+  `3588636106`, `3588636113`, `3588636118`, `3588636125`, `3588636132`,
+  `3588636140`, `3588636152`, `3588636158`, `3588636167`, `3588636176`,
+  `3588636181`, `3588636186`, and `3588636196` must be individually resolved
+  with code or evidence before merge.
 - Replacement audit: previous model attempt failed/timed out after creating a
   dirty `/private/tmp/mammoth-p9-t5-generic` worktree with partial T5 files. This
   retry did not reuse that branch/worktree, copied only useful uncommitted

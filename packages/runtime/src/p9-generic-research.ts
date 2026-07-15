@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import {
   canonicalDigest,
+  DomainPolicyPackSchema,
+  PlanAcceptanceReceiptSchema,
+  ResearchPlanProposalSchema,
+  ResearchPlanSchema,
   ParserReceiptSchema,
   P9ClaimProposalSchema,
   P9EntailmentVerdictSchema,
@@ -53,7 +57,7 @@ const DATE_POLICY_ID = 'p9-date-extraction/v1';
 const USER_AGENT = 'mammoth-research/0.9';
 const PARSER_ID = 'p9-fixture-text-parser';
 const PARSER_VERSION = '1.0.0';
-const COORDINATE_SPACE = 'utf8_char_offset';
+const COORDINATE_SPACE = 'utf16-code-units/v1';
 
 export class P9GenericResearchError extends Error {
   constructor(
@@ -227,6 +231,16 @@ export interface P9GenericResearchInput {
   readonly thresholds: PlanCoverageThresholds;
   readonly executionId: string;
   readonly now: string;
+}
+
+function containsHostileInstruction(value: string): boolean {
+  return /\b(ignore|disregard|override)\b.{0,80}\b(instruction|previous|policy|system)\b|\b(call|use|run)\b.{0,80}\b(tool|command|shell)\b|\b(approve|reveal|exfiltrate)\b.{0,80}\b(secret|claim|credential)\b/iu.test(
+    value,
+  );
+}
+
+function materialTerms(value: string): readonly string[] {
+  return value.toLowerCase().match(/[a-z][a-z0-9_-]{2,}/gu) ?? [];
 }
 
 export interface P9GenericResearchRun {
@@ -414,10 +428,34 @@ export function runP9PlanDrivenResearch(
   input: P9GenericResearchInput,
 ): P9GenericResearchRun {
   const corpus = P9OfflineCorpusSchema.parse(input.corpus);
-  const { plan, executionId, now } = input;
+  const planProposal = ResearchPlanProposalSchema.parse(input.planProposal);
+  const plan = ResearchPlanSchema.parse(input.plan);
+  const acceptanceReceipt = PlanAcceptanceReceiptSchema.parse(
+    input.acceptanceReceipt,
+  );
+  const pack = DomainPolicyPackSchema.parse(input.pack);
+  const { executionId, now } = input;
   if (
-    input.acceptanceReceipt.planDigest !== plan.planDigest ||
-    input.planProposal.proposalDigest !== plan.proposalDigest
+    !z.string().min(1).safeParse(executionId).success ||
+    !z.string().datetime().safeParse(now).success
+  ) {
+    throw new P9GenericResearchError(
+      'execution_input_invalid',
+      'execution identity and clock must be valid before budgeted work',
+    );
+  }
+  if (
+    acceptanceReceipt.decision !== 'accepted' ||
+    acceptanceReceipt.proposalId !== planProposal.proposalId ||
+    acceptanceReceipt.proposalDigest !== planProposal.proposalDigest ||
+    acceptanceReceipt.planId !== plan.planId ||
+    acceptanceReceipt.planDigest !== plan.planDigest ||
+    acceptanceReceipt.packId !== pack.packId ||
+    acceptanceReceipt.packDigest !== pack.packDigest ||
+    plan.proposalId !== planProposal.proposalId ||
+    plan.proposalDigest !== planProposal.proposalDigest ||
+    plan.domainPackId !== pack.packId ||
+    plan.packDigest !== pack.packDigest
   ) {
     throw new P9GenericResearchError(
       'plan_binding_mismatch',
@@ -724,8 +762,14 @@ export function runP9PlanDrivenResearch(
       locator,
       verdict: claim.evaluatorVerdict,
       semanticDeltas: [],
-      hostileInstructionDetected: false,
-      reasonCodes: ['fixture_deterministic_evaluation'],
+      hostileInstructionDetected: containsHostileInstruction(
+        `${claim.statement}\n${claim.quote}`,
+      ),
+      reasonCodes: containsHostileInstruction(
+        `${claim.statement}\n${claim.quote}`,
+      )
+        ? ['hostile_instruction_detected']
+        : ['fixture_deterministic_evaluation'],
       evaluatorWork: evaluatorWork(claim.claimId, claim.rejectionSeed),
       evaluatedAt: now,
     };
@@ -745,10 +789,17 @@ export function runP9PlanDrivenResearch(
       proposal,
       admission,
       subquestionIds: claim.subquestionIds,
-      sourceClass: source.sourceClass,
-      sourceFamilyId: source.sourceFamilyId,
       claimGroupId: claim.claimGroupId,
       contradictionIds: claim.contradictionIds,
+      evidence: (() => {
+        const identity = {
+          attemptId: attemptBySource.get(claim.candidateId)?.attemptId ?? '',
+          snapshotDigest: canonicalDigest(source.body),
+          sourceClass: source.sourceClass,
+          sourceFamilyId: source.sourceFamilyId,
+        };
+        return { ...identity, evidenceDigest: canonicalDigest(identity) };
+      })(),
     });
   }
 
@@ -789,16 +840,6 @@ export function runP9PlanDrivenResearch(
         claimIds: [claim.claimId],
       });
     }
-    for (const binding of contradicted) {
-      const claim = claimsById.get(binding.proposal.proposalId);
-      if (claim?.sectionId !== outline.sectionId) continue;
-      sentences.push({
-        sentenceId: `s:${outline.sectionId}:${claim.claimId}`,
-        kind: 'interpretive',
-        text: `Preserved contradiction (${claim.contradictionIds.join(', ')}): the proposed claim "${claim.statement}" was contradicted by independently quoted evidence.`,
-        claimIds: [],
-      });
-    }
     if (outline.sectionId === 'references_provenance') {
       for (const binding of admitted) {
         const attempt = attemptBySource.get(
@@ -807,9 +848,9 @@ export function runP9PlanDrivenResearch(
         if (!attempt) continue;
         sentences.push({
           sentenceId: `s:references:${binding.proposal.proposalId}`,
-          kind: 'interpretive',
-          text: `Claim ${binding.proposal.proposalId} is grounded in ${attempt.requestedUrl} (${binding.sourceClass}, family ${binding.sourceFamilyId}).`,
-          claimIds: [],
+          kind: 'factual',
+          text: `Claim ${binding.proposal.proposalId} is grounded in ${attempt.requestedUrl} (${binding.evidence.sourceClass}, family ${binding.evidence.sourceFamilyId}).`,
+          claimIds: [binding.proposal.proposalId],
         });
       }
     }
@@ -830,13 +871,26 @@ export function runP9PlanDrivenResearch(
     admissions,
   );
 
+  const planRelevant = (binding: P9ClaimEvidenceBinding): boolean =>
+    binding.subquestionIds.some((subquestionId) => {
+      const subquestion = plan.subquestions.find(
+        (entry) => entry.subquestionId === subquestionId,
+      );
+      return (
+        subquestion !== undefined &&
+        materialTerms(binding.proposal.statement).filter((term) =>
+          materialTerms(subquestion.question).includes(term),
+        ).length >= 2
+      );
+    });
+  const relevantAdmitted = admitted.filter(planRelevant);
   const admittedSubquestions = new Set(
-    admitted.flatMap((binding) => binding.subquestionIds),
+    relevantAdmitted.flatMap((binding) => binding.subquestionIds),
   );
   const criticalGroups = new Map<string, Set<string>>();
   for (const binding of admitted) {
     const group = criticalGroups.get(binding.claimGroupId) ?? new Set<string>();
-    group.add(binding.sourceFamilyId);
+    group.add(binding.evidence.sourceFamilyId);
     criticalGroups.set(binding.claimGroupId, group);
   }
   const criticalGroupIds = new Set(
@@ -886,7 +940,7 @@ export function runP9PlanDrivenResearch(
         }
         case 'section_admitted_claims': {
           const sectionId = base.sectionId ?? '';
-          const count = admitted.filter(
+          const count = relevantAdmitted.filter(
             (binding) =>
               claimsById.get(binding.proposal.proposalId)?.sectionId ===
               sectionId,
@@ -944,8 +998,8 @@ export function runP9PlanDrivenResearch(
       claimId: claim.claimId,
       attemptId: attempt.attemptId,
       requestedUrl: attempt.requestedUrl,
-      sourceClass: binding.sourceClass,
-      sourceFamilyId: binding.sourceFamilyId,
+      sourceClass: binding.evidence.sourceClass,
+      sourceFamilyId: binding.evidence.sourceFamilyId,
       quoteDigest: canonicalDigest(claim.quote),
     };
   });
@@ -1027,14 +1081,11 @@ export function runP9PlanDrivenResearch(
     'plan-coverage-assessment.json': JSON.stringify(assessment, null, 2),
     'report-manifest.json': JSON.stringify(manifest, null, 2),
     'report.md': report,
-    'execution-receipt.json': '',
   };
   const artifactDigests = Object.fromEntries(
     Object.entries(artifacts).map(([name, content]) => [
       name,
-      name === 'execution-receipt.json'
-        ? canonicalDigest({ executionReceiptArtifact: executionId })
-        : sha256Text(content),
+      sha256Text(content),
     ]),
   );
   const receiptIdentity = {

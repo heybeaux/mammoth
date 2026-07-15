@@ -1471,6 +1471,12 @@ async function verifyT5GenericExecution(): Promise<void> {
           (reportFixture.seededOutcomes as Record<string, unknown>)
             .rejectedClaims,
         ) &&
+      run.receipt.typedResidue.parser_failures.length === 1 &&
+      run.parserReceipts.some(
+        (receipt) =>
+          receipt.status === 'failed' &&
+          receipt.failureCode === 'parser_output_invalid',
+      ) &&
       run.receipt.typedResidue.unknown_costs.length === 1,
     'T5 unrelated report preserves retrieval, rejection, and unknown-cost residue',
   );

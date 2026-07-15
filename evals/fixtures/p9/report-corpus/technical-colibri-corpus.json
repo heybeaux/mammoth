@@ -351,7 +351,7 @@
       "sectionId": "bottlenecks",
       "quote": "Prefetch reduces stall time in the scheduling loop.",
       "statement": "Prefetch reduces stall time by 40% in the scheduling loop.",
-      "evaluatorVerdict": "entailed",
+      "evaluatorVerdict": "insufficient",
       "contradictionIds": [],
       "rejectionSeed": null
     },

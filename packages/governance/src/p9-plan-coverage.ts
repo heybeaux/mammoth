@@ -19,6 +19,7 @@ import {
   type SourceClassCoverageStatus,
   type StopCriterionStatus,
 } from '@mammoth/domain';
+import { z } from 'zod';
 import { GovernanceError } from './common.js';
 import { materialQuestionTerms } from './p9-plan-authority.js';
 
@@ -27,14 +28,33 @@ export const P9_PLAN_COVERAGE_POLICY_ID = 'p9-plan-relative-coverage/v1';
 /** Minimum material subquestion terms a claim must share to count as coverage. */
 export const P9_MIN_SHARED_SUBQUESTION_TERMS = 2;
 
+const CoverageEvidenceSchema = z
+  .object({
+    attemptId: z.string().min(1),
+    snapshotDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+    sourceClass: z.string().min(1),
+    sourceFamilyId: z.string().min(1),
+    evidenceDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  })
+  .strict()
+  .superRefine((evidence, context) => {
+    const identity = { ...evidence, evidenceDigest: undefined };
+    if (evidence.evidenceDigest !== canonicalDigest(identity)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'coverage evidence digest must bind immutable metadata',
+      });
+    }
+  });
+
 export interface P9ClaimEvidenceBinding {
   readonly proposal: P9ClaimProposal;
   readonly admission: P9ClaimAdmission;
   readonly subquestionIds: readonly string[];
-  readonly sourceClass: string;
-  readonly sourceFamilyId: string;
   readonly claimGroupId: string;
   readonly contradictionIds: readonly string[];
+  /** Immutable retrieval record; coverage derives source labels from this record. */
+  readonly evidence: z.infer<typeof CoverageEvidenceSchema>;
 }
 
 export interface P9StopCriterionFinding {
@@ -92,6 +112,23 @@ export function assessPlanCoverage(
       'coverage assessment requires the exact accepted plan domain pack',
     );
   }
+  const thresholds = input.thresholds;
+  if (
+    !Number.isSafeInteger(thresholds.minAdmittedClaims) ||
+    thresholds.minAdmittedClaims < 0 ||
+    !Number.isSafeInteger(thresholds.minCriticalClaims) ||
+    thresholds.minCriticalClaims < 0 ||
+    !Number.isSafeInteger(thresholds.minIndependentFamiliesPerCriticalClaim) ||
+    thresholds.minIndependentFamiliesPerCriticalClaim < 0 ||
+    !Number.isFinite(thresholds.minMandatorySourceClassCoverageRatio) ||
+    thresholds.minMandatorySourceClassCoverageRatio < 0 ||
+    thresholds.minMandatorySourceClassCoverageRatio > 1
+  ) {
+    throw new GovernanceError(
+      'coverage_invalid_thresholds',
+      'coverage thresholds must be finite non-negative bounds',
+    );
+  }
   const claims = input.claims.map((binding) => ({
     ...binding,
     proposal: P9ClaimProposalSchema.parse(binding.proposal),
@@ -111,6 +148,36 @@ export function assessPlanCoverage(
   const attempts = input.attempts.map((attempt) =>
     RetrievalAttemptSchema.parse(attempt),
   );
+  const attemptsById = new Map(
+    attempts.map((attempt) => [attempt.attemptId, attempt]),
+  );
+  const proposalIds = new Set<string>();
+  const admissionIds = new Set<string>();
+  for (const binding of claims) {
+    if (
+      proposalIds.has(binding.proposal.proposalId) ||
+      admissionIds.has(binding.admission.admissionId)
+    ) {
+      throw new GovernanceError(
+        'coverage_duplicate_claim_binding',
+        'coverage requires unique proposal and admission identities',
+      );
+    }
+    proposalIds.add(binding.proposal.proposalId);
+    admissionIds.add(binding.admission.admissionId);
+    const evidence = CoverageEvidenceSchema.parse(binding.evidence);
+    const attempt = attemptsById.get(evidence.attemptId);
+    if (
+      !attempt ||
+      attempt.status !== 'admitted' ||
+      evidence.snapshotDigest !== binding.proposal.locator.snapshotDigest
+    ) {
+      throw new GovernanceError(
+        'coverage_evidence_binding_mismatch',
+        'coverage labels require an admitted attempt and its immutable snapshot',
+      );
+    }
+  }
   const gaps = new Set<string>();
   const admitted = claims.filter(
     (binding) => binding.admission.decision === 'admitted',
@@ -164,8 +231,10 @@ export function assessPlanCoverage(
       const independentSourceFamilyIds = [
         ...new Set(
           admitted
-            .filter((binding) => binding.sourceClass === target.sourceClass)
-            .map((binding) => binding.sourceFamilyId),
+            .filter(
+              (binding) => binding.evidence.sourceClass === target.sourceClass,
+            )
+            .map((binding) => binding.evidence.sourceFamilyId),
         ),
       ].sort();
       const satisfied =
@@ -191,7 +260,7 @@ export function assessPlanCoverage(
         mandatoryTargets.length;
   if (
     mandatorySourceClassCoverageRatio <
-    input.thresholds.minMandatorySourceClassCoverageRatio
+    thresholds.minMandatorySourceClassCoverageRatio
   ) {
     gaps.add('source_class_coverage_ratio_below_minimum');
   }
@@ -210,7 +279,6 @@ export function assessPlanCoverage(
         contradictedClaimIds,
       };
     });
-
   const admittedAttempts = attempts.filter(
     (attempt) => attempt.status === 'admitted',
   );
@@ -240,6 +308,11 @@ export function assessPlanCoverage(
         staleAttemptIds,
       };
     });
+  for (const status of freshnessStatuses) {
+    if (status.staleAttemptIds.length > 0) {
+      gaps.add(`freshness_unmet:${status.freshnessId}`);
+    }
+  }
 
   const findingsByStopId = new Map(
     input.stopCriterionFindings.map((finding) => [finding.stopId, finding]),
@@ -255,9 +328,12 @@ export function assessPlanCoverage(
           reason: 'no deterministic finding was recorded for this criterion',
         };
       }
+      const status = finding.met ? 'met' : 'not_met';
+      if (status === 'not_met')
+        gaps.add(`stop_criterion_not_met:${criterion.stopId}`);
       return {
         stopId: criterion.stopId,
-        status: finding.met ? 'met' : 'not_met',
+        status,
         reason: finding.reason,
       };
     },
@@ -278,11 +354,11 @@ export function assessPlanCoverage(
     )
     .map(([claimGroupId, members]) => {
       const independentSourceFamilyIds = [
-        ...new Set(members.map((binding) => binding.sourceFamilyId)),
+        ...new Set(members.map((binding) => binding.evidence.sourceFamilyId)),
       ].sort();
       const satisfied =
         independentSourceFamilyIds.length >=
-        input.thresholds.minIndependentFamiliesPerCriticalClaim;
+        thresholds.minIndependentFamiliesPerCriticalClaim;
       if (!satisfied) {
         gaps.add(`critical_claim_uncorroborated:${claimGroupId}`);
       }
@@ -294,7 +370,7 @@ export function assessPlanCoverage(
           .sort(),
         independentSourceFamilyIds,
         requiredIndependentFamilies:
-          input.thresholds.minIndependentFamiliesPerCriticalClaim,
+          thresholds.minIndependentFamiliesPerCriticalClaim,
         satisfied,
       };
     })
@@ -303,10 +379,10 @@ export function assessPlanCoverage(
   const criticalClaimCount = admitted.filter(
     (binding) => binding.proposal.critical,
   ).length;
-  if (admitted.length < input.thresholds.minAdmittedClaims) {
+  if (admitted.length < thresholds.minAdmittedClaims) {
     gaps.add('admitted_claims_below_minimum');
   }
-  if (criticalClaimCount < input.thresholds.minCriticalClaims) {
+  if (criticalClaimCount < thresholds.minCriticalClaims) {
     gaps.add('critical_claims_below_minimum');
   }
 
