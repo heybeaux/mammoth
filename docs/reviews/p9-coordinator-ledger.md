@@ -397,23 +397,33 @@ handoff, integration commit, blockers, and replacement audit.
   P9 live application, a controlled `research p9-live` CLI path guarded by
   `evaluateP9LiveAuthority`, distinct profile-family rejection, and injected
   adapter tests for budget cap rejection, same-family rejection, terminal
-  acquisition residue, exact-bundle replay, and OpenRouter-shaped capability
-  discovery through `OpenAICompatibleModelProvider`.
-- Current local verification: `pnpm format:check` PASS; `pnpm lint` PASS after
-  lint-only fixes; `pnpm typecheck` PASS; focused runtime live-application test
-  PASS (5); focused CLI authority test PASS (6); full `pnpm test` PASS before
-  the lint-only cleanup; `pnpm build` PASS; `pnpm verify:p8` PASS with manifest
+  acquisition residue, exact-bundle replay, OpenRouter-shaped capability
+  discovery through `OpenAICompatibleModelProvider`, source-class
+  normalization, incomplete model-output rejection, and CLI/env budget mismatch.
+  Review-fix implementation additionally binds observed compiler admissions to
+  deterministic recomputation, rejects off-outline bindings and unrelated budget
+  snapshots, settles post-transport failures as conservative unknown cost,
+  charges model effects as unknown unless attributable dollar cost is present,
+  and records provider/search raw-response digests in effect receipts.
+- Review evidence: CodeRabbit on PR #75 posted 12 findings after exact-head CI
+  `29438660392` passed; the current local diff addresses the valid code findings.
+  Independent reviewer Lovelace found three blockers: model effects exceeded one
+  reserved request and used synthetic costs, CLI budget could broaden env
+  authority, and Brave search lacked bounded receipt controls. The current local
+  diff addresses those blockers except that Brave still uses fixed-origin `fetch`
+  rather than the pinned retrieval transport; it now records a bounded receipt
+  and raw-response digest, and retrieval remains the hostile URL boundary.
+- Current local verification after review-fix diff: focused runtime
+  live-application test PASS (8); focused CLI authority test PASS (7);
+  `pnpm typecheck` PASS; `pnpm build` PASS; `pnpm verify:p8` PASS with manifest
   digest `sha256:d154c6e1df6bfdb41f5222643f33862fa4eb15531af75ce6194171150077298f`;
-  `pnpm verify:p9` PASS with T6 authority and frozen live-plan acceptance still
-  reporting live effects blocked pending authorization/merge gates. The known
-  `packages/temporal-adapter/src/research-cli.ts` mode toggle is absent after
-  build. Follow-up provider-boundary refactor focused checks: OpenAI-compatible
-  provider test PASS (18), runtime live-application test PASS (5), CLI authority
-  test PASS (6), and `pnpm typecheck` PASS.
-- Next predicate: commit/push the code-bearing live operator PR, obtain
-  independent code/security/epistemic review and exact-head CI, merge, verify
-  fresh main CI, then and only then run one authorized live exhibition within the
-  US$5 cap.
+  `pnpm verify:p9` PASS with `T6 live_authority_logic=pass; live_effects=not_run`;
+  full `pnpm test` PASS; `pnpm format:check` PASS; `pnpm lint` PASS; `git diff --check`
+  PASS. The known `packages/temporal-adapter/src/research-cli.ts` mode toggle is
+  absent after build.
+- Next predicate: commit/push the review-fix diff, obtain new exact-head CI and
+  review disposition, merge, verify fresh main CI, then and only then run one
+  authorized live exhibition within the US$5 cap.
 
 ## Release evidence
 

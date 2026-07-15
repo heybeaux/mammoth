@@ -1422,6 +1422,9 @@ export function compileP9ObservedResearchBundle(
   const verdictById = new Map(
     verdicts.map((verdict) => [verdict.verdictId, verdict]),
   );
+  const proposalById = new Map(
+    proposals.map((proposal) => [proposal.proposalId, proposal]),
+  );
   const admissionByProposalId = new Map(
     admissions.map((admission) => [admission.proposalId, admission]),
   );
@@ -1440,7 +1443,31 @@ export function compileP9ObservedResearchBundle(
       'observed attempts, proposals, verdicts, and admissions require unique identities',
     );
   }
+  const allowedReportSectionIds = new Set([
+    ...plan.reportOutline.sections.map((section) => section.sectionId),
+    'references_provenance',
+  ]);
+  const budgetSnapshot = input.budgetSnapshot;
+  if (
+    budgetSnapshot.programId !== executionId ||
+    budgetSnapshot.limit.currencyUsd !== plan.budget.currencyUsd
+  ) {
+    throw new P9GenericResearchError(
+      'observed_budget_snapshot_mismatch',
+      'observed budget snapshot must belong to this execution and accepted plan budget',
+    );
+  }
   for (const binding of bindings) {
+    const observedProposal = proposalById.get(binding.proposal.proposalId);
+    if (
+      !observedProposal ||
+      observedProposal.proposalDigest !== binding.proposal.proposalDigest
+    ) {
+      throw new P9GenericResearchError(
+        'observed_proposal_mismatch',
+        `binding for ${binding.proposal.proposalId} must use an observed proposal`,
+      );
+    }
     const matchingAdmission = admissionByProposalId.get(
       binding.proposal.proposalId,
     );
@@ -1491,6 +1518,26 @@ export function compileP9ObservedResearchBundle(
       throw new P9GenericResearchError(
         'observed_entailment_mismatch',
         `binding for ${binding.proposal.proposalId} does not replay against observed entailment inputs`,
+      );
+    }
+    const recomputedAdmission = evaluateP9ClaimAdmission({
+      proposal: observedProposal,
+      verdict,
+      decidedAt: binding.admission.decidedAt,
+    });
+    if (
+      canonicalDigest(recomputedAdmission) !==
+      canonicalDigest(binding.admission)
+    ) {
+      throw new P9GenericResearchError(
+        'observed_admission_mismatch',
+        `binding for ${binding.proposal.proposalId} must match deterministic admission policy`,
+      );
+    }
+    if (!allowedReportSectionIds.has(binding.evidence.reportSectionId)) {
+      throw new P9GenericResearchError(
+        'observed_report_section_invalid',
+        `binding ${binding.proposal.proposalId} targets a section outside the accepted plan`,
       );
     }
   }
@@ -1641,7 +1688,7 @@ export function compileP9ObservedResearchBundle(
   });
   const report = renderP9Report(manifest, assessment);
   const budgetSummary = summarizeBudget(
-    input.budgetSnapshot,
+    budgetSnapshot,
     plan.budget.currencyUsd,
   );
   const typedResidue = {

@@ -68,6 +68,20 @@ function bodyFor(candidateId: string): string {
   return body;
 }
 
+function searchResult(value: readonly P9LiveCandidate[] = candidates) {
+  return Promise.resolve({
+    candidates: value,
+    receipt: {
+      provider: 'fixture-search',
+      operationKind: 'search' as const,
+      rawResponseDigest: 'sha256:'.concat('1'.repeat(64)),
+      actual: { currencyUsd: 0.01, requests: 1 },
+      startedAt: now().toISOString(),
+      finishedAt: now().toISOString(),
+    },
+  });
+}
+
 function model(
   overrides: Partial<P9LiveModelAdapter> = {},
 ): P9LiveModelAdapter {
@@ -132,15 +146,44 @@ function model(
       profileFamilyId: 'live-evaluator-family',
       modelId: 'fixture/evaluator',
     },
-    proposeClaims: () => Promise.resolve(seeds),
-    evaluateClaims: () =>
-      Promise.resolve(
-        seeds.map((seed) => ({
+    proposeClaims: () =>
+      Promise.resolve({
+        claims: seeds,
+        receipt: {
+          provider: 'fixture-model',
+          operationKind: 'model',
+          rawResponseDigest: 'sha256:'.concat('2'.repeat(64)),
+          actual: {
+            currencyUsd: 0.01,
+            requests: 1,
+            inputTokens: 10,
+            outputTokens: 10,
+          },
+          startedAt: now().toISOString(),
+          finishedAt: now().toISOString(),
+        },
+      }),
+    evaluateClaims: (input) =>
+      Promise.resolve({
+        verdicts: input.claims.map((seed) => ({
           claimId: seed.claimId,
           verdict: 'entailed' as const,
           reasonCodes: ['fixture_independent_entailment'],
         })),
-      ),
+        receipt: {
+          provider: 'fixture-model',
+          operationKind: 'model',
+          rawResponseDigest: 'sha256:'.concat('3'.repeat(64)),
+          actual: {
+            currencyUsd: 0.01,
+            requests: 1,
+            inputTokens: 10,
+            outputTokens: 10,
+          },
+          startedAt: now().toISOString(),
+          finishedAt: now().toISOString(),
+        },
+      }),
     ...overrides,
   };
 }
@@ -167,7 +210,7 @@ describe('P9 live application', () => {
       executionId: 'p9-live-test',
       budgetUsd: 5,
       now,
-      search: { search: () => Promise.resolve(candidates) },
+      search: { search: () => searchResult() },
       retrieve: (request) => {
         const candidate = candidates.find((entry) => entry.url === request.url);
         const body = candidate ? bodies.get(candidate.candidateId) : undefined;
@@ -204,7 +247,7 @@ describe('P9 live application', () => {
         executionId: 'p9-live-over-budget',
         budgetUsd: 5.01,
         now,
-        search: { search: () => Promise.resolve(candidates) },
+        search: { search: () => searchResult() },
         model: model(),
       }),
     ).rejects.toThrow(/no greater than 5/);
@@ -224,7 +267,7 @@ describe('P9 live application', () => {
         executionId: 'p9-live-correlated',
         budgetUsd: 5,
         now,
-        search: { search: () => Promise.resolve(candidates) },
+        search: { search: () => searchResult() },
         model: correlated,
       }),
     ).rejects.toThrow(/profile families differ/);
@@ -235,7 +278,7 @@ describe('P9 live application', () => {
       executionId: 'p9-live-terminal-failure',
       budgetUsd: 5,
       now,
-      search: { search: () => Promise.resolve(candidates) },
+      search: { search: () => searchResult() },
       retrieve: (request) => {
         if (request.url.includes('benchmark-noise')) throw new Error('boom');
         const candidate = candidates.find((entry) => entry.url === request.url);
@@ -257,9 +300,12 @@ describe('P9 live application', () => {
         proposeClaims: (input) =>
           model()
             .proposeClaims(input)
-            .then((claims) =>
-              claims.filter((claim) => claim.candidateId !== 'benchmark-docs'),
-            ),
+            .then((result) => ({
+              ...result,
+              claims: result.claims.filter(
+                (claim) => claim.candidateId !== 'benchmark-docs',
+              ),
+            })),
       }),
       maxCandidates: 4,
     });
@@ -268,5 +314,116 @@ describe('P9 live application', () => {
     expect(run.receipt.typedResidue.retrieval_failures).toEqual([
       'attempt:benchmark-docs',
     ]);
+  });
+
+  it('rejects invalid execution identity and candidate limits before search', async () => {
+    let searched = false;
+    await expect(
+      runP9LiveApplication({
+        executionId: '',
+        budgetUsd: 5,
+        now,
+        search: {
+          search: () => {
+            searched = true;
+            return searchResult();
+          },
+        },
+        model: model(),
+      }),
+    ).rejects.toThrow(/executionId/);
+    expect(searched).toBe(false);
+
+    await expect(
+      runP9LiveApplication({
+        executionId: 'p9-live-bad-limit',
+        budgetUsd: 5,
+        now,
+        search: { search: () => searchResult() },
+        model: model(),
+        maxCandidates: 0,
+      }),
+    ).rejects.toThrow(/maxCandidates/);
+  });
+
+  it('normalizes candidate source classes without trusting search-provided labels', async () => {
+    const firstCandidate = candidates[0];
+    if (!firstCandidate) throw new Error('missing first fixture candidate');
+    const run = await runP9LiveApplication({
+      executionId: 'p9-live-normalized-source-class',
+      budgetUsd: 5,
+      now,
+      search: {
+        search: () =>
+          searchResult([
+            { ...firstCandidate, sourceClass: 'hardware_vendor_docs' },
+            ...candidates.slice(1),
+          ]),
+      },
+      retrieve: (request) => {
+        const candidate = candidates.find((entry) => entry.url === request.url);
+        const body = candidate ? bodies.get(candidate.candidateId) : undefined;
+        if (!candidate || !body) throw new Error('missing fixture source');
+        return Promise.resolve({
+          requestedUrl: request.url,
+          finalUrl: request.url,
+          redirectChain: [],
+          retrievedAt: now().toISOString(),
+          status: 200,
+          headers: { 'content-type': 'text/plain' },
+          mediaType: 'text/plain',
+          bytes: new TextEncoder().encode(body),
+          networkReceipts: [],
+        });
+      },
+      model: model(),
+      maxCandidates: 4,
+    });
+
+    const repoCitation = run.manifest.citations.find(
+      (citation) => citation.claimId === 'claim-upstream-code',
+    );
+    expect(repoCitation?.sourceClass).toBe('repository_code');
+  });
+
+  it('fails closed when evaluator output is incomplete', async () => {
+    await expect(
+      runP9LiveApplication({
+        executionId: 'p9-live-incomplete-evaluator',
+        budgetUsd: 5,
+        now,
+        search: { search: () => searchResult() },
+        retrieve: (request) => {
+          const candidate = candidates.find(
+            (entry) => entry.url === request.url,
+          );
+          const body = candidate
+            ? bodies.get(candidate.candidateId)
+            : undefined;
+          if (!candidate || !body) throw new Error('missing fixture source');
+          return Promise.resolve({
+            requestedUrl: request.url,
+            finalUrl: request.url,
+            redirectChain: [],
+            retrievedAt: now().toISOString(),
+            status: 200,
+            headers: { 'content-type': 'text/plain' },
+            mediaType: 'text/plain',
+            bytes: new TextEncoder().encode(body),
+            networkReceipts: [],
+          });
+        },
+        model: model({
+          evaluateClaims: (input) =>
+            model()
+              .evaluateClaims(input)
+              .then((result) => ({
+                ...result,
+                verdicts: result.verdicts.slice(1),
+              })),
+        }),
+        maxCandidates: 4,
+      }),
+    ).rejects.toThrow(/one unique verdict/);
   });
 });

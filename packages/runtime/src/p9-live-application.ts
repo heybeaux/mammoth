@@ -52,6 +52,17 @@ const USER_AGENT = 'mammoth-research/0.9';
 const ROBOTS_POLICY_ID = 'p9-live-robots-not-checked/v1';
 const RIGHTS_POLICY_ID = 'p9-live-rights-unknown/v1';
 const COORDINATE_SPACE = 'utf16-code-units/v1';
+const UNCLASSIFIED_SOURCE_CLASS = 'unclassified_non_authoritative';
+
+export interface P9ObservedEffectReceipt {
+  readonly provider: string;
+  readonly operationKind: 'search' | 'model';
+  readonly rawResponseDigest: string;
+  readonly actual?: Partial<P9BudgetVector>;
+  readonly providerModelId?: string;
+  readonly startedAt: string;
+  readonly finishedAt: string;
+}
 
 export interface P9LiveCandidate {
   readonly candidateId: string;
@@ -62,7 +73,10 @@ export interface P9LiveCandidate {
 }
 
 export interface P9LiveSearchAdapter {
-  readonly search: (query: string) => Promise<readonly P9LiveCandidate[]>;
+  readonly search: (query: string) => Promise<{
+    readonly candidates: readonly P9LiveCandidate[];
+    readonly receipt: P9ObservedEffectReceipt;
+  }>;
 }
 
 export interface P9LiveClaimSeed {
@@ -81,19 +95,23 @@ export interface P9LiveModelAdapter {
   readonly proposeClaims: (input: {
     readonly plan: ResearchPlan;
     readonly snapshots: readonly P9ObservedSourceSnapshot[];
-  }) => Promise<readonly P9LiveClaimSeed[]>;
+  }) => Promise<{
+    readonly claims: readonly P9LiveClaimSeed[];
+    readonly receipt: P9ObservedEffectReceipt;
+  }>;
   readonly evaluateClaims: (input: {
     readonly plan: ResearchPlan;
     readonly claims: readonly P9LiveClaimSeed[];
     readonly snapshots: readonly P9ObservedSourceSnapshot[];
-  }) => Promise<
-    readonly {
+  }) => Promise<{
+    readonly verdicts: readonly {
       readonly claimId: string;
       readonly verdict: 'entailed' | 'contradicted' | 'insufficient';
       readonly semanticDeltas?: readonly string[];
       readonly reasonCodes?: readonly string[];
-    }[]
-  >;
+    }[];
+    readonly receipt: P9ObservedEffectReceipt;
+  }>;
   readonly proposerProfile: P9LiveModelProfile;
   readonly evaluatorProfile: P9LiveModelProfile;
 }
@@ -123,6 +141,13 @@ export interface P9LiveApplicationRun extends P9GenericResearchRun {
 export async function runP9LiveApplication(
   input: P9LiveApplicationInput,
 ): Promise<P9LiveApplicationRun> {
+  if (!input.executionId.trim()) {
+    throw new Error('P9 live executionId must be non-empty');
+  }
+  const maxCandidates = input.maxCandidates ?? 8;
+  if (!Number.isInteger(maxCandidates) || maxCandidates <= 0) {
+    throw new Error('P9 live maxCandidates must be a positive integer');
+  }
   if (input.budgetUsd <= 0 || input.budgetUsd > 5) {
     throw new Error(
       'P9 live budget must be positive and no greater than 5 USD',
@@ -179,34 +204,49 @@ export async function runP9LiveApplication(
       actorId: actor,
     });
   };
+  const settleObserved = (
+    id: string,
+    receipt: P9ObservedEffectReceipt | undefined,
+  ): void => {
+    if (
+      receipt?.actual &&
+      typeof receipt.actual.currencyUsd === 'number' &&
+      Number.isFinite(receipt.actual.currencyUsd)
+    ) {
+      settleKnown(id, receipt.actual);
+      return;
+    }
+    authority.settle(id, { costState: 'unknown', actorId: actor });
+  };
+  const settleUnknown = (id: string): void => {
+    authority.settle(id, { costState: 'unknown', actorId: actor });
+  };
 
   const candidatesById = new Map<string, P9LiveCandidate>();
   for (const query of planBundle.plan.searchQueries) {
     const reservation = reserveEffect({
       id: `search:${query.queryId}`,
       catalogEntryId: 'brave-search',
-      ceiling: ceiling({ durationMs: 10_000 }),
+      ceiling: ceiling({ bytes: 1_000_000, durationMs: 10_000 }),
     });
     authority.markTransportStarted(reservation.id, actor);
     let results: readonly P9LiveCandidate[];
     try {
-      results = await input.search.search(query.query);
-      settleKnown(reservation.id, { currencyUsd: 0.01, requests: 1 });
+      const searchResult = await input.search.search(query.query);
+      results = searchResult.candidates;
+      settleObserved(reservation.id, searchResult.receipt);
     } catch (error) {
-      authority.cancel(
-        reservation.id,
-        actor,
-        `search terminal failure: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      settleUnknown(reservation.id);
       throw error;
     }
     for (const candidate of results) {
-      if (!candidatesById.has(candidate.candidateId)) {
-        candidatesById.set(candidate.candidateId, candidate);
+      const normalized = normalizeLiveCandidate(candidate);
+      if (!candidatesById.has(normalized.candidateId)) {
+        candidatesById.set(normalized.candidateId, normalized);
       }
-      if (candidatesById.size >= (input.maxCandidates ?? 8)) break;
+      if (candidatesById.size >= maxCandidates) break;
     }
-    if (candidatesById.size >= (input.maxCandidates ?? 8)) break;
+    if (candidatesById.size >= maxCandidates) break;
   }
 
   const retrieve = input.retrieve ?? retrieveSource;
@@ -233,11 +273,7 @@ export async function runP9LiveApplication(
         bytes: retrieved.bytes.byteLength,
       });
     } catch (error) {
-      authority.cancel(
-        retrievalReservation.id,
-        actor,
-        `retrieval terminal failure: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      settleUnknown(retrievalReservation.id);
       const failure =
         error instanceof AcquisitionFailure
           ? error.code === 'ACQUISITION_TIMEOUT'
@@ -332,11 +368,7 @@ export async function runP9LiveApplication(
         sourceFamilyId: candidate.sourceFamilyId,
       });
     } catch (error) {
-      authority.cancel(
-        parserReservation.id,
-        actor,
-        `parser terminal failure: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      settleUnknown(parserReservation.id);
       if (error instanceof ParserPolicyError && error.receipt) {
         parserReceipts.push(ParserReceiptSchema.parse(error.receipt));
       }
@@ -373,6 +405,7 @@ export async function runP9LiveApplication(
     id: 'model:proposer',
     catalogEntryId: 'model-proposer-live',
     ceiling: ceiling({
+      requests: 3,
       inputTokens: 120_000,
       outputTokens: 24_000,
       durationMs: 90_000,
@@ -380,23 +413,17 @@ export async function runP9LiveApplication(
   });
   authority.markTransportStarted(proposerReservation.id, actor);
   let seeds: readonly P9LiveClaimSeed[];
+  let proposerReceipt: P9ObservedEffectReceipt;
   try {
-    seeds = await input.model.proposeClaims({
+    const proposerResult = await input.model.proposeClaims({
       plan: planBundle.plan,
       snapshots,
     });
-    settleKnown(proposerReservation.id, {
-      currencyUsd: 0.45,
-      requests: 1,
-      inputTokens: 12_000,
-      outputTokens: 2_000,
-    });
+    seeds = proposerResult.claims;
+    proposerReceipt = proposerResult.receipt;
+    settleObserved(proposerReservation.id, proposerReceipt);
   } catch (error) {
-    authority.cancel(
-      proposerReservation.id,
-      actor,
-      `proposer terminal failure: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    settleUnknown(proposerReservation.id);
     throw error;
   }
 
@@ -404,6 +431,7 @@ export async function runP9LiveApplication(
     id: 'model:evaluator',
     catalogEntryId: 'model-evaluator-live',
     ceiling: ceiling({
+      requests: 3,
       inputTokens: 120_000,
       outputTokens: 24_000,
       durationMs: 90_000,
@@ -412,28 +440,34 @@ export async function runP9LiveApplication(
   authority.markTransportStarted(evaluatorReservation.id, actor);
   let evaluatorResults: Awaited<
     ReturnType<P9LiveModelAdapter['evaluateClaims']>
-  >;
+  >['verdicts'];
+  let evaluatorReceipt: P9ObservedEffectReceipt;
   try {
-    evaluatorResults = await input.model.evaluateClaims({
+    const evaluatorResult = await input.model.evaluateClaims({
       plan: planBundle.plan,
       claims: seeds,
       snapshots,
     });
-    settleKnown(evaluatorReservation.id, {
-      currencyUsd: 0.45,
-      requests: 1,
-      inputTokens: 12_000,
-      outputTokens: 2_000,
-    });
+    evaluatorResults = evaluatorResult.verdicts;
+    evaluatorReceipt = evaluatorResult.receipt;
+    settleObserved(evaluatorReservation.id, evaluatorReceipt);
   } catch (error) {
-    authority.cancel(
-      evaluatorReservation.id,
-      actor,
-      `evaluator terminal failure: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    settleUnknown(evaluatorReservation.id);
     throw error;
   }
 
+  if (new Set(seeds.map((seed) => seed.claimId)).size !== seeds.length) {
+    throw new Error('P9 live proposer returned duplicate claim identities');
+  }
+  if (
+    new Set(evaluatorResults.map((result) => result.claimId)).size !==
+      evaluatorResults.length ||
+    evaluatorResults.length !== seeds.length
+  ) {
+    throw new Error(
+      'P9 live evaluator must return one unique verdict for every proposed claim',
+    );
+  }
   const evaluatorByClaimId = new Map(
     evaluatorResults.map((result) => [result.claimId, result]),
   );
@@ -449,9 +483,17 @@ export async function runP9LiveApplication(
       (entry) => entry.candidateId === seed.candidateId,
     );
     const evaluator = evaluatorByClaimId.get(seed.claimId);
-    if (!snapshot || !attempt || !evaluator) continue;
+    if (!snapshot || !attempt || !evaluator) {
+      throw new Error(
+        `P9 live claim ${seed.claimId} references missing source or evaluator output`,
+      );
+    }
     const startOffset = snapshot.body.indexOf(seed.quote);
-    if (startOffset < 0) continue;
+    if (startOffset < 0) {
+      throw new Error(
+        `P9 live claim ${seed.claimId} quote does not match observed source bytes`,
+      );
+    }
     const endOffset = startOffset + seed.quote.length;
     const boundedContext = boundedSentenceContext(
       snapshot.body,
@@ -478,7 +520,7 @@ export async function runP9LiveApplication(
         role: 'claim_proposer',
         claimId: seed.claimId,
         profile: input.model.proposerProfile,
-        raw: seeds,
+        rawResponseDigest: proposerReceipt.rawResponseDigest,
       }),
     };
     const proposal = P9ClaimProposalSchema.parse({
@@ -505,7 +547,7 @@ export async function runP9LiveApplication(
         role: 'entailment_evaluator',
         claimId: seed.claimId,
         profile: input.model.evaluatorProfile,
-        raw: evaluatorResults,
+        rawResponseDigest: evaluatorReceipt.rawResponseDigest,
       }),
       evaluatedAt: timestamp(),
     };
@@ -892,6 +934,12 @@ function stopCriterionFindings(
     admitted.flatMap((binding) => binding.evidence.subquestionIds),
   );
   const hasCritical = admitted.some((binding) => binding.proposal.critical);
+  const sourceClasses = new Set(
+    admitted.map((binding) => binding.evidence.sourceClass),
+  );
+  const hasExperiment = admitted.some((binding) =>
+    binding.evidence.subquestionIds.includes('sq-experiment'),
+  );
   const openReservations = snapshot.reservations.filter(
     (reservation) => reservation.state === 'reserved',
   );
@@ -909,10 +957,25 @@ function stopCriterionFindings(
     if (criterion.stopId === 'stop-bounded-change') {
       return {
         stopId: criterion.stopId,
-        met: hasCritical,
-        reason: hasCritical
-          ? 'at least one admitted critical claim supports the bounded-change decision'
-          : 'no admitted critical claim supports the bounded-change decision',
+        met: hasCritical && hasExperiment,
+        reason:
+          hasCritical && hasExperiment
+            ? 'admitted claims support both the bounded-change decision and experiment design'
+            : 'bounded-change stop requires an admitted critical claim and an admitted experiment claim',
+      };
+    }
+    if (criterion.stopId === 'stop-source-classes') {
+      const missing = plan.sourceClassTargets
+        .filter((target) => target.mandatory)
+        .map((target) => target.sourceClass)
+        .filter((sourceClass) => !sourceClasses.has(sourceClass));
+      return {
+        stopId: criterion.stopId,
+        met: missing.length === 0,
+        reason:
+          missing.length === 0
+            ? 'all mandatory source classes have admitted coverage'
+            : `missing mandatory source classes: ${missing.join(', ')}`,
       };
     }
     return {
@@ -997,7 +1060,7 @@ function modelWorkRef(input: {
   readonly role: P9ModelWorkRef['role'];
   readonly claimId: string;
   readonly profile: P9LiveModelProfile;
-  readonly raw: unknown;
+  readonly rawResponseDigest: string;
 }): P9ModelWorkRef {
   return {
     workId: `work:${input.role}:${input.claimId}`,
@@ -1006,7 +1069,7 @@ function modelWorkRef(input: {
       claimId: input.claimId,
       modelId: input.profile.modelId,
     }),
-    rawResponseDigest: canonicalDigest(input.raw),
+    rawResponseDigest: input.rawResponseDigest,
     role: input.role,
     profileVersionId: input.profile.profileVersionId,
     profileFamilyId: input.profile.profileFamilyId,
@@ -1049,15 +1112,98 @@ function boundedSentenceContext(
     body.lastIndexOf('?', Math.max(0, startOffset - 1)),
     body.lastIndexOf('\n', Math.max(0, startOffset - 1)),
   );
+  const lastSelected = body[endOffset - 1];
+  const endsAtBoundary =
+    lastSelected === '.' ||
+    lastSelected === '!' ||
+    lastSelected === '?' ||
+    lastSelected === '\n';
   const following = [
     body.indexOf('.', endOffset),
     body.indexOf('!', endOffset),
     body.indexOf('?', endOffset),
     body.indexOf('\n', endOffset),
   ].filter((index) => index >= 0);
-  const contextEnd =
-    following.length === 0 ? body.length : Math.min(...following) + 1;
+  const contextEnd = endsAtBoundary
+    ? endOffset
+    : following.length === 0
+      ? body.length
+      : Math.min(...following) + 1;
   return body.slice(priorBoundary + 1, contextEnd).trim();
+}
+
+function normalizeLiveCandidate(candidate: P9LiveCandidate): P9LiveCandidate {
+  const classified = classifySource(candidate.url);
+  return {
+    ...candidate,
+    sourceClass: classified.sourceClass,
+    sourceFamilyId: classified.sourceFamilyId,
+  };
+}
+
+function classifySource(url: string): {
+  readonly sourceClass: string;
+  readonly sourceFamilyId: string;
+} {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return {
+      sourceClass: UNCLASSIFIED_SOURCE_CLASS,
+      sourceFamilyId: 'invalid-url',
+    };
+  }
+  const host = parsed.hostname.toLowerCase();
+  const path = parsed.pathname.toLowerCase();
+  if (hostMatches(host, 'github.com') && path.startsWith('/justvugg/colibri')) {
+    const sourceClass =
+      path.includes('readme') || path.includes('/docs/')
+        ? 'repository_docs'
+        : 'repository_code';
+    return { sourceClass, sourceFamilyId: 'github.com/JustVugg/colibri' };
+  }
+  if (hostMatches(host, 'apple.com')) {
+    return {
+      sourceClass: 'hardware_vendor_docs',
+      sourceFamilyId: 'apple.com',
+    };
+  }
+  if (hostMatches(host, 'huggingface.co')) {
+    return {
+      sourceClass: 'upstream_model_docs',
+      sourceFamilyId: 'huggingface.co',
+    };
+  }
+  if (
+    hostMatches(host, 'arxiv.org') ||
+    hostMatches(host, 'doi.org') ||
+    hostMatches(host, 'acm.org') ||
+    hostMatches(host, 'ieee.org')
+  ) {
+    return {
+      sourceClass: 'peer_reviewed_or_primary_technical',
+      sourceFamilyId: host,
+    };
+  }
+  if (
+    hostMatches(host, 'nvd.nist.gov') ||
+    hostMatches(host, 'cve.org') ||
+    (hostMatches(host, 'github.com') && path.includes('/security/advisories'))
+  ) {
+    return {
+      sourceClass: 'security_advisory',
+      sourceFamilyId: host,
+    };
+  }
+  return {
+    sourceClass: UNCLASSIFIED_SOURCE_CLASS,
+    sourceFamilyId: host,
+  };
+}
+
+function hostMatches(host: string, domain: string): boolean {
+  return host === domain || host.endsWith(`.${domain}`);
 }
 
 const RETRIEVAL_FAILURES = {
@@ -1084,7 +1230,11 @@ const RETRIEVAL_FAILURES = {
 export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
   constructor(private readonly apiKey: string) {}
 
-  async search(query: string): Promise<readonly P9LiveCandidate[]> {
+  async search(query: string): Promise<{
+    readonly candidates: readonly P9LiveCandidate[];
+    readonly receipt: P9ObservedEffectReceipt;
+  }> {
+    const startedAt = new Date().toISOString();
     const url = new URL('https://api.search.brave.com/res/v1/web/search');
     url.searchParams.set('q', query);
     url.searchParams.set('count', '5');
@@ -1099,17 +1249,33 @@ export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
         `Brave search failed with HTTP ${String(response.status)}`,
       );
     }
-    const parsed = BraveSearchResponseSchema.parse(await response.json());
-    return parsed.web.results.map((result, index) => {
-      const sourceClass = inferSourceClass(result.url);
+    const body = await response.text();
+    const parsed = BraveSearchResponseSchema.parse(JSON.parse(body));
+    const candidates = parsed.web.results.map((result, index) => {
+      const classified = classifySource(result.url);
       return {
         candidateId: `brave:${canonicalDigest(result.url).slice(7, 19)}:${String(index)}`,
         url: result.url,
         title: result.title,
-        sourceClass,
-        sourceFamilyId: new URL(result.url).hostname.replace(/^www\./u, ''),
+        sourceClass: classified.sourceClass,
+        sourceFamilyId: classified.sourceFamilyId,
       };
     });
+    return {
+      candidates,
+      receipt: {
+        provider: 'brave-search',
+        operationKind: 'search',
+        rawResponseDigest: canonicalDigest(body),
+        actual: {
+          currencyUsd: 0.01,
+          requests: 1,
+          bytes: new TextEncoder().encode(body).byteLength,
+        },
+        startedAt,
+        finishedAt: new Date().toISOString(),
+      },
+    };
   }
 }
 
@@ -1131,26 +1297,3 @@ const BraveSearchResponseSchema = z
       .default({ results: [] }),
   })
   .passthrough();
-
-function inferSourceClass(url: string): string {
-  const parsed = new URL(url);
-  const host = parsed.hostname.toLowerCase();
-  const path = parsed.pathname.toLowerCase();
-  if (host === 'github.com' && path.includes('/justvugg/colibri')) {
-    return path.includes('/blob/') || path.includes('/tree/')
-      ? 'repository_code'
-      : 'repository_docs';
-  }
-  if (host.includes('apple.com')) return 'hardware_vendor_docs';
-  if (
-    host.includes('arxiv.org') ||
-    host.includes('acm.org') ||
-    host.includes('ieee.org')
-  ) {
-    return 'peer_reviewed_or_primary_technical';
-  }
-  if (host.includes('github.com')) return 'repository_docs';
-  if (host.includes('cve') || host.includes('nvd.nist.gov'))
-    return 'security_advisory';
-  return 'peer_reviewed_or_primary_technical';
-}

@@ -2332,5 +2332,5 @@ await verifyT5GenericExecution();
 verifyT6LiveAuthorityGate();
 
 console.log(
-  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5 generic_execution=pass; T6 live_authority_gate=pass blocked_pending_authorization',
+  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5 generic_execution=pass; T6 live_authority_logic=pass; live_effects=not_run',
 );

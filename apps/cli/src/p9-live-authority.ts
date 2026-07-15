@@ -15,6 +15,7 @@ export interface P9LiveAuthorityReport {
   readonly liveModelCredential: string;
   readonly liveEvaluatorIndependence: string;
   readonly safeForEffects: boolean;
+  readonly authorizedBudgetUsd: number | null;
 }
 
 const MAX_AUTHORIZED_BUDGET_USD = 5;
@@ -55,6 +56,7 @@ export function evaluateP9LiveAuthority(
     status: ready ? 'ready' : 'blocked_live_exhibition',
     localProfile: 'ok',
     safeForEffects: ready,
+    authorizedBudgetUsd: budget,
     liveAuthorization: explicitAuthorization
       ? 'MAMMOTH_P9_LIVE_RESEARCH=authorized'
       : 'MAMMOTH_P9_LIVE_RESEARCH=authorized missing; P9 live exhibition remains blocked',

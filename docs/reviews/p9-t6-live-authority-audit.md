@@ -64,34 +64,26 @@ Required P9 authority inputs are distinct from P8 authority:
   `MAMMOTH_P9_EVALUATOR_MODEL` identities;
 - `MAMMOTH_P9_PROVIDER_API_KEY_ENV` naming a populated provider key variable.
 
-Local evidence at this candidate:
+The historical local evidence list for this candidate was summary-only and is
+not release evidence. It is superseded by the exact code-bearing PR #75 CI
+records and the active coordinator ledger, which must name exact commands,
+exit status, digest or immutable CI run, and review disposition before any
+effect boundary opens.
 
-- `pnpm install --frozen-lockfile` PASS;
-- `pnpm --filter @mammoth/domain test -- p9-execution.test.ts` PASS;
-- `pnpm --filter @mammoth/runtime test` PASS;
-- `pnpm --filter @mammoth/cli test -- p9-live-authority.test.ts` PASS;
-- `pnpm --filter @mammoth/cli typecheck` PASS;
-- `pnpm format:check` PASS;
-- `pnpm lint` PASS;
-- `pnpm typecheck` PASS;
-- `pnpm test` PASS;
-- `pnpm build` PASS;
-- `pnpm verify:p2` PASS after setting a short local
-  `MAMMOTH_PROFILE_ROOT=/tmp/mmp2-p9t6`, local test `MAMMOTH_PG_PASSWORD`, and
-  `MAMMOTH_PG_PORT=55442`;
-- `pnpm verify:p3` PASS;
-- `pnpm verify:p4` PASS;
-- `pnpm verify:p5` PASS;
-- `pnpm verify:p6` PASS;
-- `pnpm verify:p7` PASS;
-- `pnpm verify:p8` PASS;
-- `pnpm verify:p9` PASS with
-  `T6 live_authority_gate=pass blocked_pending_authorization`.
+Scoped human authorization receipt locator:
 
-Beaux explicitly supplied P9 live authority on 2026-07-15 for the existing
-Brave/model-provider credentials with a hard maximum spend of US$5. That clears
-the human authorization predicate but does not permit effects until the complete
-environment gate passes at the actual effect boundary.
+- Receipt locator: `telegram:agent:scout:direct:8274834197:2026-07-15T10:29:00-07:00`.
+- Actor: Beaux.
+- Authorization time: 2026-07-15T10:29:00-07:00.
+- Maximum authorized spend: US$5 hard cap.
+- Covered credentials/providers: existing Brave Search credential and existing
+  OpenRouter/OpenAI-compatible model-provider credential only.
+- Permitted effect boundary: exactly one P9 T6 Colibri live exhibition after
+  code-bearing PR exact-head CI, independent review, merge, fresh main CI, and
+  runtime P9 authority gate all pass with the same budget and distinct
+  proposer/evaluator profile families.
+- Explicit non-authority: P8 flags, offline fixture verification, green local
+  tests, and this audit do not authorize metered live effects.
 
 The next valid task is:
 
