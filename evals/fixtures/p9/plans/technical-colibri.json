@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p9.v1",
+  "fixtureId": "plan-technical-colibri",
+  "domainPack": "technical_due_diligence",
+  "question": "Which evidence-backed changes to JustVugg/colibri could most improve the feasibility, correctness, and measured performance of running GLM-5.2-class 744B MoE inference on a consumer machine with about 25 GB of memory, without overstating what has been demonstrated?",
+  "scope": {
+    "include": [
+      "repository architecture",
+      "memory model",
+      "I/O and scheduling",
+      "model and vendor constraints",
+      "security and reproducibility",
+      "benchmark design"
+    ],
+    "exclude": [
+      "claiming a working patch without execution",
+      "unlicensed model redistribution",
+      "benchmark fabrication"
+    ]
+  },
+  "subquestions": [
+    "What memory is resident per token and per active expert?",
+    "Where do storage, transfer, compute, and scheduling bottlenecks occur?",
+    "Which claims are supported by code, docs, vendor specifications, and reproducible measurements?",
+    "Which security and supply-chain risks affect a fork?",
+    "Which experiments could falsify the leading optimization hypotheses?"
+  ],
+  "requiredSourceClasses": [
+    "repository_code",
+    "repository_docs",
+    "upstream_model_docs",
+    "hardware_vendor_docs",
+    "peer_reviewed_or_primary_technical",
+    "security_advisory"
+  ],
+  "requiredContradictions": [
+    "claimed_vs_reproduced_performance",
+    "theoretical_vs_measured_memory",
+    "throughput_vs_latency",
+    "optimization_vs_correctness"
+  ],
+  "freshness": { "volatileDays": 180, "stableDays": 1825 },
+  "stopCriteria": [
+    "all_subquestions_accounted",
+    "two_independent_families_for_critical_claims",
+    "leading_hypothesis_has_falsification_test",
+    "budget_exhausted_honestly"
+  ],
+  "reportOutline": [
+    "executive_summary",
+    "system_model",
+    "evidence",
+    "bottlenecks",
+    "candidate_hypotheses",
+    "experiment_plan",
+    "security_and_risks",
+    "uncertainties",
+    "recommendation"
+  ],
+  "budgetAllocation": {
+    "currencyUsd": 5,
+    "search": 0.5,
+    "retrievalParsing": 0.5,
+    "models": 4
+  },
+  "criticalClaimPolicy": "independent_entailment_distinct_profile_family"
+}

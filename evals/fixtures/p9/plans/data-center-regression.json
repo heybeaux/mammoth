@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p9.v1",
+  "fixtureId": "plan-data-center-regression",
+  "mode": "regression_reference",
+  "question": "What are the environmental and community effects of data centers, how do they vary by context, and which mitigations are supported by evidence?",
+  "inheritsUnchangedFixture": "evals/fixtures/p8/report-corpus/manifest.json",
+  "requiredSourceClasses": [
+    "government_regulatory",
+    "utility_grid",
+    "peer_reviewed",
+    "community",
+    "industry",
+    "critical_analysis"
+  ],
+  "requiredContradictions": [
+    "benefits_vs_externalities",
+    "aggregate_vs_site_specific_effects"
+  ],
+  "criticalClaimPolicy": "independent_entailment_distinct_profile_family",
+  "status": "frozen_reference_only"
+}

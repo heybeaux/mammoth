@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p9.v1",
+  "fixtureId": "plan-scientific-microplastics",
+  "domainPack": "scientific_review",
+  "question": "What can current human evidence establish about causal health effects of microplastic exposure, which findings conflict, and which studies would most reduce uncertainty?",
+  "scope": {
+    "include": [
+      "human observational evidence",
+      "trials where ethical",
+      "mechanistic and animal evidence",
+      "exposure measurement",
+      "systematic reviews",
+      "bias and confounding"
+    ],
+    "exclude": ["clinical advice", "causal conclusions from association alone"]
+  },
+  "subquestions": [
+    "How is exposure measured and validated?",
+    "Which outcomes replicate across independent cohorts?",
+    "Do mechanistic findings plausibly bridge to human dose?",
+    "Where do results conflict and why?",
+    "What design would falsify the leading causal theory?"
+  ],
+  "requiredSourceClasses": [
+    "systematic_review",
+    "human_primary_study",
+    "methods_validation",
+    "mechanistic_primary_study",
+    "critical_commentary"
+  ],
+  "requiredContradictions": [
+    "positive_vs_null_human_results",
+    "biomarker_vs_clinical_outcome",
+    "animal_dose_vs_human_exposure"
+  ],
+  "freshness": { "reviewDays": 1095, "searchEndDateRequired": true },
+  "stopCriteria": [
+    "risk_of_bias_assessed",
+    "conflicting_results_preserved",
+    "causal_limits_explicit",
+    "falsification_study_proposed"
+  ],
+  "reportOutline": [
+    "plain_language_summary",
+    "methods",
+    "human_evidence",
+    "mechanisms",
+    "conflicts",
+    "causal_assessment",
+    "research_priorities",
+    "limitations"
+  ],
+  "budgetAllocation": {
+    "currencyUsd": 5,
+    "search": 0.5,
+    "retrievalParsing": 1,
+    "models": 3.5
+  },
+  "criticalClaimPolicy": "independent_entailment_distinct_profile_family"
+}

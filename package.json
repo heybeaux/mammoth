@@ -38,6 +38,7 @@
     "verify:p6": "tsx scripts/verify-p6.ts",
     "verify:p7": "tsx scripts/verify-p7.ts",
     "verify:p8": "tsx scripts/verify-p8.ts",
+    "verify:p9": "tsx scripts/verify-p9.ts",
     "eval:offline": "tsx scripts/verify-phase-0.ts"
   },
   "devDependencies": {

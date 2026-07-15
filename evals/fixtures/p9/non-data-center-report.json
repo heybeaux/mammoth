@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p9.v1",
+  "fixtureId": "offline-report-technical-colibri",
+  "planFixture": "plans/technical-colibri.json",
+  "exactQuestion": "Which evidence-backed changes to JustVugg/colibri could most improve the feasibility, correctness, and measured performance of running GLM-5.2-class 744B MoE inference on a consumer machine with about 25 GB of memory, without overstating what has been demonstrated?",
+  "frozenCorpusPolicy": "Synthetic, explicitly labelled offline source records exercise plan-relative verification; they are not claims about the live repository.",
+  "requiredSections": [
+    "executive_summary",
+    "system_model",
+    "evidence",
+    "bottlenecks",
+    "candidate_hypotheses",
+    "experiment_plan",
+    "security_and_risks",
+    "uncertainties",
+    "recommendation",
+    "references_provenance"
+  ],
+  "requiredSourceClasses": [
+    "repository_code",
+    "repository_docs",
+    "upstream_model_docs",
+    "hardware_vendor_docs",
+    "peer_reviewed_or_primary_technical",
+    "security_advisory"
+  ],
+  "seededOutcomes": {
+    "admittedClaims": 12,
+    "rejectedClaims": 5,
+    "contradictions": 3,
+    "retrievalResidue": 4,
+    "criticalClaims": 4
+  },
+  "mustRejectCannedDataCenterReport": true,
+  "liveExhibitionQuestionFrozen": "Using the current upstream repository and primary technical sources, which bounded change to JustVugg/colibri should be tested first on a 128 GB Apple-silicon machine, and what experiment would distinguish a real improvement from measurement noise?"
+}

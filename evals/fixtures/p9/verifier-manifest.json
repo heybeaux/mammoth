@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p9.v1",
+  "releaseAuthority": "pnpm verify:p9 is offline; at T0 it verifies only the frozen acceptance surface and must not claim implementation gates",
+  "inputs": [
+    "plans/data-center-regression.json",
+    "plans/technical-colibri.json",
+    "plans/policy-short-term-rentals.json",
+    "plans/scientific-microplastics.json",
+    "non-data-center-report.json",
+    "hostile-manifest.json",
+    "thresholds.json",
+    "expected-artifacts.json",
+    "evaluator-rubric.json",
+    "receipt-schema.json"
+  ],
+  "inputDigests": {
+    "plans/data-center-regression.json": "sha256:206ae1672aa3cc947eab79d216246ec73e7fed869823a770f4bce9133079e0ab",
+    "plans/technical-colibri.json": "sha256:460f5617931b8c348d39bac07b6279e5592664793a3fa6bbd2da2320e1fdcc1d",
+    "plans/policy-short-term-rentals.json": "sha256:8f538ca0424058926e688a3020f43d7d22b26574f8f7298d35d6b7b0a7dbed01",
+    "plans/scientific-microplastics.json": "sha256:2a07aaf22aa27d3c315ab76623f840453399e26f9d699303fe9427740a7e261d",
+    "non-data-center-report.json": "sha256:d527bb70428a2c1f38e47ffcf4cbdd5295386b853ffe097b8573fc8e738541f6",
+    "hostile-manifest.json": "sha256:3db8cbeb84240b1072cfb4ed336336d02e88c155e091a7f91b8a320f62d226d5",
+    "thresholds.json": "sha256:06e8074557133d5f1cdc3f7efb7ed861c8d3695a9d09b0fa0132470d7a0ea988",
+    "expected-artifacts.json": "sha256:b21ab9f4f2e34de2dd7b936b29544c4dbba17164a959a317100a3803a2c6c43a",
+    "evaluator-rubric.json": "sha256:176c07c43e83634bec36216083fac62448f12e559471ed4afce7168ff7c059c7",
+    "receipt-schema.json": "sha256:3f04270c83acbb4936ca900b6c7334a3c3697900e74beea884edf44450e2bd25"
+  },
+  "implementationGatePolicy": "Each successor gate must replace its blocked state with executable evidence. Presence of this baseline is not implementation progress.",
+  "checks": [
+    "four_plan_fixtures",
+    "three_unrelated_domain_packs",
+    "exact_non_data_center_question",
+    "hostile_case_classes",
+    "frozen_thresholds",
+    "typed_artifacts",
+    "rubric",
+    "closed_receipt_schema",
+    "visible_offline_verifier"
+  ]
+}
