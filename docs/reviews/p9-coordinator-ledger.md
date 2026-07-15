@@ -15,16 +15,16 @@ Never use a branch, worktree, or accepted spawn as proof that work is active.
 
 ## Ownership
 
-| Assignment | State   | Owner/runtime             | Worktree / branch                                                                     | Base           | Record                     | Next                   |
-| ---------- | ------- | ------------------------- | ------------------------------------------------------------------------------------- | -------------- | -------------------------- | ---------------------- |
-| `P9-PLAN`  | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                                  | `1de5b37`      | [P9-PLAN](#p9-plan-record) | complete               |
-| `P9-T0`    | merged  | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`                   | `2aeb3db`      | [P9-T0](#p9-t0-record)     | complete               |
-| `P9-T1`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9`      | [P9-T1](#p9-t1-record)     | complete               |
-| `P9-T2`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8`      | [P9-T2](#p9-t2-record)     | complete               |
-| `P9-T3`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38`      | [P9-T3](#p9-t3-record)     | complete               |
-| `P9-T4`    | merged  | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f`      | [P9-T4](#p9-t4-record)     | complete               |
-| `P9-T5`    | active  | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t5-generic-retry` / `feat/p9-t5-generic-execution-retry`     | `ff03482`      | [P9-T5](#p9-t5-record)     | PR, CI, merge, main CI |
-| `P9-T6`    | blocked | coordinator               | fresh worktree required after T5 merge                                                | later T5 merge | [P9-T6](#p9-t6-record)     | inspect live authority |
+| Assignment | State   | Owner/runtime             | Worktree / branch                                                                     | Base      | Record                     | Next                    |
+| ---------- | ------- | ------------------------- | ------------------------------------------------------------------------------------- | --------- | -------------------------- | ----------------------- |
+| `P9-PLAN`  | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                                  | `1de5b37` | [P9-PLAN](#p9-plan-record) | complete                |
+| `P9-T0`    | merged  | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`                   | `2aeb3db` | [P9-T0](#p9-t0-record)     | complete                |
+| `P9-T1`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9` | [P9-T1](#p9-t1-record)     | complete                |
+| `P9-T2`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8` | [P9-T2](#p9-t2-record)     | complete                |
+| `P9-T3`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38` | [P9-T3](#p9-t3-record)     | complete                |
+| `P9-T4`    | merged  | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f` | [P9-T4](#p9-t4-record)     | complete                |
+| `P9-T5`    | merged  | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t5-review-remediation` / `fix/p9-t5-review-remediation`      | `86f5c30` | [P9-T5](#p9-t5-record)     | complete                |
+| `P9-T6`    | blocked | Scout / primary session   | `/private/tmp/mammoth-p9-t6-live-authority` / `feat/p9-t6-live-authority`             | `fe0c96f` | [P9-T6](#p9-t6-record)     | explicit live authority |
 
 ## Required state fields for implementation lanes
 
@@ -336,31 +336,35 @@ handoff, integration commit, blockers, and replacement audit.
   `29428355569` passed every lane and the aggregate check at
   `9448ce70ff86661c929c8d514a560b0fd331de0d`. Merged-main CI remains to be run
   after merge.
-- Review-remediation claim `P9-T5-REMEDIATION-001`: commits
-  `e679d129ead3459166ec9c2e58fcab43cccb6508`, `0c18531`, and
-  `a5bf21cf9a16b4db82af8474e49c64dcebe3fc0e` reconcile all 16 actionable
-  findings in code and executable tests. At candidate `a5bf21c`, fail-fast
-  local format, lint, typecheck, full tests, build, `verify:p8`, and
-  `verify:p9` all passed. Exact source-comment digests, finding-to-test mapping,
-  command-result digests, and remaining external gates are recorded in
-  `docs/reviews/p9-t5-remediation-evidence.md`. This is attributable local
-  evidence, not independent review approval or exact-head CI.
-- Reviewer: PR #68. CodeRabbit posted 16 actionable inline findings against
-  `50596212634ecfbd7eabb3d0ce01c763e8dece1c`. All 16 now have code and
-  executable-evidence reconciliation under `P9-T5-REMEDIATION-001`, but the
-  remote threads and original review do not become an independent PASS by
-  implication. A fresh review and exact-head CI are still required after push.
-  The prior rate-limit summary is not an independent approval.
+- Review-remediation claim `P9-T5-REMEDIATION-001`: PR #70 landed the
+  remediation over merged PR #68. Commits
+  `24fd47b`, `02f24be`, `b570ee1`, and
+  `0af166a5411cac5c177f57bd6629264d64521d62` reconcile all 16 actionable
+  findings in code and executable tests, including the final policy/digest
+  binding for factual citations. Local focused gates passed for domain,
+  governance, runtime, and `verify:p9`; full local gates passed for format,
+  lint, typecheck, test, build, `verify:p8`, and `verify:p9`. Exact source-comment
+  digests, finding-to-test mapping, command-result digests, and review status are
+  recorded in `docs/reviews/p9-t5-remediation-evidence.md`.
+- Reviewer: PR #68 CodeRabbit posted 16 actionable inline findings against
+  `50596212634ecfbd7eabb3d0ce01c763e8dece1c`. PR #70 carried the reconciliation
+  and a requested fresh CodeRabbit review at head `0af166a`; CodeRabbit replied
+  "Review finished" and `gh api repos/heybeaux/mammoth/pulls/70/comments`
+  returned no current inline comments. The earlier PR #70 rate-limit warning is
+  preserved as a warning, not approval.
 - Registry/artifact proof: fresh worktree from exact origin/main, frozen install,
   inspected prior dirty T5 worktree, attributable diff, focused tests, and
   verifier output.
-- Handoff/integration: push the local remediation commits; request fresh
-  independent review; require exact-head PR CI and detached clean-checkout
-  verification before merge; require fresh default-branch CI after merge.
-- Blockers: no known unreconciled local code finding. External blockers are the
-  unpushed exact head, fresh independent review/thread disposition, exact-head
-  PR CI, and detached clean-checkout verification. The 16 original findings and
-  their immutable body digests remain individually enumerated in
+- Handoff/integration: PR #70 merged as
+  `fe0c96f646d6a5821a43dff814affe53dadf621e`.
+- Verification after remediation: PR #70 exact-head CI run `29431969478` passed at
+  `0af166a5411cac5c177f57bd6629264d64521d62`, including static, tests, build,
+  foundation, p2-p4, p5-p7, p8-p9, aggregate verify, and CodeRabbit. Fresh
+  default-branch CI run `29432359193` passed at
+  `fe0c96f646d6a5821a43dff814affe53dadf621e`, including tests, p8-p9,
+  foundation, p5-p7, build, p2-p4, static, and aggregate verify.
+- Blockers: none for T5. The 16 original findings and their immutable body
+  digests remain individually enumerated in
   `docs/reviews/p9-t5-remediation-evidence.md` for auditability.
 - Replacement audit: previous model attempt failed/timed out after creating a
   dirty `/private/tmp/mammoth-p9-t5-generic` worktree with partial T5 files. This
@@ -371,10 +375,30 @@ handoff, integration commit, blockers, and replacement audit.
 ### P9-T6 record
 
 - Objective: live exhibition and release sequencing after T5 merge.
-- State: blocked until T5 is merged and fresh default-branch CI passes.
+- Runtime identity: Scout primary session in fresh worktree
+  `/private/tmp/mammoth-p9-t6-live-authority`, branch
+  `feat/p9-t6-live-authority`, exact base
+  `fe0c96f646d6a5821a43dff814affe53dadf621e`.
+- Owned paths for this audit slice: this ledger and
+  `docs/reviews/p9-t6-live-authority-audit.md`.
+- Prohibited paths: live provider execution, release/tag work, receipt-only PR,
+  code changes beyond authority evidence, unrelated user changes, and external
+  repositories.
+- Contracts changed: none; this is a coordination and authority-evidence update.
+- Dependencies: T5 PR #70 merged; default-branch CI run `29432359193` passed at
+  `fe0c96f646d6a5821a43dff814affe53dadf621e`.
+- State: blocked on explicit T6 live credential and billing authorization.
 - Blocker: T6 live exhibition and any metered provider call still require a
-  separate valid authorization check under `P9_PLAN.md`/`LOOP.md`; no T6 live
-  authority has been proven in this T5 worktree.
+  separate valid authorization check under `P9_PLAN.md`/`LOOP.md`. At
+  2026-07-15T16:31:33Z, repository search found no P9 live-exhibition
+  authorization artifact, `printenv` exposed no `MAMMOTH_P9_*`,
+  `MAMMOTH_P8_*`, `MAMMOTH_SEARCH_*`, `MAMMOTH_OPENAI*`, or
+  `MAMMOTH_PROVIDER*` variables in this process, and the only implemented live
+  readiness check is P8-specific. Details are in
+  `docs/reviews/p9-t6-live-authority-audit.md`.
+- Handoff recipient: P9 coordinator after explicit credential and billing
+  authorization is provided, or after a code slice adds a P9 live-readiness gate
+  without making live effects.
 
 ## Release evidence
 
