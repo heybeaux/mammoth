@@ -392,10 +392,25 @@ handoff, integration commit, blockers, and replacement audit.
   coordinator ledger, exact live bundle, and release evidence.
 - Prohibited paths: arbitrary code execution against the target repository,
   future P11/P12 solver work, unrelated changes, and any spend above US$5.
-- Current state: active. No P9 live search or provider effect has run yet. The
-  next predicate is a tested P9 live operator that uses the accepted plan,
-  hard pre-transport reservations, truthful acquisition residue, independent
-  entailment, exact-bundle verification, and the frozen Colibri question.
+- Current state: producing. No P9 live search or provider effect has run yet.
+  Local implementation now includes a pure observed-bundle compiler, a narrow
+  P9 live application, a controlled `research p9-live` CLI path guarded by
+  `evaluateP9LiveAuthority`, distinct profile-family rejection, and injected
+  adapter tests for budget cap rejection, same-family rejection, terminal
+  acquisition residue, and exact-bundle replay.
+- Current local verification: `pnpm format:check` PASS; `pnpm lint` PASS after
+  lint-only fixes; `pnpm typecheck` PASS; focused runtime live-application test
+  PASS (5); focused CLI authority test PASS (6); full `pnpm test` PASS before
+  the lint-only cleanup; `pnpm build` PASS; `pnpm verify:p8` PASS with manifest
+  digest `sha256:d154c6e1df6bfdb41f5222643f33862fa4eb15531af75ce6194171150077298f`;
+  `pnpm verify:p9` PASS with T6 authority and frozen live-plan acceptance still
+  reporting live effects blocked pending authorization/merge gates. The known
+  `packages/temporal-adapter/src/research-cli.ts` mode toggle is absent after
+  build.
+- Next predicate: commit/push the code-bearing live operator PR, obtain
+  independent code/security/epistemic review and exact-head CI, merge, verify
+  fresh main CI, then and only then run one authorized live exhibition within the
+  US$5 cap.
 
 ## Release evidence
 

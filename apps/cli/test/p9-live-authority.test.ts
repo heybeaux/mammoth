@@ -96,4 +96,22 @@ describe('P9 live authority gate', () => {
     expect(report.safeForEffects).toBe(false);
     expect(report.liveEvaluatorIndependence).toContain('must be distinct');
   });
+
+  it('rejects distinct model strings from the same profile family', () => {
+    const report = evaluateP9LiveAuthority({
+      MAMMOTH_P9_LIVE_RESEARCH: 'authorized',
+      MAMMOTH_SEARCH_BRAVE_API_KEY: 'search-secret',
+      MAMMOTH_P9_LIVE_BILLING_AUTHORIZATION: 'authorized',
+      MAMMOTH_P9_LIVE_BUDGET_USD: '5',
+      MAMMOTH_P9_PROVIDER_BASE_URL: 'https://provider.example.test/v1',
+      MAMMOTH_P9_PROPOSER_MODEL: 'openai/gpt-5.1',
+      MAMMOTH_P9_EVALUATOR_MODEL: 'openai/gpt-5.2',
+      MAMMOTH_P9_PROVIDER_API_KEY_ENV: 'MAMMOTH_P9_PROVIDER_API_KEY',
+      MAMMOTH_P9_PROVIDER_API_KEY: 'provider-secret',
+    });
+    expect(report.safeForEffects).toBe(false);
+    expect(report.liveEvaluatorIndependence).toContain(
+      'distinct profile families',
+    );
+  });
 });

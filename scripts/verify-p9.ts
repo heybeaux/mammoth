@@ -50,6 +50,8 @@ import {
   type TransportResponse,
 } from '../packages/retrieval/src/index.js';
 import {
+  P9_LIVE_EXHIBITION_QUESTION,
+  buildAcceptedP9LivePlan,
   P9GenericResearchError,
   runP9PlanDrivenResearch,
   verifyP9ExactBundle,
@@ -2298,6 +2300,27 @@ function verifyT6LiveAuthorityGate(): void {
   invariant(
     ready.status === 'ready' && ready.safeForEffects,
     'T6 authority gate recognizes complete explicit P9 live authority',
+  );
+
+  const acceptedLivePlan = buildAcceptedP9LivePlan({
+    budgetUsd: 5,
+    now: '2026-07-15T18:00:00.000Z',
+    proposerProfile: {
+      profileVersionId: 'verify-live-plan-proposer',
+      profileFamilyId: 'verify-live-plan-family',
+      modelId: 'fixture/live-plan-proposer',
+    },
+  });
+  invariant(
+    acceptedLivePlan.plan.question === P9_LIVE_EXHIBITION_QUESTION &&
+      acceptedLivePlan.plan.domainPackId === 'technical-due-diligence/v1' &&
+      acceptedLivePlan.plan.budget.currencyUsd === 5 &&
+      acceptedLivePlan.acceptanceReceipt.decision === 'accepted' &&
+      acceptedLivePlan.plan.sourceClassTargets.some(
+        (target) => target.sourceClass === 'hardware_vendor_docs',
+      ) &&
+      acceptedLivePlan.plan.contradictionRequirements.length >= 2,
+    'T6 frozen live Colibri question derives an accepted technical due-diligence plan',
   );
 }
 

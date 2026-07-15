@@ -29,6 +29,10 @@ export function evaluateP9LiveAuthority(
   const providerBaseUrl = nonEmpty(env.MAMMOTH_P9_PROVIDER_BASE_URL);
   const proposerModel = nonEmpty(env.MAMMOTH_P9_PROPOSER_MODEL);
   const evaluatorModel = nonEmpty(env.MAMMOTH_P9_EVALUATOR_MODEL);
+  const distinctProfileFamilies =
+    proposerModel &&
+    evaluatorModel &&
+    modelProfileFamily(proposerModel) !== modelProfileFamily(evaluatorModel);
   const providerApiKeyEnv = nonEmpty(env.MAMMOTH_P9_PROVIDER_API_KEY_ENV);
   const providerApiKey = providerApiKeyEnv
     ? nonEmpty(env[providerApiKeyEnv])
@@ -43,6 +47,7 @@ export function evaluateP9LiveAuthority(
     Boolean(proposerModel) &&
     Boolean(evaluatorModel) &&
     proposerModel !== evaluatorModel &&
+    Boolean(distinctProfileFamilies) &&
     Boolean(providerApiKeyEnv) &&
     Boolean(providerApiKey);
 
@@ -72,9 +77,12 @@ export function evaluateP9LiveAuthority(
         ? `P9 provider API credential present via ${providerApiKeyEnv}`
         : 'MAMMOTH_P9_PROVIDER_API_KEY_ENV must name a populated environment variable for live synthesis',
     liveEvaluatorIndependence:
-      proposerModel && evaluatorModel && proposerModel !== evaluatorModel
-        ? 'P9 proposer and evaluator use distinct model identities'
-        : 'MAMMOTH_P9_PROPOSER_MODEL and MAMMOTH_P9_EVALUATOR_MODEL must be distinct',
+      proposerModel &&
+      evaluatorModel &&
+      proposerModel !== evaluatorModel &&
+      distinctProfileFamilies
+        ? 'P9 proposer and evaluator use distinct model identities and profile families'
+        : 'MAMMOTH_P9_PROPOSER_MODEL and MAMMOTH_P9_EVALUATOR_MODEL must be distinct model identities from distinct profile families',
   };
 }
 
@@ -91,4 +99,10 @@ function parsePositiveBudget(value: string | undefined): number | null {
     parsed <= MAX_AUTHORIZED_BUDGET_USD
     ? parsed
     : null;
+}
+
+function modelProfileFamily(model: string): string {
+  const [provider = 'unknown', name = model] = model.split('/', 2);
+  const family = name.split(/[-:.]/u, 1)[0] ?? name;
+  return `${provider}/${family}`;
 }
