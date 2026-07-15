@@ -36,7 +36,7 @@ export interface RuntimeCharter {
 export interface RuntimeOptions {
   rootDirectory: string;
   charter: RuntimeCharter;
-  transport: SourceTransport;
+  transport?: SourceTransport;
   verifyEntailment(input: {
     claim: RuntimeClaimProposal;
     sourceText: string;

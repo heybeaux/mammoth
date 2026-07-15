@@ -25,6 +25,7 @@ export async function snapshotSource(
     status: retrieved.status,
     headers: retrieved.headers,
     mediaType: retrieved.mediaType,
+    networkReceipts: retrieved.networkReceipts,
     contentDigest: contentObject.digest,
     contentSize: contentObject.size,
     contentObject,

@@ -36,16 +36,19 @@ describe('runtime concurrent ownership', () => {
     const options: RuntimeOptions = {
       rootDirectory,
       charter,
-      transport: async () => {
-        retrievalEffects += 1;
-        await new Promise((resolve) => setTimeout(resolve, 25));
-        return {
-          status: 200,
-          headers: new Headers({ 'content-type': 'text/plain' }),
-          body: new Response(source).body,
-        };
+      transport: {
+        request: async ({ approvedAddress }) => {
+          retrievalEffects += 1;
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          return {
+            status: 200,
+            headers: { 'content-type': 'text/plain' },
+            body: new TextEncoder().encode(source),
+            connectedAddress: approvedAddress,
+          };
+        },
       },
-      resolveHost: () => Promise.resolve(['203.0.113.10']),
+      resolveHost: () => Promise.resolve(['93.184.216.34']),
       now: () => new Date('2026-07-10T20:00:00.000Z'),
       verifyEntailment: ({ claim }) => ({
         entails: true,

@@ -135,7 +135,7 @@ export async function verifyRuntimeBridge(
     rootDirectory: root,
     charter: runtimeCharter,
     now: () => new Date(fixture.clock),
-    resolveHost: () => Promise.resolve(['203.0.113.10']),
+    resolveHost: () => Promise.resolve(['93.184.216.34']),
     verifyEntailment: ({ claim, quote, locator, snapshotDigest }) => {
       const pinned = locatorByClaim.get(claim.id);
       invariant(pinned, `entailment requested for unpinned claim ${claim.id}`);
@@ -159,17 +159,20 @@ export async function verifyRuntimeBridge(
         verifierVersion: '1.0.0',
       };
     },
-    transport: (request) => {
-      transportCalls += 1;
-      invariant(
-        request.href === source.sourceUri,
-        'runtime requested an unpinned URL',
-      );
-      return Promise.resolve({
-        status: 200,
-        headers: new Headers({ 'content-type': 'text/plain' }),
-        body: new Response(sourceBytes).body,
-      });
+    transport: {
+      request: (request) => {
+        transportCalls += 1;
+        invariant(
+          request.url.href === source.sourceUri,
+          'runtime requested an unpinned URL',
+        );
+        return Promise.resolve({
+          status: 200,
+          headers: { 'content-type': 'text/plain' },
+          body: sourceBytes,
+          connectedAddress: request.approvedAddress,
+        });
+      },
     },
   });
 

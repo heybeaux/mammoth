@@ -9,6 +9,7 @@ import {
   parseSource,
   retrieveSource,
   snapshotSource,
+  type SourceTransportRequest,
   type SourceTransport,
 } from '../src/index.js';
 
@@ -18,18 +19,21 @@ const publicResolver = () => Promise.resolve(['93.184.216.34']);
 function response(
   body: string,
   options: { status?: number; headers?: Record<string, string> } = {},
-): Awaited<ReturnType<SourceTransport>> {
-  const bytes = encoder.encode(body);
+): Awaited<ReturnType<SourceTransport['request']>> {
   return {
     status: options.status ?? 200,
-    headers: new Headers({ 'content-type': 'text/plain', ...options.headers }),
-    body: new ReadableStream({
-      start: (controller) => {
-        controller.enqueue(bytes);
-        controller.close();
-      },
-    }),
+    headers: { 'content-type': 'text/plain', ...options.headers },
+    body: encoder.encode(body),
+    connectedAddress: '93.184.216.34',
   };
+}
+
+function fixtureTransport(
+  handler: (
+    input: SourceTransportRequest,
+  ) => Awaited<ReturnType<SourceTransport['request']>>,
+): SourceTransport {
+  return { request: (input) => Promise.resolve(handler(input)) };
 }
 
 describe('source retrieval', () => {
@@ -42,12 +46,11 @@ describe('source retrieval', () => {
   });
 
   it('records redirects and final response metadata', async () => {
-    const transport: SourceTransport = (url) =>
-      Promise.resolve(
-        url.pathname === '/old'
-          ? response('', { status: 302, headers: { location: '/new' } })
-          : response('ground truth', { headers: { 'x-source': 'fixture' } }),
-      );
+    const transport = fixtureTransport(({ url }) =>
+      url.pathname === '/old'
+        ? response('', { status: 302, headers: { location: '/new' } })
+        : response('ground truth', { headers: { 'x-source': 'fixture' } }),
+    );
     const result = await retrieveSource(
       { url: 'https://example.com/old' },
       {
@@ -72,13 +75,13 @@ describe('source retrieval', () => {
         { url: 'https://internal.example/secret' },
         {
           resolveHost: () => Promise.resolve(['127.0.0.1']),
-          transport: () => {
+          transport: fixtureTransport(() => {
             called = true;
-            return Promise.resolve(response('no'));
-          },
+            return response('no');
+          }),
         },
       ),
-    ).rejects.toThrow('PRIVATE_ADDRESS_NOT_ALLOWED');
+    ).rejects.toThrow('ADDRESS_NOT_ALLOWED');
     expect(called).toBe(false);
   });
 
@@ -88,7 +91,7 @@ describe('source retrieval', () => {
         { url: 'https://example.com/large' },
         {
           resolveHost: publicResolver,
-          transport: () => Promise.resolve(response('12345')),
+          transport: fixtureTransport(() => response('12345')),
           policy: { maxBytes: 4 },
         },
       ),
@@ -101,8 +104,9 @@ describe('source retrieval', () => {
         { url: 'https://example.com/missing' },
         {
           resolveHost: publicResolver,
-          transport: () =>
-            Promise.resolve(response('not found', { status: 404 })),
+          transport: fixtureTransport(() =>
+            response('not found', { status: 404 }),
+          ),
         },
       ),
     ).rejects.toThrow('SOURCE_HTTP_ERROR:404');
@@ -117,16 +121,15 @@ describe('source retrieval', () => {
             Promise.resolve(
               host === 'example.com' ? ['93.184.216.34'] : ['10.0.0.2'],
             ),
-          transport: () =>
-            Promise.resolve(
-              response('', {
-                status: 302,
-                headers: { location: 'https://private.example/end' },
-              }),
-            ),
+          transport: fixtureTransport(() =>
+            response('', {
+              status: 302,
+              headers: { location: 'https://private.example/end' },
+            }),
+          ),
         },
       ),
-    ).rejects.toThrow('PRIVATE_ADDRESS_NOT_ALLOWED:private.example');
+    ).rejects.toThrow('REDIRECT_ORIGIN_NOT_ALLOWED');
   });
 });
 
@@ -141,7 +144,7 @@ describe('parsing and immutable snapshots', () => {
     expect(parsed.text).toBe('Title & facts\nAnswer: 42');
     expect(parsed).toMatchObject({
       parserId: 'mammoth-deterministic-text',
-      parserVersion: '1.0.0',
+      parserVersion: '2.0.0',
     });
   });
 
@@ -169,12 +172,11 @@ describe('parsing and immutable snapshots', () => {
       new FileContentStore(root),
       {
         resolveHost: publicResolver,
-        transport: () =>
-          Promise.resolve(
-            response('<p>A fact</p>', {
-              headers: { 'content-type': 'text/html; charset=utf-8' },
-            }),
-          ),
+        transport: fixtureTransport(() =>
+          response('<p>A fact</p>', {
+            headers: { 'content-type': 'text/html; charset=utf-8' },
+          }),
+        ),
       },
     );
     expect(snapshot.contentDigest).toBe(
