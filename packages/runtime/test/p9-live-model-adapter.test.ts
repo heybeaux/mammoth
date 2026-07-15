@@ -139,6 +139,13 @@ describe('OpenAI-compatible P9 live model adapter', () => {
         },
       },
     });
+    expect(requests[0]?.response_format).toMatchObject({
+      json_schema: {
+        schema: {
+          properties: { claims: { minItems: 16, maxItems: 16 } },
+        },
+      },
+    });
   });
 
   it('rejects evaluator output outside the governed semantic-delta enum', async () => {

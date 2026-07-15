@@ -141,9 +141,10 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'term, certainty term, timeframe, and recommendation term in a statement',
         'must also appear in its quote. Map claims only to subquestions they',
         'directly answer, and the quote itself must include at least two material',
-        'words from each mapped subquestion. Prefer coverage across distinct source',
-        'classes and all mandatory subquestions over multiple claims from one',
-        'source. Mark a claim critical only when its quote directly supports a',
+        'words from each mapped subquestion. Return exactly 16 distinct claims.',
+        'Prefer coverage across distinct source classes and all mandatory',
+        'subquestions over multiple claims from one source. Mark a claim critical',
+        'only when its quote directly supports a',
         'factual premise essential to the bounded-change decision.',
         'Return the governed JSON object whose claims array contains objects',
         'with keys: claimId,',
@@ -271,39 +272,44 @@ function promptContext(
 }
 
 function claimSeedResponseFormat(): object {
-  return structuredResponseFormat('p9_live_claim_seeds', 'claims', {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      claimId: { type: 'string', minLength: 1 },
-      candidateId: { type: 'string', minLength: 1 },
-      quote: { type: 'string', minLength: 1 },
-      statement: { type: 'string', minLength: 1 },
-      subquestionIds: {
-        type: 'array',
-        minItems: 1,
-        items: { type: 'string', minLength: 1 },
+  return structuredResponseFormat(
+    'p9_live_claim_seeds',
+    'claims',
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        claimId: { type: 'string', minLength: 1 },
+        candidateId: { type: 'string', minLength: 1 },
+        quote: { type: 'string', minLength: 1 },
+        statement: { type: 'string', minLength: 1 },
+        subquestionIds: {
+          type: 'array',
+          minItems: 1,
+          items: { type: 'string', minLength: 1 },
+        },
+        sectionId: { type: 'string', minLength: 1 },
+        claimGroupId: { type: 'string', minLength: 1 },
+        critical: { type: 'boolean' },
+        contradictionIds: {
+          type: 'array',
+          items: { type: 'string', minLength: 1 },
+        },
       },
-      sectionId: { type: 'string', minLength: 1 },
-      claimGroupId: { type: 'string', minLength: 1 },
-      critical: { type: 'boolean' },
-      contradictionIds: {
-        type: 'array',
-        items: { type: 'string', minLength: 1 },
-      },
+      required: [
+        'claimId',
+        'candidateId',
+        'quote',
+        'statement',
+        'subquestionIds',
+        'sectionId',
+        'claimGroupId',
+        'critical',
+        'contradictionIds',
+      ],
     },
-    required: [
-      'claimId',
-      'candidateId',
-      'quote',
-      'statement',
-      'subquestionIds',
-      'sectionId',
-      'claimGroupId',
-      'critical',
-      'contradictionIds',
-    ],
-  });
+    { minItems: 16, maxItems: 16 },
+  );
 }
 
 function evaluatorResponseFormat(): object {
@@ -334,6 +340,10 @@ function structuredResponseFormat(
   name: string,
   collectionKey: string,
   itemSchema: object,
+  collectionConstraints: Readonly<{
+    minItems?: number;
+    maxItems?: number;
+  }> = {},
 ): object {
   return {
     type: 'json_schema',
@@ -344,7 +354,11 @@ function structuredResponseFormat(
         type: 'object',
         additionalProperties: false,
         properties: {
-          [collectionKey]: { type: 'array', items: itemSchema },
+          [collectionKey]: {
+            type: 'array',
+            ...collectionConstraints,
+            items: itemSchema,
+          },
         },
         required: [collectionKey],
       },

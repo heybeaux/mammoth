@@ -594,6 +594,18 @@ describe('P9 live application', () => {
                     title: 'Community copy',
                     url: 'https://huggingface.co/community/GLM-5',
                   },
+                  {
+                    title: 'Official raw model card',
+                    url: 'https://huggingface.co/zai-org/GLM-5/raw/main/README.md',
+                  },
+                  {
+                    title: 'Colibri research note',
+                    url: 'https://raw.githubusercontent.com/JustVugg/colibri/main/issue_diskio.md',
+                  },
+                  {
+                    title: 'Benchmark guide',
+                    url: 'https://raw.githubusercontent.com/google/benchmark/main/docs/user_guide.md',
+                  },
                 ],
               },
             }),
@@ -605,7 +617,13 @@ describe('P9 live application', () => {
     const result = await adapter.search('official model card');
 
     expect(result.candidates.map((candidate) => candidate.sourceClass)).toEqual(
-      ['upstream_model_docs', 'unclassified_public_source'],
+      [
+        'upstream_model_docs',
+        'unclassified_public_source',
+        'upstream_model_docs',
+        'repository_docs',
+        'peer_reviewed_or_primary_technical',
+      ],
     );
   });
 
@@ -670,6 +688,11 @@ describe('P9 live application', () => {
       ]),
     );
     expect(plan.acceptanceReceipt.decision).toBe('accepted');
+    expect(
+      plan.plan.subquestions.find(
+        (subquestion) => subquestion.subquestionId === 'sq-experiment',
+      )?.question,
+    ).toContain('standard-deviation measurements');
   });
 
   it('searches every governed query before selecting candidates by rank across queries', async () => {
@@ -714,8 +737,78 @@ describe('P9 live application', () => {
     expect(searched).toHaveLength(5);
     expect(retrieved).toEqual([
       'https://api.github.com/repos/JustVugg/colibri/commits/main',
+      'https://github.com/JustVugg/colibri/blob/main/source-1.md',
       'https://github.com/JustVugg/colibri/blob/main/source-2.md',
-      'https://github.com/JustVugg/colibri/blob/main/source-3.md',
+    ]);
+  });
+
+  it('selects governed direct sources when their origins are explicitly authorized', async () => {
+    const catalog = makeCatalog();
+    const providerProfileCatalog = makeProfileCatalog();
+    const journal = new MemoryP9DurableJournalStore();
+    const baseReceipt = makeReceipt(
+      catalog,
+      providerProfileCatalog,
+      5,
+      journal,
+    );
+    const { receiptDigest: _baseDigest, ...baseIdentity } = baseReceipt;
+    const expandedIdentity = {
+      ...baseIdentity,
+      authorizedRetrievalOrigins: [
+        ...baseIdentity.authorizedRetrievalOrigins,
+        'https://raw.githubusercontent.com/',
+        'https://huggingface.co/',
+      ],
+    };
+    const authorizationReceipt = P9LiveAuthorityReceiptSchema.parse({
+      ...expandedIdentity,
+      receiptDigest: canonicalDigest(expandedIdentity),
+    });
+    const retrieved: string[] = [];
+    const model = makeModel({ calls: 0 });
+
+    await runP9LiveApplication(
+      makeInput({
+        catalog,
+        providerProfileCatalog,
+        journal,
+        authorizationReceipt,
+        expectedAuthorityDigest: authorizationReceipt.receiptDigest,
+        search: {
+          destinationOrigin: 'https://api.search.brave.com',
+          search: () =>
+            Promise.resolve({
+              candidates: [],
+              usage: {
+                requests: 1,
+                inputTokens: 0,
+                outputTokens: 0,
+                bytes: 100,
+                durationMs: 1,
+              },
+            }),
+        },
+        model: {
+          ...model,
+          proposeClaims: () =>
+            Promise.resolve({ value: [], usage: modelUsage }),
+          evaluateClaims: () =>
+            Promise.resolve({ value: [], usage: modelUsage }),
+        },
+        retrieve: (request) => {
+          retrieved.push(request.url);
+          return fakeRetrieve(request);
+        },
+      }),
+    );
+
+    expect(retrieved).toEqual([
+      'https://api.github.com/repos/JustVugg/colibri/commits/main',
+      'https://raw.githubusercontent.com/JustVugg/colibri/main/issue_diskio.md',
+      'https://huggingface.co/zai-org/GLM-5/raw/main/README.md',
+      'https://raw.githubusercontent.com/google/benchmark/main/docs/user_guide.md',
+      'https://raw.githubusercontent.com/JustVugg/colibri/main/README.md',
     ]);
   });
 

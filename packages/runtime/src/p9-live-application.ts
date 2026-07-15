@@ -81,7 +81,7 @@ import {
 export const P9_LIVE_EXHIBITION_QUESTION =
   'Using the current upstream repository and primary technical sources, which bounded change to JustVugg/colibri should be tested first on a 128 GB Apple-silicon machine, and what experiment would distinguish a real improvement from measurement noise?';
 export const P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST = canonicalDigest(
-  'p9-live-source-classification/v3',
+  'p9-live-source-classification/v4',
 );
 
 const USER_AGENT = 'mammoth-research/0.9';
@@ -652,6 +652,22 @@ async function runP9LiveApplicationExclusive(
     input.maxCandidates ?? retrievalProfile.requestCeiling.requests,
     retrievalProfile.requestCeiling.requests,
   );
+  if (
+    candidateLimit > 0 &&
+    authorizedRetrievalOrigins.has('https://api.github.com')
+  ) {
+    const currentCommitCandidate: P9LiveCandidate = {
+      candidateId: 'github-api:justvugg-colibri:main',
+      url: 'https://api.github.com/repos/JustVugg/colibri/commits/main',
+      title: 'JustVugg/colibri current main commit',
+      sourceClass: 'repository_metadata',
+      sourceFamilyId: 'github.com',
+    };
+    candidatesByUrl.set(
+      canonicalP9CandidateSelectionUrl(currentCommitCandidate.url),
+      currentCommitCandidate,
+    );
+  }
   for (const query of planBundle.plan.searchQueries.slice(
     0,
     searchProfile.requestCeiling.requests,
@@ -683,18 +699,50 @@ async function runP9LiveApplicationExclusive(
     const authorizedCandidates = result.value.filter((candidate) =>
       authorizedRetrievalOrigins.has(new URL(candidate.url).origin),
     );
-    if (
-      query.queryId === 'q-colibri-repo' &&
-      authorizedRetrievalOrigins.has('https://api.github.com')
-    ) {
-      authorizedCandidates.unshift({
-        candidateId: 'github-api:justvugg-colibri:main',
-        url: 'https://api.github.com/repos/JustVugg/colibri/commits/main',
-        title: 'JustVugg/colibri current main commit',
-        sourceClass: 'repository_metadata',
-        sourceFamilyId: 'github.com',
-      });
-    }
+    const governedDirectCandidates: readonly P9LiveCandidate[] =
+      query.queryId === 'q-colibri-repo'
+        ? [
+            {
+              candidateId: 'direct:justvugg-colibri:diskio-research',
+              url: 'https://raw.githubusercontent.com/JustVugg/colibri/main/issue_diskio.md',
+              title: 'Colibri disk I/O research',
+              sourceClass: 'repository_docs',
+              sourceFamilyId: 'github.com',
+            },
+            {
+              candidateId: 'direct:justvugg-colibri:readme',
+              url: 'https://raw.githubusercontent.com/JustVugg/colibri/main/README.md',
+              title: 'Colibri README',
+              sourceClass: 'repository_docs',
+              sourceFamilyId: 'github.com',
+            },
+          ]
+        : query.queryId === 'q-upstream-model'
+          ? [
+              {
+                candidateId: 'direct:zai-org-glm-5:model-card',
+                url: 'https://huggingface.co/zai-org/GLM-5/raw/main/README.md',
+                title: 'Official GLM-5 model card',
+                sourceClass: 'upstream_model_docs',
+                sourceFamilyId: 'huggingface.co',
+              },
+            ]
+          : query.queryId === 'q-experiment'
+            ? [
+                {
+                  candidateId: 'direct:google-benchmark:user-guide',
+                  url: 'https://raw.githubusercontent.com/google/benchmark/main/docs/user_guide.md',
+                  title: 'Google Benchmark user guide',
+                  sourceClass: 'peer_reviewed_or_primary_technical',
+                  sourceFamilyId: 'github.com/google/benchmark',
+                },
+              ]
+            : [];
+    authorizedCandidates.unshift(
+      ...governedDirectCandidates.filter((candidate) =>
+        authorizedRetrievalOrigins.has(new URL(candidate.url).origin),
+      ),
+    );
     candidatesPerQuery.push(authorizedCandidates);
   }
   // Preserve plan diversity: take one result from every governed query before
@@ -1194,7 +1242,7 @@ export function buildAcceptedP9LivePlan(input: {
       {
         subquestionId: 'sq-upstream',
         question:
-          'Which current upstream colibri code and documentation facts constrain a bounded first change?',
+          'Which current upstream colibri engine bottlenecks and bounded opportunities constrain the first change?',
         mandatory: true,
       },
       {
@@ -1206,13 +1254,13 @@ export function buildAcceptedP9LivePlan(input: {
       {
         subquestionId: 'sq-experiment',
         question:
-          'What controlled experiment would distinguish a real colibri improvement from measurement noise?',
+          'What controlled experiment using benchmark repetitions and standard-deviation measurements would distinguish a real colibri improvement from noise?',
         mandatory: true,
       },
       {
         subquestionId: 'sq-risk',
         question:
-          'What correctness, security, or maintenance risks could falsify the recommended bounded colibri change?',
+          'Which documented correctness or router-semantics risks could falsify the recommended bounded colibri change?',
         mandatory: true,
       },
     ],
@@ -1826,10 +1874,25 @@ function inferSourceClass(url: string): string {
       ? 'repository_code'
       : 'repository_docs';
   }
+  if (
+    host === 'raw.githubusercontent.com' &&
+    path.startsWith('/justvugg/colibri/')
+  ) {
+    return path.includes('/c/') ? 'repository_code' : 'repository_docs';
+  }
+  if (
+    host === 'raw.githubusercontent.com' &&
+    path === '/google/benchmark/main/docs/user_guide.md'
+  ) {
+    return 'peer_reviewed_or_primary_technical';
+  }
   if (host.includes('apple.com')) return 'hardware_vendor_docs';
   if (
     host === 'huggingface.co' &&
-    (path === '/zai-org/glm-5' || path === '/zai-org/glm-4.7-flash')
+    (path === '/zai-org/glm-5' ||
+      path.startsWith('/zai-org/glm-5/') ||
+      path === '/zai-org/glm-4.7-flash' ||
+      path.startsWith('/zai-org/glm-4.7-flash/'))
   ) {
     return 'upstream_model_docs';
   }
