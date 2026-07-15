@@ -36,6 +36,16 @@
       "body": "# Memory model (synthetic fixture)\nResident memory per token is dominated by the active expert weights that the runtime keeps mapped. The docs mark which kernels have reproducible measurements and which claims rest on vendor specifications alone. The memory model chapter documents expert residency accounting for the token decode path."
     },
     {
+      "candidateId": "cand-docs-experiment",
+      "sourceClass": "repository_docs",
+      "sourceFamilyId": "family-colibri-experiment-docs",
+      "url": "https://fixtures.mammoth.invalid/colibri/docs/experiment-protocol.md",
+      "mediaType": "text/plain",
+      "outcome": "admitted",
+      "publishedAt": null,
+      "body": "# Experiment protocol (synthetic fixture)\nThe documented experiments vary expert cache size to falsify the leading optimization hypotheses when measured latency does not track predicted cache behavior. Each run records its cache state and latency distribution."
+    },
+    {
       "candidateId": "cand-model-card",
       "sourceClass": "upstream_model_docs",
       "sourceFamilyId": "family-glm-upstream",
@@ -247,6 +257,19 @@
       "sectionId": "experiment_plan",
       "quote": "Replicated experiments falsify optimization hypotheses whenever measured latency departs from predicted cache behavior.",
       "statement": "Replicated experiments falsify optimization hypotheses whenever measured latency departs from predicted cache behavior.",
+      "evaluatorVerdict": "entailed",
+      "contradictionIds": [],
+      "rejectionSeed": null
+    },
+    {
+      "claimId": "claim-documented-falsification",
+      "candidateId": "cand-docs-experiment",
+      "subquestionIds": ["sq-5"],
+      "claimGroupId": "group-falsification",
+      "critical": false,
+      "sectionId": "experiment_plan",
+      "quote": "The documented experiments vary expert cache size to falsify the leading optimization hypotheses when measured latency does not track predicted cache behavior.",
+      "statement": "The documented experiments vary expert cache size to falsify the leading optimization hypotheses when measured latency does not track predicted cache behavior.",
       "evaluatorVerdict": "entailed",
       "contradictionIds": [],
       "rejectionSeed": null
