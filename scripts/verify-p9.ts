@@ -8,11 +8,14 @@ import {
   canonicalDigest,
   P9ClaimProposalSchema,
   P9EntailmentVerdictSchema,
+  ResearchPlanProposalSchema,
   RobotsDecisionSchema,
   type P9BudgetVector,
   type P9ClaimProposal,
   type P9EntailmentVerdict,
   type P9SemanticDelta,
+  type ResearchDomainPackId,
+  type ResearchPlanProposal,
 } from '../packages/domain/src/index.js';
 import {
   assertEveryP9FactualSentenceAdmitted,
@@ -20,9 +23,16 @@ import {
   rejectedP9ClaimResidue,
 } from '../packages/evidence/src/index.js';
 import {
+  acceptResearchPlan,
+  changedPlanFieldGroups,
   GovernanceError,
+  materialQuestionTerms,
+  P9_DOMAIN_POLICY_PACKS,
   P9BudgetAuthority,
+  previewResearchPlan,
   priceCatalogDigest,
+  reviseResearchPlan,
+  type PlanAcceptanceThresholds,
 } from '../packages/governance/src/index.js';
 import {
   buildTruthfulRetrievalAttempt,
@@ -177,14 +187,6 @@ invariant(
 
 const receipt = await json('receipt-schema.json');
 invariant(receipt.additionalProperties === false, 'closed receipt schema');
-
-await verifyT1BudgetAndMetadata();
-await verifyT2AcquisitionAndParsers();
-verifyT3IndependentEntailment();
-
-console.log(
-  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4-T6=blocked',
-);
 
 function budgetVector(currencyUsd: number): P9BudgetVector {
   return {
@@ -834,3 +836,539 @@ function verifyT3IndependentEntailment(): void {
     'T3 unsupported claims cannot render and all rejection residue remains visible',
   );
 }
+
+const T4_PACK_BY_FIXTURE_DOMAIN: Readonly<
+  Record<string, ResearchDomainPackId>
+> = {
+  general_web: 'general-web/v1',
+  technical_due_diligence: 'technical-due-diligence/v1',
+  public_policy: 'public-policy/v1',
+  scientific_review: 'scientific-review/v1',
+};
+
+function humanizeIdentifier(value: string): string {
+  return value.replaceAll(/[_-]+/gu, ' ');
+}
+
+function fixtureFreshnessRequirements(
+  freshness: Record<string, unknown>,
+): readonly {
+  freshnessId: string;
+  appliesTo: string;
+  maxAgeDays: number | null;
+  asOfDateRequired: boolean;
+}[] {
+  const requirements = [];
+  for (const [key, value] of Object.entries(freshness)) {
+    if (typeof value === 'number') {
+      requirements.push({
+        freshnessId: `fresh-${key}`,
+        appliesTo: humanizeIdentifier(key.replace(/Days$/u, '')),
+        maxAgeDays: value,
+        asOfDateRequired: false,
+      });
+    } else if (value === true) {
+      requirements.push({
+        freshnessId: `fresh-${key}`,
+        appliesTo: humanizeIdentifier(key.replace(/Required$/u, '')),
+        maxAgeDays: null,
+        asOfDateRequired: true,
+      });
+    }
+  }
+  return requirements;
+}
+
+function questionTermsInContent(question: string, content: unknown): string[] {
+  const bodyTokens = new Set(
+    materialQuestionTerms(stringValues(content).join(' ')),
+  );
+  return materialQuestionTerms(question).filter((term) => bodyTokens.has(term));
+}
+
+function stringValues(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value))
+    return value.flatMap((entry) => stringValues(entry));
+  if (value && typeof value === 'object')
+    return Object.values(value).flatMap((entry) => stringValues(entry));
+  return [];
+}
+
+function fixtureNumber(
+  record: Record<string, number>,
+  key: string,
+  message: string,
+): number {
+  const value = record[key];
+  invariant(typeof value === 'number', message);
+  return value;
+}
+
+function planProposalFromFixture(
+  fixture: Record<string, unknown>,
+  overrides: {
+    proposalId?: string;
+    question?: string;
+    derivationQuestion?: string;
+    budget?: {
+      currencyUsd: number;
+      searchUsd: number;
+      retrievalParsingUsd: number;
+      modelsUsd: number;
+    };
+    extraQueries?: readonly {
+      queryId: string;
+      query: string;
+      subquestionIds: readonly string[];
+    }[];
+  } = {},
+): ResearchPlanProposal {
+  const question = overrides.question ?? String(fixture.question);
+  const templateQuestion = overrides.derivationQuestion ?? question;
+  const domainPackId = T4_PACK_BY_FIXTURE_DOMAIN[String(fixture.domainPack)];
+  invariant(domainPackId, `T4 domain pack for ${String(fixture.fixtureId)}`);
+  const pack = P9_DOMAIN_POLICY_PACKS[domainPackId];
+  const scopeFixture = fixture.scope as {
+    include: readonly string[];
+    exclude: readonly string[];
+  };
+  const scope = {
+    include: [...scopeFixture.include],
+    exclusions: scopeFixture.exclude.map((statement, index) => ({
+      exclusionId: `ex-${String(index + 1)}`,
+      statement,
+    })),
+  };
+  const subquestions = (fixture.subquestions as readonly string[]).map(
+    (text, index) => ({
+      subquestionId: `sq-${String(index + 1)}`,
+      question: text,
+      mandatory: true,
+    }),
+  );
+  const coverageRequirements = subquestions.map((entry, index) => ({
+    coverageId: `cov-${String(index + 1)}`,
+    subquestionId: entry.subquestionId,
+    description: `Plan-relative coverage for: ${entry.question}`,
+    mandatory: true,
+  }));
+  const sourceClassTargets = (
+    fixture.requiredSourceClasses as readonly string[]
+  ).map((sourceClass) => ({
+    sourceClass,
+    minimumIndependentSources: 1,
+    mandatory: true,
+  }));
+  const focusTerms = materialQuestionTerms(templateQuestion)
+    .slice(0, 6)
+    .join(' ');
+  const searchQueries = [
+    ...subquestions.map((entry, index) => ({
+      queryId: `q-${String(index + 1)}`,
+      query: `${focusTerms} — ${entry.question}`,
+      subquestionIds: [entry.subquestionId],
+    })),
+    ...(overrides.extraQueries ?? []).map((entry) => ({
+      queryId: entry.queryId,
+      query: entry.query,
+      subquestionIds: [...entry.subquestionIds],
+    })),
+  ];
+  const contradictionRequirements = (
+    fixture.requiredContradictions as readonly string[]
+  ).map((contradictionId) => ({
+    contradictionId,
+    description: humanizeIdentifier(contradictionId),
+  }));
+  const stopCriteria = (fixture.stopCriteria as readonly string[]).map(
+    (stopId) => ({ stopId, description: humanizeIdentifier(stopId) }),
+  );
+  const reportOutline = {
+    sections: (fixture.reportOutline as readonly string[]).map((sectionId) => ({
+      sectionId,
+      title: humanizeIdentifier(sectionId),
+    })),
+  };
+  const budgetFixture = fixture.budgetAllocation as Record<string, number>;
+  const budget = overrides.budget ?? {
+    currencyUsd: budgetFixture.currencyUsd,
+    searchUsd: budgetFixture.search,
+    retrievalParsingUsd: budgetFixture.retrievalParsing,
+    modelsUsd: budgetFixture.models,
+  };
+  const planFields = {
+    schemaVersion: '1.0.0' as const,
+    contractFamily: 'p9.v1' as const,
+    proposalId: overrides.proposalId ?? `proposal-${String(fixture.fixtureId)}`,
+    question,
+    domainPackId,
+    packDigest: pack.packDigest,
+    scope,
+    subquestions,
+    coverageRequirements,
+    sourceClassTargets,
+    searchQueries,
+    contradictionRequirements,
+    freshnessRequirements: fixtureFreshnessRequirements(
+      fixture.freshness as Record<string, unknown>,
+    ),
+    stopCriteria,
+    reportOutline,
+    budget,
+    criticalClaimPolicy:
+      'independent_entailment_distinct_profile_family' as const,
+    derivations: {
+      scope: {
+        source: 'question' as const,
+        questionTerms: questionTermsInContent(templateQuestion, scope),
+      },
+      subquestions: {
+        source: 'question' as const,
+        questionTerms: questionTermsInContent(templateQuestion, subquestions),
+      },
+      coverage: { source: 'domain_pack' as const, questionTerms: [] },
+      source_classes: { source: 'domain_pack' as const, questionTerms: [] },
+      search_queries: {
+        source: 'question' as const,
+        questionTerms: questionTermsInContent(templateQuestion, searchQueries),
+      },
+      contradictions: { source: 'domain_pack' as const, questionTerms: [] },
+      freshness: { source: 'domain_pack' as const, questionTerms: [] },
+      stop_criteria: { source: 'domain_pack' as const, questionTerms: [] },
+      outline: { source: 'domain_pack' as const, questionTerms: [] },
+      budget: { source: 'operator' as const, questionTerms: [] },
+    },
+  };
+  const proposerPayload = {
+    proposalId: planFields.proposalId,
+    question: planFields.question,
+    domainPackId: planFields.domainPackId,
+    scope: planFields.scope,
+    subquestions: planFields.subquestions,
+    searchQueries: planFields.searchQueries,
+    budget: planFields.budget,
+  };
+  const identity = {
+    ...planFields,
+    proposerWork: {
+      workId: `plan-work-${String(fixture.fixtureId)}`,
+      workDigest: canonicalDigest({ work: proposerPayload }),
+      rawResponseDigest: canonicalDigest({ rawResponse: proposerPayload }),
+      role: 'plan_proposer' as const,
+      profileVersionId: 'planner-profile-v1',
+      profileFamilyId: 'planner-family',
+    },
+    proposedAt: '2026-07-15T05:00:00.000Z',
+  };
+  return ResearchPlanProposalSchema.parse({
+    ...identity,
+    proposalDigest: canonicalDigest(identity),
+  });
+}
+
+const T4_GENERAL_WEB_FIXTURE = {
+  fixtureId: 'general-web-plan',
+  question:
+    'What should a small city understand before selecting a public library technology vendor?',
+  domainPack: 'general_web',
+  scope: {
+    include: [
+      'public library technology vendor selection',
+      'community service and procurement risks',
+    ],
+    exclude: ['No legal advice or procurement award recommendation.'],
+  },
+  subquestions: [
+    'Which user needs and access constraints should shape vendor evaluation?',
+    'What vendor lock-in and migration risks matter for public libraries?',
+    'Which procurement, privacy, and accessibility duties should be checked?',
+    'What implementation evidence distinguishes pilots from reliable operations?',
+  ],
+  requiredSourceClasses: [
+    'primary_source',
+    'independent_analysis',
+    'secondary_reporting',
+    'official_guidance',
+    'implementation_case_study',
+  ],
+  requiredContradictions: [
+    'vendor_claims_vs_user_outcomes',
+    'cost_savings_vs_service_quality',
+  ],
+  freshness: { procurementGuidanceDays: 730, marketEvidenceDays: 365 },
+  stopCriteria: [
+    'mandatory_source_classes_accounted',
+    'vendor_lock_in_risks_evaluated',
+  ],
+  reportOutline: [
+    'decision_context',
+    'evidence_by_vendor_risk',
+    'implementation_uncertainties',
+    'procurement_questions',
+  ],
+  budgetAllocation: {
+    currencyUsd: 5,
+    search: 0.5,
+    retrievalParsing: 1,
+    models: 3.5,
+  },
+};
+
+async function verifyT4QuestionDerivedPlanning(): Promise<void> {
+  const thresholdsFixture = await json('thresholds.json');
+  const planning = thresholdsFixture.planning as Record<string, number>;
+  const budgetLimits = thresholdsFixture.budget as Record<string, number>;
+  const thresholds: PlanAcceptanceThresholds = {
+    minSubquestions: fixtureNumber(
+      planning,
+      'minSubquestions',
+      'T4 minSubquestions threshold',
+    ),
+    minSourceClasses: fixtureNumber(
+      planning,
+      'minSourceClasses',
+      'T4 minSourceClasses threshold',
+    ),
+    minContradictionRequirements: fixtureNumber(
+      planning,
+      'minContradictionRequirements',
+      'T4 minContradictionRequirements threshold',
+    ),
+    maxAuthorizedUsd: fixtureNumber(
+      budgetLimits,
+      'maxAuthorizedUsd',
+      'T4 maxAuthorizedUsd threshold',
+    ),
+    minQuestionDerivedTerms: 4,
+  };
+  const now = '2026-07-15T05:00:00.000Z';
+  const domainFixtures = plans.filter((plan) => plan.domainPack);
+  invariant(domainFixtures.length === 3, 'T4 three unrelated plan fixtures');
+  const t4PlanningFixtures = [...domainFixtures, T4_GENERAL_WEB_FIXTURE];
+  const referenceFixture = plans.find((plan) => !plan.domainPack);
+  invariant(
+    referenceFixture?.status === 'frozen_reference_only',
+    'T4 data-center fixture remains frozen reference only',
+  );
+  invariant(
+    hostileIds.has('future-schema-unknown-field'),
+    'T4 hostile fixture future-schema-unknown-field',
+  );
+
+  const acceptedPlans = t4PlanningFixtures.map((fixture) => {
+    const proposal = planProposalFromFixture(fixture);
+    const preview = previewResearchPlan(proposal);
+    invariant(
+      preview.previewDigest === previewResearchPlan(proposal).previewDigest,
+      `T4 ${String(fixture.fixtureId)} preview is deterministic`,
+    );
+    const result = acceptResearchPlan({
+      proposal,
+      thresholds,
+      decidedAt: now,
+      actorId: 'p9-operator',
+    });
+    invariant(
+      result.receipt.decision === 'accepted' &&
+        result.plan !== null &&
+        result.plan.revision === 1 &&
+        result.receipt.planDigest === result.plan.planDigest,
+      `T4 ${String(fixture.fixtureId)} accepted question-derived plan`,
+    );
+    return result.plan;
+  });
+
+  invariant(
+    new Set(acceptedPlans.map((plan) => plan.domainPackId)).size === 4 &&
+      new Set(acceptedPlans.map((plan) => plan.packDigest)).size === 4 &&
+      new Set(acceptedPlans.map((plan) => plan.planDigest)).size === 4,
+    'T4 unrelated questions select all four distinct packs and plan identities',
+  );
+  for (let left = 0; left < acceptedPlans.length; left += 1) {
+    for (let right = left + 1; right < acceptedPlans.length; right += 1) {
+      const leftPlan = acceptedPlans[left];
+      const rightPlan = acceptedPlans[right];
+      invariant(leftPlan && rightPlan, 'T4 accepted plan pair exists');
+      const changed = changedPlanFieldGroups(leftPlan, rightPlan);
+      for (const group of [
+        'scope',
+        'subquestions',
+        'search_queries',
+        'contradictions',
+        'outline',
+      ] as const) {
+        invariant(
+          changed.includes(group),
+          `T4 unrelated plans differ materially in ${group}`,
+        );
+      }
+    }
+  }
+
+  const questionGroups = ['scope', 'subquestions', 'search_queries'] as const;
+  for (const plan of acceptedPlans) {
+    const corpus = JSON.stringify(plan).toLowerCase();
+    invariant(
+      !corpus.includes('data center') &&
+        !corpus.includes('data-center') &&
+        !corpus.includes('data_center') &&
+        !corpus.includes('datacenter'),
+      'T4 no data-center constants leak into unrelated plans',
+    );
+    const derivedCount = questionGroups.filter(
+      (group) => plan.derivations[group].source === 'question',
+    ).length;
+    invariant(
+      derivedCount / questionGroups.length ===
+        planning.questionDerivedFieldRatio,
+      'T4 question-derived field ratio satisfied',
+    );
+  }
+
+  const technicalFixture = domainFixtures.find(
+    (fixture) => fixture.domainPack === 'technical_due_diligence',
+  );
+  const scientificFixture = domainFixtures.find(
+    (fixture) => fixture.domainPack === 'scientific_review',
+  );
+  invariant(
+    technicalFixture && scientificFixture,
+    'T4 technical and scientific fixtures present',
+  );
+
+  const templateSwap = acceptResearchPlan({
+    proposal: planProposalFromFixture(technicalFixture, {
+      proposalId: 'proposal-template-swap',
+      question: String(scientificFixture.question),
+      derivationQuestion: String(technicalFixture.question),
+    }),
+    thresholds,
+    decidedAt: now,
+    actorId: 'p9-operator',
+  });
+  invariant(
+    templateSwap.receipt.decision === 'rejected' &&
+      templateSwap.plan === null &&
+      templateSwap.receipt.reasonCodes.includes(
+        'insufficient_question_derivation',
+      ) &&
+      templateSwap.receipt.reasonCodes.some((reason) =>
+        reason.startsWith('derivation_term_not_in_question:'),
+      ),
+    'T4 structurally valid plan that ignores the question fails closed',
+  );
+
+  const injectedVocabulary = acceptResearchPlan({
+    proposal: planProposalFromFixture(scientificFixture, {
+      proposalId: 'proposal-injected-vocabulary',
+      extraQueries: [
+        {
+          queryId: 'q-injected',
+          query: 'hyperscale data center water consumption',
+          subquestionIds: ['sq-1'],
+        },
+      ],
+    }),
+    thresholds,
+    decidedAt: now,
+    actorId: 'p9-operator',
+  });
+  invariant(
+    injectedVocabulary.receipt.decision === 'rejected' &&
+      injectedVocabulary.receipt.reasonCodes.includes(
+        'template_vocabulary:data center',
+      ),
+    'T4 forbidden template vocabulary cannot enter an unrelated plan',
+  );
+
+  const baselineProposal = planProposalFromFixture(technicalFixture);
+  let unknownFieldRejected = false;
+  try {
+    ResearchPlanProposalSchema.parse({
+      ...baselineProposal,
+      futurePlanningField: 'surprise',
+    });
+  } catch (error) {
+    unknownFieldRejected = error instanceof Error && error.name === 'ZodError';
+  }
+  invariant(
+    unknownFieldRejected,
+    'T4 unknown plan fields are rejected by closed schemas',
+  );
+
+  const baselineAccepted = acceptResearchPlan({
+    proposal: baselineProposal,
+    thresholds,
+    decidedAt: now,
+    actorId: 'p9-operator',
+  });
+  invariant(
+    baselineAccepted.plan !== null,
+    'T4 baseline technical plan accepted',
+  );
+
+  const localized = acceptResearchPlan({
+    proposal: planProposalFromFixture(technicalFixture, {
+      proposalId: 'proposal-technical-localized',
+      question: `${String(technicalFixture.question)} Prioritize evidence relevant to teams in Canada.`,
+      extraQueries: [
+        {
+          queryId: 'q-canada',
+          query: 'Canada colibri runtime limited memory hardware evidence',
+          subquestionIds: ['sq-1'],
+        },
+      ],
+    }),
+    thresholds,
+    decidedAt: now,
+    actorId: 'p9-operator',
+  });
+  invariant(
+    localized.receipt.decision === 'accepted' &&
+      localized.plan !== null &&
+      localized.plan.planDigest !== baselineAccepted.plan.planDigest &&
+      changedPlanFieldGroups(baselineAccepted.plan, localized.plan).includes(
+        'search_queries',
+      ) &&
+      localized.plan.searchQueries.some((query) =>
+        query.query.toLowerCase().includes('canada'),
+      ),
+    'T4 metamorphic question change shifts accepted plan identity and search queries',
+  );
+
+  const revision = reviseResearchPlan({
+    currentPlan: baselineAccepted.plan,
+    proposal: planProposalFromFixture(technicalFixture, {
+      proposalId: 'proposal-technical-budget-revision',
+      budget: {
+        currencyUsd: 5,
+        searchUsd: 0.5,
+        retrievalParsingUsd: 1,
+        modelsUsd: 3.5,
+      },
+    }),
+    thresholds,
+    decidedAt: now,
+    actorId: 'p9-operator',
+  });
+  invariant(
+    revision.receipt.decision === 'accepted' &&
+      revision.plan !== null &&
+      revision.plan.revision === 2 &&
+      revision.plan.previousPlanDigest === baselineAccepted.plan.planDigest &&
+      revision.plan.planDigest !== baselineAccepted.plan.planDigest &&
+      revision.revisionRecord?.invalidatesDownstreamWork === true &&
+      revision.revisionRecord.changedFieldGroups.includes('budget'),
+    'T4 material budget change creates a linked revision invalidating downstream work',
+  );
+}
+
+await verifyT1BudgetAndMetadata();
+await verifyT2AcquisitionAndParsers();
+verifyT3IndependentEntailment();
+await verifyT4QuestionDerivedPlanning();
+
+console.log(
+  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5-T6=blocked',
+);

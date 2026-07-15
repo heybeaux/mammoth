@@ -21,8 +21,9 @@ Never use a branch, worktree, or accepted spawn as proof that work is active.
 | `P9-T0`    | merged  | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`                   | `2aeb3db`      | [P9-T0](#p9-t0-record)       | complete                      |
 | `P9-T1`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9`      | [P9-T1](#p9-t1-record)       | complete                      |
 | `P9-T2`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8`      | [P9-T2](#p9-t2-record)       | complete                      |
-| `P9-T3`    | active  | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38`      | [P9-T3](#p9-t3-record)       | implement and verify          |
-| `P9-T4-T6` | blocked | unassigned                | fresh worktrees required                                                              | later T3 merge | [P9-T4-T6](#p9-t4-t6-record) | claim after accepted T3 merge |
+| `P9-T3`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38`      | [P9-T3](#p9-t3-record)       | complete                      |
+| `P9-T4`    | ready   | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f`      | [P9-T4](#p9-t4-record)       | merge after exact-head CI     |
+| `P9-T5-T6` | blocked | unassigned                | fresh worktrees required                                                              | later T4 merge | [P9-T5-T6](#p9-t5-t6-record) | claim after accepted T4 merge |
 
 ## Required state fields for implementation lanes
 
@@ -206,19 +207,82 @@ handoff, integration commit, blockers, and replacement audit.
   `pnpm install --frozen-lockfile`, format, lint, full workspace typecheck, full
   workspace tests, build, P8 regression, and `verify:p9`; the worktree was clean
   after restoring the known install-induced CLI mode toggle.
-- Reviewer: GitHub PR review plus exact-head CI; actual findings must be inspected
-  and resolved before merge recommendation.
+- Reviewer: PR #65. CodeRabbit's check was green but its comment said review was
+  rate-limited, so it produced no substantive findings or approval.
 - Registry/artifact proof: current-session fresh worktree, exact base, frozen
   install, attributable diff/tests, PR head, and CI. No child worker claim applies.
-- Handoff/integration: pending.
+- Handoff/integration: PR #65 merged as
+  `33d291f0f9046bbd3e12e446ea64734f6ea09e47`; merged-main CI `29415848385`
+  passed every lane and the aggregate check.
 - Blockers: none at assignment time.
 - Replacement audit: none.
 
-### P9-T4-T6 record
+### P9-T4 record
 
-- Objective: continue one accepted slice at a time after T1.
+- Objective: implement typed question-derived planning: proposal validation,
+  preview, immutable acceptance, linked revisions, four domain policy packs, and
+  plan-derived search, coverage, contradiction, freshness, stop, outline, and
+  budget fields.
+- Acceptance evidence: the three frozen unrelated non-data-center plan fixtures
+  plus a T4-owned `general-web/v1` proposal produce materially different accepted
+  plans covering all four policy packs with distinct identities; a structurally
+  valid template swap that ignores the question is rejected; forbidden data-center
+  vocabulary cannot leak into unrelated plans; closed schemas reject future
+  fields; material changes create linked revisions that invalidate downstream
+  work.
+- Runtime identity: Scout OpenClaw subagent session
+  `agent:scout:subagent:eee6346d-761a-4742-b039-9a3cd205eb1b`; requester run
+  `5387bca6-d44d-4d94-ae35-8a04c2c664a3`; resolved model identity is not
+  exposed to the repository runtime. This retry inherited a timed-out partial
+  worktree, inspected its diff, repaired it, and preserved useful output.
+- Worktree/branch/base: `/private/tmp/mammoth-p9-t4-planning`;
+  `feat/p9-t4-planning`; exact merged T3
+  `33d291f0f9046bbd3e12e446ea64734f6ea09e47`.
+- Owned paths: P9 planning domain contracts; governance plan authority and domain
+  policy packs; focused planning tests; `scripts/verify-p9.ts`; this ledger.
+- Prohibited paths: T5 generic execution/composition, T6 live exhibition/release/
+  tag work, frozen T0/P8 fixture contents, unrelated user changes, external
+  repositories, and future solver execution.
+- Allowed contract changes: T4 subset of `p9.v1`: `ResearchPlanProposal`,
+  `ResearchPlan`, `DomainPolicyPack`, plan derivations, plan acceptance receipt,
+  plan revision record, and planning verifier wiring. P8 and T1-T3 identities
+  remain unchanged.
+- Dependencies: P9 T3 merged as `33d291f`; merged-main T3 CI `29415848385`
+  passed every lane and the aggregate check.
+- Exact gates: focused domain/governance planning tests; format; lint; typecheck;
+  full tests; build; `pnpm verify:p8`; `pnpm verify:p9`; detached clean-checkout
+  frozen install and repeat before merge recommendation.
+- Current local results: domain planning tests PASS (9); governance plan-authority
+  tests PASS (16); format PASS; lint PASS; typecheck PASS; full workspace tests
+  PASS; build PASS; P8 regression PASS; `verify:p9` PASS with T4 planning enabled
+  and T5-T6 still blocked. The known install-induced
+  `packages/temporal-adapter/src/research-cli.ts` mode toggle was restored before
+  staging.
+- Reviewer: PR #66. CodeRabbit posted 11 actionable comments; the branch added
+  structured reason contracts, duplicate-ID checks, exact token derivation,
+  stricter revision authority, frozen preview identity, payload-bound proposer
+  work digests, four-pack verifier coverage, localization field checks, and
+  ledger replacement detail. Exact-head CI must be re-run at the final head.
+- Registry/artifact proof: OpenClaw subagent assignment, exact-base worktree,
+  frozen install, attributable diff/tests, verifier output, and later PR/CI. The
+  previous failed/timed-out attempt was replaced only after this retry inspected
+  the same worktree and took ownership of its partial artifacts.
+- Handoff/integration: PR #66 opened for merge after exact-head CI passed; remote
+  merge and merged-main CI remain the final proof.
+- Blockers: none at assignment time.
+- Replacement audit: previous model attempt failed/timed out after creating the
+  correct worktree and partial T4 diff. The requester supplied the retry as a
+  terminal replacement event for that attempt; no active registry entry remained
+  available in this subagent context. Handoff recipient is the P9 coordinator
+  parent session; independent reviewer is PR #66/CodeRabbit plus exact-head CI.
+  This coordinator verified branch/base and status before continuing; no parallel
+  live worker was claimed.
+
+### P9-T5-T6 record
+
+- Objective: continue one accepted slice at a time after T4.
 - State: blocked and unassigned.
-- Blocker: P9 T3 must merge and fresh default-branch CI must pass.
+- Blocker: P9 T4 must merge and fresh default-branch CI must pass.
 
 ## Release evidence
 
