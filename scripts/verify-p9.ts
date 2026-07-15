@@ -2092,9 +2092,7 @@ async function verifyT5GenericExecution(): Promise<void> {
     forgedBudgetLedger.snapshot !== undefined,
     'T5 budget attack fixture contains a serialized authority snapshot',
   );
-  if (forgedBudgetLedger.snapshot) {
-    forgedBudgetLedger.snapshot.programId = 'forged-execution';
-  }
+  forgedBudgetLedger.snapshot.programId = 'forged-execution';
   forgedBudget['budget-ledger.json'] = JSON.stringify(
     forgedBudgetLedger,
     null,
