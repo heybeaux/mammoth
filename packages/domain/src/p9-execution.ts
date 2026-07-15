@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { canonicalDigest } from './digest.js';
+import { P9EntailmentLocatorSchema } from './p9.js';
 import { ResearchDomainPackIdSchema } from './p9-planning.js';
 
 const DigestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
@@ -241,14 +242,19 @@ export const P9ReportCitationSchema = z
     claimId: z.string().min(1),
     admissionId: z.string().min(1),
     admissionPolicyId: z.string().min(1),
+    admissionDecision: z.literal('admitted'),
     admissionDigest: DigestSchema,
     verdictId: z.string().min(1),
     verdictDigest: DigestSchema,
+    entailmentVerdictId: z.string().min(1),
+    entailmentVerdict: z.literal('entailed'),
+    entailmentVerdictDigest: DigestSchema,
     attemptId: z.string().min(1),
     requestedUrl: z.string().url(),
     sourceClass: z.string().min(1),
     sourceFamilyId: z.string().min(1),
     evidenceSpanId: z.string().min(1),
+    locator: P9EntailmentLocatorSchema,
     snapshotDigest: DigestSchema,
     quoteDigest: DigestSchema,
     coordinateSpace: z.string().min(1),
@@ -262,6 +268,42 @@ export const P9ReportCitationSchema = z
         code: z.ZodIssueCode.custom,
         path: ['endOffset'],
         message: 'report citation must select a non-empty evidence span',
+      });
+    }
+    if (
+      citation.verdictId !== citation.entailmentVerdictId ||
+      citation.verdictDigest !== citation.entailmentVerdictDigest
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['entailmentVerdictId'],
+        message: 'citation verdict aliases must identify the same verdict',
+      });
+    }
+    if (
+      citation.evidenceSpanId !== citation.locator.evidenceSpanId ||
+      citation.coordinateSpace !== citation.locator.coordinateSpace ||
+      citation.startOffset !== citation.locator.startOffset ||
+      citation.endOffset !== citation.locator.endOffset
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['locator'],
+        message: 'citation locator aliases must select the same exact span',
+      });
+    }
+    if (citation.snapshotDigest !== citation.locator.snapshotDigest) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['snapshotDigest'],
+        message: 'citation snapshot digest must match its exact locator',
+      });
+    }
+    if (citation.quoteDigest !== citation.locator.quoteDigest) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['quoteDigest'],
+        message: 'citation quote digest must match its exact locator',
       });
     }
   });
@@ -506,7 +548,10 @@ export const P9_REQUIRED_EXECUTION_ARTIFACTS = [
   'retrieval-attempts.jsonl',
   'budget-ledger.json',
   'parser-receipts.jsonl',
+  'claim-proposals.jsonl',
+  'claim-evidence.jsonl',
   'entailment-verdicts.jsonl',
+  'evidence-sources.jsonl',
   'plan-coverage-assessment.json',
   'report-manifest.json',
   'report.md',

@@ -51,6 +51,7 @@ import {
 import {
   P9GenericResearchError,
   runP9PlanDrivenResearch,
+  verifyP9ExactBundle,
 } from '../packages/runtime/src/index.js';
 
 const root = resolve(import.meta.dirname, '..');
@@ -65,6 +66,30 @@ async function json(path: string): Promise<Record<string, unknown>> {
 
 function invariant(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`P9_BASELINE_INVALID: ${message}`);
+}
+
+function resealP9Artifacts(artifacts: Record<string, string>): void {
+  const receipt = JSON.parse(
+    artifacts['execution-receipt.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  const artifactDigests = Object.fromEntries(
+    Object.entries(artifacts)
+      .filter(([name]) => name !== 'execution-receipt.json')
+      .map(([name, content]) => [
+        name,
+        `sha256:${createHash('sha256').update(content, 'utf8').digest('hex')}`,
+      ]),
+  );
+  const identity: Record<string, unknown> = {
+    ...receipt,
+    artifactDigests,
+  };
+  Reflect.deleteProperty(identity, 'receiptDigest');
+  artifacts['execution-receipt.json'] = JSON.stringify(
+    { ...identity, receiptDigest: canonicalDigest(identity) },
+    null,
+    2,
+  );
 }
 
 function hasZodIssue(error: unknown, message: string): boolean {
@@ -1445,6 +1470,530 @@ async function verifyT5GenericExecution(): Promise<void> {
     executionId: 'p9-t5-offline-technical-colibri',
     now,
   });
+  invariant(
+    verifyP9ExactBundle(run.artifacts).verifiedCitationCount ===
+      run.manifest.citations.length,
+    'T5 exact serialized bundle replays every factual citation chain',
+  );
+  const irrelevantCorpus = structuredClone(corpus);
+  const irrelevantClaims = irrelevantCorpus.claims as Record<string, unknown>[];
+  const irrelevantSeed = structuredClone(irrelevantClaims[0] ?? {});
+  irrelevantClaims.push({
+    ...irrelevantSeed,
+    claimId: 'claim-admitted-but-plan-irrelevant',
+    claimGroupId: 'group-admitted-but-plan-irrelevant',
+    critical: false,
+    statement: 'Cerulean typography zephyrs oscillate.',
+  });
+  const irrelevantRun = runP9PlanDrivenResearch({
+    planProposal: proposal,
+    plan: accepted.plan,
+    acceptanceReceipt: accepted.receipt,
+    pack,
+    corpus: irrelevantCorpus,
+    thresholds: coverageThresholds,
+    executionId: 'p9-t5-offline-with-irrelevant-admission',
+    now,
+  });
+  invariant(
+    irrelevantRun.admissions.filter((record) => record.decision === 'admitted')
+      .length > irrelevantRun.manifest.citations.length &&
+      verifyP9ExactBundle(irrelevantRun.artifacts).verifiedCitationCount ===
+        irrelevantRun.manifest.citations.length,
+    'T5 exact-bundle verifier accepts the rendered relevant subset while retaining irrelevant admissions',
+  );
+  const invalidSectionCorpus = structuredClone(corpus);
+  const invalidSectionClaim = (
+    invalidSectionCorpus.claims as Record<string, unknown>[]
+  )[0];
+  invariant(
+    Boolean(invalidSectionClaim),
+    'T5 fixture contains a claim section',
+  );
+  if (invalidSectionClaim) {
+    invalidSectionClaim.sectionId = 'not_in_the_accepted_outline';
+  }
+  let invalidSectionRejected = false;
+  try {
+    runP9PlanDrivenResearch({
+      planProposal: proposal,
+      plan: accepted.plan,
+      acceptanceReceipt: accepted.receipt,
+      pack,
+      corpus: invalidSectionCorpus,
+      thresholds: coverageThresholds,
+      executionId: 'p9-t5-invalid-report-section',
+      now,
+    });
+  } catch (error) {
+    invalidSectionRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'corpus_report_section_invalid';
+  }
+  invariant(
+    invalidSectionRejected,
+    'T5 producer rejects corpus claims outside the accepted report outline',
+  );
+
+  const forgedAliases = { ...run.artifacts } as Record<string, string>;
+  const forgedManifest = JSON.parse(
+    forgedAliases['report-manifest.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  const forgedCitations = forgedManifest.citations as Record<string, unknown>[];
+  const forgedCitation = forgedCitations[0];
+  invariant(Boolean(forgedCitation), 'T5 fixture contains a citation to forge');
+  if (forgedCitation) {
+    const forgedDigest = canonicalDigest('forged-verdict');
+    forgedCitation.verdictId = 'verdict:forged';
+    forgedCitation.entailmentVerdictId = 'verdict:forged';
+    forgedCitation.verdictDigest = forgedDigest;
+    forgedCitation.entailmentVerdictDigest = forgedDigest;
+  }
+  const forgedManifestIdentity = { ...forgedManifest };
+  delete forgedManifestIdentity.manifestDigest;
+  forgedAliases['report-manifest.json'] = JSON.stringify(
+    {
+      ...forgedManifestIdentity,
+      manifestDigest: canonicalDigest(forgedManifestIdentity),
+    },
+    null,
+    2,
+  );
+  resealP9Artifacts(forgedAliases);
+  let forgedAliasesRejected = false;
+  try {
+    verifyP9ExactBundle(forgedAliases);
+  } catch (error) {
+    forgedAliasesRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    forgedAliasesRejected,
+    'T5 exact-bundle verifier rejects jointly forged citation aliases after manifest and receipt resealing',
+  );
+
+  const swappedAdmission = { ...run.artifacts } as Record<string, string>;
+  const entailmentLines = (swappedAdmission['entailment-verdicts.jsonl'] ?? '')
+    .trimEnd()
+    .split('\n')
+    .map(
+      (line) =>
+        JSON.parse(line) as {
+          verdict: Record<string, unknown>;
+          admission: Record<string, unknown>;
+        },
+    );
+  invariant(
+    entailmentLines.length >= 2,
+    'T5 fixture contains two entailment records for cross-record tampering',
+  );
+  const firstAdmission = entailmentLines[0]?.admission;
+  const secondVerdict = entailmentLines[1]?.verdict;
+  invariant(
+    Boolean(firstAdmission && secondVerdict),
+    'T5 entailment records contain admission and verdict identities',
+  );
+  if (firstAdmission && secondVerdict) {
+    firstAdmission.verdictId = secondVerdict.verdictId;
+    firstAdmission.verdictDigest = secondVerdict.verdictDigest;
+    const admissionIdentity = { ...firstAdmission };
+    delete admissionIdentity.admissionDigest;
+    firstAdmission.admissionDigest = canonicalDigest(admissionIdentity);
+  }
+  swappedAdmission['entailment-verdicts.jsonl'] = `${entailmentLines
+    .map((record) => JSON.stringify(record))
+    .join('\n')}\n`;
+  resealP9Artifacts(swappedAdmission);
+  let swappedAdmissionRejected = false;
+  try {
+    verifyP9ExactBundle(swappedAdmission);
+  } catch (error) {
+    swappedAdmissionRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    swappedAdmissionRejected,
+    'T5 exact-bundle verifier rejects a schema-valid swapped admission/verdict chain',
+  );
+
+  const forgedAdmissionPolicy = { ...run.artifacts } as Record<string, string>;
+  const policyEntailmentLines = (
+    forgedAdmissionPolicy['entailment-verdicts.jsonl'] ?? ''
+  )
+    .trimEnd()
+    .split('\n')
+    .map(
+      (line) =>
+        JSON.parse(line) as {
+          verdict: Record<string, unknown>;
+          admission: Record<string, unknown>;
+        },
+    );
+  const policyManifest = JSON.parse(
+    forgedAdmissionPolicy['report-manifest.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  const policyCitations = policyManifest.citations as Record<string, unknown>[];
+  const policyCitation = policyCitations[0];
+  const policyRecord = policyEntailmentLines.find(
+    (record) => record.admission.proposalId === policyCitation?.claimId,
+  );
+  invariant(
+    Boolean(policyCitation && policyRecord),
+    'T5 fixture contains a rendered admitted decision for policy tampering',
+  );
+  if (policyCitation && policyRecord) {
+    const policyVerdict = policyRecord.verdict;
+    policyVerdict.semanticDeltas = ['quantity'];
+    const policyVerdictIdentity = { ...policyVerdict };
+    delete policyVerdictIdentity.verdictDigest;
+    policyVerdict.verdictDigest = canonicalDigest(policyVerdictIdentity);
+    const policyAdmission = policyRecord.admission;
+    policyAdmission.verdictDigest = policyVerdict.verdictDigest;
+    const policyAdmissionIdentity = { ...policyAdmission };
+    delete policyAdmissionIdentity.admissionDigest;
+    policyAdmission.admissionDigest = canonicalDigest(policyAdmissionIdentity);
+    policyCitation.verdictDigest = policyVerdict.verdictDigest;
+    policyCitation.entailmentVerdictDigest = policyVerdict.verdictDigest;
+    policyCitation.admissionDigest = policyAdmission.admissionDigest;
+  }
+  forgedAdmissionPolicy['entailment-verdicts.jsonl'] = `${policyEntailmentLines
+    .map((record) => JSON.stringify(record))
+    .join('\n')}\n`;
+  const policyManifestIdentity = { ...policyManifest };
+  delete policyManifestIdentity.manifestDigest;
+  policyManifest.manifestDigest = canonicalDigest(policyManifestIdentity);
+  forgedAdmissionPolicy['report-manifest.json'] = JSON.stringify(
+    policyManifest,
+    null,
+    2,
+  );
+  resealP9Artifacts(forgedAdmissionPolicy);
+  let forgedAdmissionPolicyRejected = false;
+  try {
+    verifyP9ExactBundle(forgedAdmissionPolicy);
+  } catch (error) {
+    forgedAdmissionPolicyRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    forgedAdmissionPolicyRejected,
+    'T5 exact-bundle verifier rejects a fully resealed admission that violates deterministic policy',
+  );
+
+  const alteredSnapshot = { ...run.artifacts } as Record<string, string>;
+  const firstSnapshot = Object.keys(alteredSnapshot).find((name) =>
+    name.startsWith('source-snapshots/'),
+  );
+  invariant(
+    Boolean(firstSnapshot),
+    'T5 exact bundle contains source snapshots',
+  );
+  if (firstSnapshot) {
+    alteredSnapshot[firstSnapshot] =
+      `${alteredSnapshot[firstSnapshot] ?? ''}\nforged source bytes`;
+  }
+  resealP9Artifacts(alteredSnapshot);
+  let alteredSnapshotRejected = false;
+  try {
+    verifyP9ExactBundle(alteredSnapshot);
+  } catch (error) {
+    alteredSnapshotRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    alteredSnapshotRejected,
+    'T5 exact-bundle verifier rejects altered source bytes after receipt resealing',
+  );
+
+  const unsupportedProse = { ...run.artifacts } as Record<string, string>;
+  const unsupportedManifest = JSON.parse(
+    unsupportedProse['report-manifest.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  const unsupportedSections = unsupportedManifest.sections as Record<
+    string,
+    unknown
+  >[];
+  const unsupportedSentences = unsupportedSections.flatMap(
+    (section) => section.sentences as Record<string, unknown>[],
+  );
+  const unsupportedSentence = unsupportedSentences.find(
+    (sentence) => sentence.kind === 'factual',
+  );
+  invariant(
+    Boolean(unsupportedSentence),
+    'T5 fixture contains factual prose for tampering',
+  );
+  const originalSentenceText =
+    typeof unsupportedSentence?.text === 'string'
+      ? unsupportedSentence.text
+      : '';
+  invariant(
+    originalSentenceText.length > 0,
+    'T5 factual prose tamper target is a non-empty string',
+  );
+  const forgedSentenceText =
+    'This canned conclusion is not the independently entailed proposal.';
+  if (unsupportedSentence) unsupportedSentence.text = forgedSentenceText;
+  const unsupportedManifestIdentity = { ...unsupportedManifest };
+  delete unsupportedManifestIdentity.manifestDigest;
+  unsupportedProse['report-manifest.json'] = JSON.stringify(
+    {
+      ...unsupportedManifestIdentity,
+      manifestDigest: canonicalDigest(unsupportedManifestIdentity),
+    },
+    null,
+    2,
+  );
+  unsupportedProse['report.md'] = (unsupportedProse['report.md'] ?? '').replace(
+    originalSentenceText,
+    forgedSentenceText,
+  );
+  resealP9Artifacts(unsupportedProse);
+  let unsupportedProseRejected = false;
+  try {
+    verifyP9ExactBundle(unsupportedProse);
+  } catch (error) {
+    unsupportedProseRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    unsupportedProseRejected,
+    'T5 exact-bundle verifier rejects unsupported rendered prose after full resealing',
+  );
+
+  const swappedCandidate = { ...run.artifacts } as Record<string, string>;
+  const sourceLines = (swappedCandidate['evidence-sources.jsonl'] ?? '')
+    .trimEnd()
+    .split('\n')
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  invariant(
+    sourceLines.length >= 2,
+    'T5 fixture contains two source records for identity tampering',
+  );
+  if (sourceLines[0] && sourceLines[1]) {
+    sourceLines[0].candidateId = sourceLines[1].candidateId;
+  }
+  swappedCandidate['evidence-sources.jsonl'] = `${sourceLines
+    .map((record) => JSON.stringify(record))
+    .join('\n')}\n`;
+  resealP9Artifacts(swappedCandidate);
+  let swappedCandidateRejected = false;
+  try {
+    verifyP9ExactBundle(swappedCandidate);
+  } catch (error) {
+    swappedCandidateRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    swappedCandidateRejected,
+    'T5 exact-bundle verifier rejects a resealed source candidate identity swap',
+  );
+
+  const swappedClaimEvidence = { ...run.artifacts } as Record<string, string>;
+  const claimEvidenceLines = (
+    swappedClaimEvidence['claim-evidence.jsonl'] ?? ''
+  )
+    .trimEnd()
+    .split('\n')
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  invariant(
+    claimEvidenceLines.length >= 2,
+    'T5 fixture contains two claim-evidence records for cross-chain tampering',
+  );
+  const citedClaimId = run.manifest.citations[0]?.claimId;
+  invariant(
+    Boolean(citedClaimId),
+    'T5 fixture contains a cited claim to tamper',
+  );
+  const firstClaimEvidenceRecord = claimEvidenceLines.find(
+    (record) => record.proposalId === citedClaimId,
+  );
+  invariant(
+    Boolean(firstClaimEvidenceRecord),
+    'T5 fixture serializes claim evidence for the cited claim',
+  );
+  const firstClaimEvidence = firstClaimEvidenceRecord?.evidence as Record<
+    string,
+    unknown
+  >;
+  const secondClaimEvidenceRecord = claimEvidenceLines.find(
+    (record) =>
+      (record.evidence as Record<string, unknown>).attemptId !==
+      firstClaimEvidence.attemptId,
+  );
+  invariant(
+    Boolean(secondClaimEvidenceRecord),
+    'T5 fixture contains claim evidence from two distinct retrieval attempts',
+  );
+  const secondClaimEvidence = secondClaimEvidenceRecord?.evidence as Record<
+    string,
+    unknown
+  >;
+  for (const key of [
+    'candidateId',
+    'attemptId',
+    'attemptDigest',
+    'snapshotDigest',
+    'sourceClass',
+    'sourceFamilyId',
+  ]) {
+    firstClaimEvidence[key] = secondClaimEvidence[key];
+  }
+  firstClaimEvidence.evidenceDigest = canonicalDigest({
+    ...firstClaimEvidence,
+    evidenceDigest: undefined,
+  });
+  swappedClaimEvidence['claim-evidence.jsonl'] = `${claimEvidenceLines
+    .map((record) => JSON.stringify(record))
+    .join('\n')}\n`;
+  resealP9Artifacts(swappedClaimEvidence);
+  let swappedClaimEvidenceRejected = false;
+  let swappedClaimEvidenceError = 'none';
+  try {
+    verifyP9ExactBundle(swappedClaimEvidence);
+  } catch (error) {
+    swappedClaimEvidenceError =
+      error instanceof Error ? `${error.name}:${error.message}` : String(error);
+    swappedClaimEvidenceRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    swappedClaimEvidenceRejected,
+    `T5 exact-bundle verifier rejects resealed claim evidence disconnected from its citation (${swappedClaimEvidenceError})`,
+  );
+
+  const removedContradiction = { ...run.artifacts } as Record<string, string>;
+  const contradictionManifest = JSON.parse(
+    removedContradiction['report-manifest.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  const contradictionRecords = contradictionManifest.contradictions as Record<
+    string,
+    unknown
+  >[];
+  const omittedContradiction = contradictionRecords.shift();
+  invariant(
+    Boolean(omittedContradiction),
+    'T5 fixture contains a contradiction for provenance tampering',
+  );
+  const contradictionManifestIdentity = { ...contradictionManifest };
+  delete contradictionManifestIdentity.manifestDigest;
+  contradictionManifest.manifestDigest = canonicalDigest(
+    contradictionManifestIdentity,
+  );
+  removedContradiction['report-manifest.json'] = JSON.stringify(
+    contradictionManifest,
+    null,
+    2,
+  );
+  if (omittedContradiction) {
+    const contradictionLine = `- Proposal ${String(omittedContradiction.proposalId)} was contradicted under ${(omittedContradiction.contradictionIds as unknown[]).join(', ')} (verdict ${String(omittedContradiction.verdictId)}; locator ${String(omittedContradiction.evidenceSpanId)}; snapshot ${String(omittedContradiction.snapshotDigest)}).\n`;
+    removedContradiction['report.md'] = (
+      removedContradiction['report.md'] ?? ''
+    ).replace(contradictionLine, '');
+  }
+  resealP9Artifacts(removedContradiction);
+  let removedContradictionRejected = false;
+  try {
+    verifyP9ExactBundle(removedContradiction);
+  } catch (error) {
+    removedContradictionRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    removedContradictionRejected,
+    'T5 exact-bundle verifier rejects a fully resealed omitted contradiction',
+  );
+
+  const alteredPlanArtifacts = { ...run.artifacts } as Record<string, string>;
+  const planArtifact = JSON.parse(
+    alteredPlanArtifacts['research-plan.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  const alteredScope = planArtifact.scope as Record<string, unknown>;
+  alteredScope.include = [
+    ...(alteredScope.include as unknown[]),
+    'A forged accepted scope expansion.',
+  ];
+  const planIdentity = { ...planArtifact };
+  delete planIdentity.planDigest;
+  planArtifact.planDigest = canonicalDigest(planIdentity);
+  alteredPlanArtifacts['research-plan.json'] = JSON.stringify(
+    planArtifact,
+    null,
+    2,
+  );
+  const acceptanceArtifact = JSON.parse(
+    alteredPlanArtifacts['plan-acceptance-receipt.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  acceptanceArtifact.planDigest = planArtifact.planDigest;
+  const acceptanceIdentity = { ...acceptanceArtifact };
+  delete acceptanceIdentity.receiptDigest;
+  acceptanceArtifact.receiptDigest = canonicalDigest(acceptanceIdentity);
+  alteredPlanArtifacts['plan-acceptance-receipt.json'] = JSON.stringify(
+    acceptanceArtifact,
+    null,
+    2,
+  );
+  const assessmentArtifact = JSON.parse(
+    alteredPlanArtifacts['plan-coverage-assessment.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  assessmentArtifact.planDigest = planArtifact.planDigest;
+  const assessmentIdentity = { ...assessmentArtifact };
+  delete assessmentIdentity.assessmentDigest;
+  assessmentArtifact.assessmentDigest = canonicalDigest(assessmentIdentity);
+  alteredPlanArtifacts['plan-coverage-assessment.json'] = JSON.stringify(
+    assessmentArtifact,
+    null,
+    2,
+  );
+  const manifestArtifact = JSON.parse(
+    alteredPlanArtifacts['report-manifest.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  manifestArtifact.planDigest = planArtifact.planDigest;
+  manifestArtifact.coverageAssessmentDigest =
+    assessmentArtifact.assessmentDigest;
+  const manifestIdentity = { ...manifestArtifact };
+  delete manifestIdentity.manifestDigest;
+  manifestArtifact.manifestDigest = canonicalDigest(manifestIdentity);
+  alteredPlanArtifacts['report-manifest.json'] = JSON.stringify(
+    manifestArtifact,
+    null,
+    2,
+  );
+  alteredPlanArtifacts['report.md'] = (
+    alteredPlanArtifacts['report.md'] ?? ''
+  ).replace(accepted.plan.planDigest, String(planArtifact.planDigest));
+  const executionArtifact = JSON.parse(
+    alteredPlanArtifacts['execution-receipt.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  executionArtifact.planDigest = planArtifact.planDigest;
+  executionArtifact.coverageAssessmentDigest =
+    assessmentArtifact.assessmentDigest;
+  alteredPlanArtifacts['execution-receipt.json'] = JSON.stringify(
+    executionArtifact,
+    null,
+    2,
+  );
+  resealP9Artifacts(alteredPlanArtifacts);
+  let alteredPlanRejected = false;
+  try {
+    verifyP9ExactBundle(alteredPlanArtifacts);
+  } catch (error) {
+    alteredPlanRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    alteredPlanRejected,
+    'T5 exact-bundle verifier rejects a fully resealed plan outside its accepted proposal content',
+  );
   const reportFixture = await json('non-data-center-report.json');
   const requiredSections = new Set(
     (reportFixture.requiredSections as readonly string[]).map(String),
@@ -1582,6 +2131,29 @@ async function verifyT5GenericExecution(): Promise<void> {
       run.report.includes('references and provenance') &&
       !run.report.toLowerCase().includes('data center'),
     'T5 unrelated report is admitted-claim grounded and free of data-center template leakage',
+  );
+  const citationsByClaim = new Map(
+    run.manifest.citations.map((citation) => [citation.claimId, citation]),
+  );
+  const factualClaimIds = run.manifest.sections.flatMap((section) =>
+    section.sentences
+      .filter((sentence) => sentence.kind === 'factual')
+      .flatMap((sentence) => sentence.claimIds),
+  );
+  invariant(
+    factualClaimIds.every((claimId) => {
+      const citation = citationsByClaim.get(claimId);
+      return (
+        citation !== undefined &&
+        citation.admissionPolicyId.length > 0 &&
+        citation.admissionDigest.startsWith('sha256:') &&
+        citation.entailmentVerdictDigest.startsWith('sha256:') &&
+        citation.snapshotDigest === citation.locator.snapshotDigest &&
+        citation.quoteDigest === citation.locator.quoteDigest &&
+        citation.locator.coordinateSpace === 'utf16-code-units/v1'
+      );
+    }),
+    'T5 factual citations bind admission, entailment, exact locator, and immutable snapshot metadata',
   );
 
   let invalidChainRejected = false;
