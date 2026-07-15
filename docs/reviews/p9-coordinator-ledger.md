@@ -329,12 +329,11 @@ handoff, integration commit, blockers, and replacement audit.
   lint, typecheck, full tests, build, P8 regression, and `verify:p9`; the known
   install/build induced `packages/temporal-adapter/src/research-cli.ts` mode
   toggle was restored and `git status --short` was clean. Exact-head PR CI
-  `29427796474` passed every lane and the aggregate check at
-  `ee7df921cbf54f574b89d3d954ba87e68bfba69a`. Merged-main CI remains to be run
+  `29428355569` passed every lane and the aggregate check at
+  `9448ce70ff86661c929c8d514a560b0fd331de0d`. Merged-main CI remains to be run
   after merge.
-- Reviewer: PR #68. CodeRabbit remained pending after exact-head CI and produced
-  no line findings or completed review result before merge consideration; this is
-  recorded as no reviewer result, not approval.
+- Reviewer: PR #68. CodeRabbit completed with pass and no line findings at the
+  exact PR head.
 - Registry/artifact proof: fresh worktree from exact origin/main, frozen install,
   inspected prior dirty T5 worktree, attributable diff, focused tests, and
   verifier output.
