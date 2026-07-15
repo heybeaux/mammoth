@@ -60,6 +60,7 @@ import {
 } from '@mammoth/retrieval';
 import { z } from 'zod';
 import {
+  boundedP9SentenceContext,
   compileP9ObservedResearchBundle,
   verifyP9ExactBundle,
   type P9GenericResearchRun,
@@ -885,7 +886,7 @@ async function runP9LiveApplicationExclusive(
     const startOffset = snapshot.body.indexOf(seed.quote);
     if (startOffset < 0) continue;
     const endOffset = startOffset + seed.quote.length;
-    const boundedContext = boundedSentenceContext(
+    const boundedContext = boundedP9SentenceContext(
       snapshot.body,
       startOffset,
       endOffset,
@@ -1473,28 +1474,6 @@ function ceiling(input: Partial<EffectRequestCeiling>): EffectRequestCeiling {
     parserClass: null,
     ...input,
   };
-}
-
-function boundedSentenceContext(
-  body: string,
-  startOffset: number,
-  endOffset: number,
-): string {
-  const priorBoundary = Math.max(
-    body.lastIndexOf('.', Math.max(0, startOffset - 1)),
-    body.lastIndexOf('!', Math.max(0, startOffset - 1)),
-    body.lastIndexOf('?', Math.max(0, startOffset - 1)),
-    body.lastIndexOf('\n', Math.max(0, startOffset - 1)),
-  );
-  const following = [
-    body.indexOf('.', endOffset),
-    body.indexOf('!', endOffset),
-    body.indexOf('?', endOffset),
-    body.indexOf('\n', endOffset),
-  ].filter((index) => index >= 0);
-  const contextEnd =
-    following.length === 0 ? body.length : Math.min(...following) + 1;
-  return body.slice(priorBoundary + 1, contextEnd).trim();
 }
 
 const RETRIEVAL_FAILURES = {

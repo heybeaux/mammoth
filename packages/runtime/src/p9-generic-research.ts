@@ -437,7 +437,7 @@ function sha256Text(value: string): string {
   return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`;
 }
 
-function boundedSentenceContext(
+export function boundedP9SentenceContext(
   body: string,
   startOffset: number,
   endOffset: number,
@@ -910,7 +910,7 @@ export function runP9PlanDrivenResearch(
     }
     const startOffset = source.body.indexOf(claim.quote);
     const endOffset = startOffset + claim.quote.length;
-    const boundedContext = boundedSentenceContext(
+    const boundedContext = boundedP9SentenceContext(
       source.body,
       startOffset,
       endOffset,
@@ -1507,7 +1507,7 @@ export function compileP9ObservedResearchBundle(
       canonicalDigest(quote) !== binding.proposal.locator.quoteDigest ||
       canonicalDigest(snapshot.body) !==
         binding.proposal.locator.snapshotDigest ||
-      boundedSentenceContext(
+      boundedP9SentenceContext(
         snapshot.body,
         binding.proposal.locator.startOffset,
         binding.proposal.locator.endOffset,
@@ -2313,7 +2313,7 @@ export function verifyP9ExactBundle(
       `citation ${citation.claimId} locator does not select the evaluated quote`,
     );
     assert(
-      boundedSentenceContext(
+      boundedP9SentenceContext(
         snapshot,
         citation.locator.startOffset,
         citation.locator.endOffset,
@@ -2414,7 +2414,7 @@ export function verifyP9ExactBundle(
       canonicalDigest(snapshot) === contradiction.snapshotDigest &&
         quote === verdict.evaluatedQuote &&
         canonicalDigest(quote) === contradiction.quoteDigest &&
-        boundedSentenceContext(
+        boundedP9SentenceContext(
           snapshot,
           contradiction.startOffset,
           contradiction.endOffset,
