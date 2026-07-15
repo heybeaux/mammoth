@@ -15,15 +15,16 @@ Never use a branch, worktree, or accepted spawn as proof that work is active.
 
 ## Ownership
 
-| Assignment | State   | Owner/runtime             | Worktree / branch                                                                     | Base           | Record                       | Next                          |
-| ---------- | ------- | ------------------------- | ------------------------------------------------------------------------------------- | -------------- | ---------------------------- | ----------------------------- |
-| `P9-PLAN`  | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                                  | `1de5b37`      | [P9-PLAN](#p9-plan-record)   | complete                      |
-| `P9-T0`    | merged  | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`                   | `2aeb3db`      | [P9-T0](#p9-t0-record)       | complete                      |
-| `P9-T1`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9`      | [P9-T1](#p9-t1-record)       | complete                      |
-| `P9-T2`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8`      | [P9-T2](#p9-t2-record)       | complete                      |
-| `P9-T3`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38`      | [P9-T3](#p9-t3-record)       | complete                      |
-| `P9-T4`    | ready   | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f`      | [P9-T4](#p9-t4-record)       | merge after exact-head CI     |
-| `P9-T5-T6` | blocked | unassigned                | fresh worktrees required                                                              | later T4 merge | [P9-T5-T6](#p9-t5-t6-record) | claim after accepted T4 merge |
+| Assignment | State   | Owner/runtime             | Worktree / branch                                                                     | Base           | Record                     | Next                   |
+| ---------- | ------- | ------------------------- | ------------------------------------------------------------------------------------- | -------------- | -------------------------- | ---------------------- |
+| `P9-PLAN`  | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                                  | `1de5b37`      | [P9-PLAN](#p9-plan-record) | complete               |
+| `P9-T0`    | merged  | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`                   | `2aeb3db`      | [P9-T0](#p9-t0-record)     | complete               |
+| `P9-T1`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9`      | [P9-T1](#p9-t1-record)     | complete               |
+| `P9-T2`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8`      | [P9-T2](#p9-t2-record)     | complete               |
+| `P9-T3`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38`      | [P9-T3](#p9-t3-record)     | complete               |
+| `P9-T4`    | merged  | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f`      | [P9-T4](#p9-t4-record)     | complete               |
+| `P9-T5`    | active  | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t5-generic-retry` / `feat/p9-t5-generic-execution-retry`     | `ff03482`      | [P9-T5](#p9-t5-record)     | PR, CI, merge, main CI |
+| `P9-T6`    | blocked | coordinator               | fresh worktree required after T5 merge                                                | later T5 merge | [P9-T6](#p9-t6-record)     | inspect live authority |
 
 ## Required state fields for implementation lanes
 
@@ -267,8 +268,10 @@ handoff, integration commit, blockers, and replacement audit.
   frozen install, attributable diff/tests, verifier output, and later PR/CI. The
   previous failed/timed-out attempt was replaced only after this retry inspected
   the same worktree and took ownership of its partial artifacts.
-- Handoff/integration: PR #66 opened for merge after exact-head CI passed; remote
-  merge and merged-main CI remain the final proof.
+- Handoff/integration: PR #66 merged as
+  `d5b8c3b9e431ec7de7211eb51f5fbc066e24c75f`; README PR #67 then merged as
+  `ff034823cc460d774642dbe9144c5ecd0ace35d5`. Fresh current-main CI
+  `29421678055` passed every lane and the aggregate check.
 - Blockers: none at assignment time.
 - Replacement audit: previous model attempt failed/timed out after creating the
   correct worktree and partial T4 diff. The requester supplied the retry as a
@@ -278,11 +281,74 @@ handoff, integration commit, blockers, and replacement audit.
   This coordinator verified branch/base and status before continuing; no parallel
   live worker was claimed.
 
-### P9-T5-T6 record
+### P9-T5 record
 
-- Objective: continue one accepted slice at a time after T4.
-- State: blocked and unassigned.
-- Blocker: P9 T4 must merge and fresh default-branch CI must pass.
+- Objective: implement generic execution and plan-relative verification by
+  composing an accepted plan into discovery, budgeted acquisition, parser
+  receipts, independent entailment admission, cycle stop checks, admitted-only
+  reporting, complete unrelated offline report artifacts, P8 regression, and a
+  negative canned-prose coverage proof.
+- Acceptance evidence: data-center P8 regression remains green; the frozen
+  technical Colibri offline corpus produces a covered report against the
+  accepted technical plan; a dense data-center corpus with entailed claims fails
+  coverage and forbidden vocabulary under that same plan; `verify:p9` reports
+  `T5 generic_execution=pass`.
+- Runtime identity: Scout OpenClaw subagent session
+  `agent:scout:subagent:acb0ab44-1153-4ce8-86b3-131f2c9b23d5`; requester
+  session `agent:scout:telegram:direct:8274834197`; resolved model identity is
+  not exposed to the repository runtime. This retry inspected the prior dirty
+  `/private/tmp/mammoth-p9-t5-generic` worktree and preserved useful partial
+  artifacts into a fresh worktree before editing.
+- Worktree/branch/base: `/private/tmp/mammoth-p9-t5-generic-retry`;
+  `feat/p9-t5-generic-execution-retry`; exact `origin/main`
+  `ff034823cc460d774642dbe9144c5ecd0ace35d5`.
+- Owned paths: `packages/domain/src/p9-execution.ts`,
+  `packages/governance/src/p9-plan-coverage.ts`,
+  `packages/runtime/src/p9-generic-research.ts`, package exports and runtime
+  dependency wiring, `evals/fixtures/p9/report-corpus/**`,
+  `scripts/verify-p9.ts`, `pnpm-lock.yaml`, and this ledger.
+- Prohibited paths: live provider execution, T6 release/tag/receipt work before
+  T5 merge, frozen T0/P8 fixture semantics, unrelated user changes, external
+  repositories, and future solver execution.
+- Allowed contract changes: T5 subset of `p9.v1`: plan coverage assessment,
+  report manifest, execution receipt, typed residue, and offline corpus schema.
+- Dependencies: P9 T4 merged by PR #66, README PR #67 merged, current-main CI
+  `29421678055` passed at `ff03482`.
+- Exact gates: focused domain/governance/runtime tests; format; lint; typecheck;
+  full tests; build; `pnpm verify:p8`; `pnpm verify:p9`; detached clean-checkout
+  frozen install and repeat before merge recommendation; exact-head PR CI and
+  merged-main CI.
+- Current local results: `pnpm --filter @mammoth/domain test` PASS (56);
+  `pnpm --filter @mammoth/governance test` PASS (40);
+  `pnpm --filter @mammoth/runtime test` PASS (51); `pnpm format:check` PASS;
+  `pnpm lint` PASS; `pnpm typecheck` PASS; full `pnpm test` PASS; `pnpm build`
+  PASS; `pnpm verify:p8` PASS with manifest digest
+  `sha256:d154c6e1df6bfdb41f5222643f33862fa4eb15531af75ce6194171150077298f`;
+  `pnpm verify:p9` PASS with `T5 generic_execution=pass` and `T6=blocked`.
+  Detached clean checkout proof passed `pnpm install --frozen-lockfile`, format,
+  lint, typecheck, full tests, build, P8 regression, and `verify:p9`; the known
+  install/build induced `packages/temporal-adapter/src/research-cli.ts` mode
+  toggle was restored and `git status --short` was clean. PR CI and merged-main
+  CI remain to be run after push.
+- Reviewer: pending PR reviewer after push.
+- Registry/artifact proof: fresh worktree from exact origin/main, frozen install,
+  inspected prior dirty T5 worktree, attributable diff, focused tests, and
+  verifier output.
+- Handoff/integration: pending.
+- Blockers: none for T5 implementation.
+- Replacement audit: previous model attempt failed/timed out after creating a
+  dirty `/private/tmp/mammoth-p9-t5-generic` worktree with partial T5 files. This
+  retry did not reuse that branch/worktree, copied only useful uncommitted
+  artifacts into a fresh exact-main worktree, and continued with exclusive
+  ownership of the retry worktree.
+
+### P9-T6 record
+
+- Objective: live exhibition and release sequencing after T5 merge.
+- State: blocked until T5 is merged and fresh default-branch CI passes.
+- Blocker: T6 live exhibition and any metered provider call still require a
+  separate valid authorization check under `P9_PLAN.md`/`LOOP.md`; no T6 live
+  authority has been proven in this T5 worktree.
 
 ## Release evidence
 
