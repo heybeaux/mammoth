@@ -1521,10 +1521,14 @@ export interface BraveP9LiveSearchAdapterInput {
   readonly environment?: Readonly<Record<string, string | undefined>>;
   readonly fetchImpl?: typeof fetch;
   readonly now?: () => Date;
+  readonly monotonicNow?: () => number;
+  readonly sleep?: (milliseconds: number) => Promise<void>;
+  readonly minimumIntervalMs?: number;
 }
 
 export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
   readonly destinationOrigin = 'https://api.search.brave.com';
+  #nextRequestAtMs = 0;
 
   constructor(private readonly input: BraveP9LiveSearchAdapterInput) {
     if (!input.apiKeyEnvironmentVariable.trim()) {
@@ -1543,6 +1547,20 @@ export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
       );
     }
     const now = this.input.now ?? (() => new Date());
+    const monotonicNow = this.input.monotonicNow ?? Date.now;
+    const sleep =
+      this.input.sleep ??
+      ((milliseconds: number) =>
+        new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+    const minimumIntervalMs = this.input.minimumIntervalMs ?? 1_100;
+    if (!Number.isFinite(minimumIntervalMs) || minimumIntervalMs < 0) {
+      throw new Error(
+        'Brave adapter minimum request interval must be a finite non-negative number',
+      );
+    }
+    const waitMs = Math.max(0, this.#nextRequestAtMs - monotonicNow());
+    if (waitMs > 0) await sleep(waitMs);
+    this.#nextRequestAtMs = monotonicNow() + minimumIntervalMs;
     const fetchImpl = this.input.fetchImpl ?? fetch;
     const url = new URL('https://api.search.brave.com/res/v1/web/search');
     url.searchParams.set('q', query);
