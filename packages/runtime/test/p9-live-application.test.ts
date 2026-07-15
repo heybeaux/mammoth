@@ -266,6 +266,11 @@ function makeReceipt(
     authorizedRetrievalOrigins: [
       'https://github.com/',
       'https://api.github.com/',
+      'https://raw.githubusercontent.com/',
+      'https://huggingface.co/',
+      'https://www.apple.com/',
+      'https://arxiv.org/',
+      'https://www.cisa.gov/',
     ],
     authorizedBillingAccountIds: [
       ...new Set(
@@ -666,7 +671,7 @@ describe('P9 live application', () => {
       expect.arrayContaining([
         expect.stringContaining('site:apple.com'),
         expect.stringContaining('site:arxiv.org'),
-        expect.stringContaining('site:nvd.nist.gov'),
+        expect.stringContaining('site:cisa.gov'),
       ]),
     );
     expect(plan.acceptanceReceipt.decision).toBe('accepted');
@@ -717,6 +722,34 @@ describe('P9 live application', () => {
       'https://github.com/JustVugg/colibri/blob/main/source-2.md',
       'https://github.com/JustVugg/colibri/blob/main/source-3.md',
     ]);
+  });
+
+  it('seeds every mandatory source class before volatile search results', async () => {
+    const retrieved: string[] = [];
+    const run = await runP9LiveApplication(
+      makeInput({
+        includeMandatorySourceTargets: true,
+        maxCandidates: 6,
+        retrieve: (request) => {
+          retrieved.push(request.url);
+          return fakeRetrieve(request);
+        },
+      }),
+    );
+
+    expect(retrieved).toEqual([
+      'https://raw.githubusercontent.com/JustVugg/colibri/main/c/backend_metal.mm',
+      'https://github.com/JustVugg/colibri',
+      'https://huggingface.co/zai-org/GLM-5',
+      'https://www.apple.com/macbook-pro/specs/',
+      'https://arxiv.org/html/2509.24086v1',
+      'https://www.cisa.gov/news-events/ics-advisories/icsa-24-205-03',
+    ]);
+    expect(
+      JSON.parse(run.artifacts['execution-receipt.json'] ?? '{}') as {
+        counts?: { selectedCandidates?: number };
+      },
+    ).toMatchObject({ counts: { selectedCandidates: 6 } });
   });
 
   it('precedes every outbound effect with a durable journaled reservation and settles observed usage', async () => {

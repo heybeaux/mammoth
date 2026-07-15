@@ -639,6 +639,7 @@ async function liveCommand(
     trustedIssuerId: requiredEnv(env, 'MAMMOTH_P9_TRUSTED_AUTHORIZER_ID'),
     sourceClassificationPolicyDigest:
       P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
+    includeMandatorySourceTargets: true,
     journal,
     search: new BraveP9LiveSearchAdapter({
       apiKeyEnvironmentVariable: requiredCredentialEnv(searchProfile),

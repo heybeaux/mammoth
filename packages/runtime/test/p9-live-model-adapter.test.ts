@@ -108,6 +108,13 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     expect(JSON.stringify(requests[0])).toContain(
       'statement must be exactly identical to the quote',
     );
+    expect(requests[0]?.response_format).toMatchObject({
+      json_schema: {
+        schema: {
+          properties: { claims: { minItems: 6 } },
+        },
+      },
+    });
     expect(requests[1]?.response_format).toMatchObject({
       json_schema: {
         schema: {
