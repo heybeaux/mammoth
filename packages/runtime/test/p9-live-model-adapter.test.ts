@@ -7,6 +7,7 @@ import {
 describe('OpenAI-compatible P9 live model adapter', () => {
   it('binds each call to its reserved output ceiling and a strict JSON schema', async () => {
     const requests: Record<string, unknown>[] = [];
+    const requestUrls: string[] = [];
     const responses = [
       {
         claims: [
@@ -34,10 +35,13 @@ describe('OpenAI-compatible P9 live model adapter', () => {
         ],
       },
     ];
-    const fetchImpl: typeof fetch = (_url, init) => {
+    const fetchImpl: typeof fetch = (url, init) => {
       if (typeof init?.body !== 'string') {
         throw new Error('expected a serialized JSON request body');
       }
+      requestUrls.push(
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url,
+      );
       requests.push(JSON.parse(init.body) as Record<string, unknown>);
       const content = responses.shift();
       return Promise.resolve(
@@ -89,6 +93,10 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     });
 
     expect(requests).toHaveLength(2);
+    expect(requestUrls).toEqual([
+      'https://openrouter.ai/api/v1/chat/completions',
+      'https://openrouter.ai/api/v1/chat/completions',
+    ]);
     expect(requests.map((request) => request.max_tokens)).toEqual([1200, 800]);
     for (const request of requests) {
       expect(request.response_format).toMatchObject({
