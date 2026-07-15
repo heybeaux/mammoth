@@ -23,18 +23,22 @@ jobs:
         include:
           - name: static
             postgres: false
+            prebuild: false
             command: |
               pnpm format:check
               pnpm lint
               pnpm typecheck
           - name: tests
             postgres: false
+            prebuild: false
             command: pnpm test
           - name: build
             postgres: false
+            prebuild: false
             command: pnpm build
           - name: foundation
             postgres: false
+            prebuild: true
             command: |
               pnpm verify:evidence
               pnpm verify:audit
@@ -48,18 +52,21 @@ jobs:
               pnpm verify:mvp
           - name: p2-p4
             postgres: true
+            prebuild: true
             command: |
               pnpm verify:p2:profile
               pnpm verify:p3
               pnpm verify:p4
           - name: p5-p7
             postgres: false
+            prebuild: true
             command: |
               pnpm verify:p5
               pnpm verify:p6
               pnpm verify:p7
           - name: p8-p9
             postgres: false
+            prebuild: false
             command: |
               pnpm verify:p8
               pnpm verify:p9
@@ -87,6 +94,10 @@ jobs:
       - name: Create ephemeral profile credential
         if: matrix.postgres
         run: echo "MAMMOTH_PG_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+
+      - name: Build required workspace artifacts
+        if: matrix.prebuild
+        run: pnpm build
 
       - name: Run ${{ matrix.name }} validation
         env:
