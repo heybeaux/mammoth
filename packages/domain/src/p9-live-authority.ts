@@ -73,7 +73,6 @@ export const P9ProviderProfileSchema = z
       destination &&
       (destination.username ||
         destination.password ||
-        destination.pathname !== '/' ||
         destination.search ||
         destination.hash)
     ) {
@@ -81,7 +80,7 @@ export const P9ProviderProfileSchema = z
         code: z.ZodIssueCode.custom,
         path: ['destinationOrigin'],
         message:
-          'provider destination must be a credential-free origin without path, query, or fragment',
+          'provider destination must be a credential-free base URL without query or fragment',
       });
     }
     const isModel = profile.role.startsWith('model_');

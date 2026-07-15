@@ -148,7 +148,26 @@ describe('P9 live authority contracts', () => {
     ).toThrow(/receipt digest/u);
   });
 
-  it('rejects role/effect drift and credential-bearing or non-origin destinations', () => {
+  it('accepts credential-free provider path prefixes', () => {
+    const changed = profile({
+      destinationOrigin: 'https://openrouter.ai/api/v1',
+    });
+    const identity = {
+      schemaVersion: '1.0.0' as const,
+      contractFamily: 'p9.v1' as const,
+      catalogId: 'profiles:path-prefix',
+      version: 'v1',
+      profiles: [changed],
+    };
+    expect(
+      P9ProviderProfileCatalogSchema.parse({
+        ...identity,
+        catalogDigest: canonicalDigest(identity),
+      }).profiles[0]?.destinationOrigin,
+    ).toBe('https://openrouter.ai/api/v1');
+  });
+
+  it('rejects role/effect drift and credential-bearing or query-bearing destinations', () => {
     for (const changed of [
       profile({ effectKind: 'search' }),
       profile({ destinationOrigin: 'https://user:secret@models.example/' }),
