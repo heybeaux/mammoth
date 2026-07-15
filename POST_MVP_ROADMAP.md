@@ -14,7 +14,7 @@
 > Latest release receipt:
 > [`v0.8.0-turnkey-research.md`](evals/reports/v0.8.0-turnkey-research.md)
 >
-> Active checkpoint: post-P8 follow-up planning; no P9 release scope is frozen.
+> Active checkpoint: P9 Trustworthy General Research entry planning.
 
 ## Outcome
 
@@ -23,6 +23,12 @@ supplies a plain-language question or theory, Mammoth performs bounded iterative
 discovery and evidence admission, and it returns a cited report bundle. The
 substrate remains subordinate to that user outcome and every evidence, authority,
 durability, isolation, lineage, budget, and receipt invariant carries forward.
+
+The approved Mammoth 2.0 direction is recorded in [`MAMMOTH_2.md`](MAMMOTH_2.md):
+one epistemic core with `research ask` for evidence-bound research and a future
+`lab solve` program for research-driven hypotheses, bounded experiments, patches,
+formal checks, and solution portfolios. P9 does not implement solver execution; it
+makes the live path truthful and general first.
 
 ## Release train
 
@@ -204,6 +210,43 @@ Frozen entry contract: [`P8_PLAN.md`](P8_PLAN.md).
 Completed release receipt:
 [`v0.8.0-turnkey-research.md`](evals/reports/v0.8.0-turnkey-research.md).
 
+### P9 — Trustworthy General Research
+
+Deliver:
+
+- Hard pre-transport budget reservations and honest unknown provider cost.
+- Truthful publication, retrieval, robots, rights, media, parser, and failure
+  metadata.
+- Hosted-safe DNS/redirect/SSRF acquisition and bounded parser policy.
+- Independent quote-to-claim entailment before admission.
+- A versioned question-derived research plan covering scope, subquestions,
+  sources, contradictions, freshness, stop criteria, outline, and budget.
+- Plan-relative verification, three unrelated accepted plans, and one complete
+  non-data-center report.
+
+Exit gate:
+
+No hostile transport, retry, parser, source span, or provider can overspend,
+access private infrastructure, fabricate provenance, hide selected-source failure,
+or render a non-entailing claim. Technical, policy, and scientific questions
+produce distinct accepted plans; an unrelated offline report and authorized live
+exhibition pass plan-relative review and the complete P2-P9 ladder.
+
+Proposed entry contract: [`P9_PLAN.md`](P9_PLAN.md). It becomes frozen only after
+the entry-plan PR merges.
+
+### P10-P12 — General evaluation and experimental solver
+
+- **P10:** complete three unrelated report exhibitions and equal-budget benchmark
+  against strong direct/deep-research baselines.
+- **P11:** freeze and implement problem, hypothesis, sandbox, patch, evaluator,
+  run, and solution-verdict contracts for `mammoth lab solve`.
+- **P12:** run Colibri, mathematical, and non-code solver exhibitions with exact
+  reproducibility and independent review.
+
+These scopes remain directional until their own entry plans and acceptance
+baselines merge. See [`MAMMOTH_2.md`](MAMMOTH_2.md).
+
 ## Dependency order
 
 ```text
@@ -215,6 +258,10 @@ P1 adapter contracts
   -> P6 broader research topology
   -> P7 live research loop
   -> P8 turnkey research product
+  -> P9 trustworthy general research
+  -> P10 comparative general-research evaluation
+  -> P11 experimental solver
+  -> P12 solver exhibitions
 ```
 
 P2 and the non-workflow portions of P3 may proceed in parallel after P1 contract
@@ -236,9 +283,10 @@ cannot become release scope until P2 and P3 pass their exit gates.
 
 ## Next implementation checkpoint
 
-P8 Turnkey Research is complete at the local CLI and release-receipt layer. The
-next release scope is intentionally unfrozen; future work should start with a
-new plan and acceptance baseline rather than silently broadening P8.
+P8 Turnkey Research is complete at the local CLI and release-receipt layer. P9
+Trustworthy General Research is the active plan-first checkpoint. Implementation
+starts only after its entry-plan PR and a distinct T0 acceptance-baseline PR
+merge. P10-P12 remain directional and cannot inherit a release claim from P9.
 
 The read-only visualization track is specified in
 [`docs/OBSERVATORY.md`](docs/OBSERVATORY.md). A high-fidelity shell and 3D

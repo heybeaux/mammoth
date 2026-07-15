@@ -1,154 +1,167 @@
-# P8 Turnkey Research Delivery Loop
+# P9 Trustworthy General Research Delivery Loop
 
 ## Mission
 
-P8 Turnkey Research is complete as the local CLI release specified by
-`P8_PLAN.md`: plain-language question or theory in, iterative evidence-bound
-research and a comprehensive cited report bundle out. Preserve all P2-P8
-authority, durability, isolation, lineage, review, and effect-receipt invariants
-in any follow-up work.
+Deliver P9 exactly as specified by `P9_PLAN.md`: preserve P8's useful
+question-to-report product while making every live effect truthful, hostile-input
+safe, independently entailed, hard-budgeted, and driven by an accepted plan rather
+than data-center constants.
+
+`MAMMOTH_2.md` records the broader P9-P12 product direction. It does not authorize
+`lab solve` implementation during P9.
 
 ## Slice 0: reconcile and freeze
 
-Before implementation delegation:
+Before implementation work:
 
-1. fetch and inspect merged `main`, PRs, CI, tags, worktrees, and receipts;
-2. record exactly what P7 proves and reconcile stale docs without inventing a P7
-   release receipt or tag;
-3. merge `P8_PLAN.md`, this loop, `AGENTS.md`, and the coordinator ledger;
-4. merge the separate T0 acceptance-baseline PR with both golden corpora,
-   thresholds, typed expected artifacts, rubric, adversarial outcomes, verifier
-   manifest, ADRs, receipt schema, and non-production provider-spike report;
-5. create an integration worktree and one fresh worktree per assigned lane from
-   the merged T0 SHA;
-6. run one bounded runtime/model probe and prove registry identity, resolved
-   model, fresh marker, and artifact before starting a real lane;
-7. prove one lane end to end, then activate at most two additional lanes.
+1. fetch and inspect merged `main`, P8/P9 docs, CI, tags, receipts, worktrees, and
+   the exact post-P8 exhibition;
+2. merge the P9 entry plan, Mammoth 2.0 thesis, ADR 0011, active loop, roadmap,
+   worker contract, and coordinator ledger;
+3. merge a distinct T0 acceptance-baseline PR containing four plan fixtures, one
+   unrelated report fixture, hostile budget/network/parser/metadata/entailment/
+   retention cases, thresholds, typed expected artifacts, verifier manifest,
+   rubric, receipt schema, and visible `verify:p9` skeleton;
+4. create an integration worktree and fresh path-disjoint worktree per claimed
+   lane from the merged T0 SHA;
+5. prove one runtime/model lane end to end before activating additional lanes;
+6. do not claim implementation progress from plan text, prepared branches,
+   accepted spawns, or unexecuted fixtures.
 
 ## Durable coordinator ledger
 
-`docs/reviews/p8-coordinator-ledger.md` is the cross-turn ownership authority. Each
-row records task, state, runtime, session/run/model, worktree, branch, base SHA,
-owned paths, dependencies, last registry proof, last artifact proof, handoff and
-commit, integration, blockers, and replacement audit.
+`docs/reviews/p9-coordinator-ledger.md` is the cross-turn ownership authority.
+Each row records task, state, runtime/session/run/model, worktree/branch/base,
+owned/prohibited paths, contracts, dependencies, exact gates, reviewer, registry
+proof, artifact proof, handoff, integration, blockers, and replacement audit.
 
 At the start of every coordinator turn:
 
-1. fetch `origin/main` and reconcile PR/CI state;
-2. read the P8 plan and ledger;
-3. inspect OpenClaw and Codex-native registries separately;
-4. inspect listed worktrees, branches, processes, diffs, and fresh artifacts;
-5. update ownership and liveness using only observed evidence;
-6. continue the highest unproved P8 predicate.
+1. fetch `origin/main` and reconcile PR/CI/release state;
+2. read `P9_PLAN.md`, `MAMMOTH_2.md`, and the ledger;
+3. inspect listed registries, worktrees, processes, diffs, and artifacts;
+4. update state using observed evidence only;
+5. continue the highest unproved P9 predicate.
 
-A status request produces a ledger-backed update only. It never authorizes a
-respawn, merge, tag, destructive cleanup, or release claim.
+A status request never authorizes duplicate workers, destructive cleanup, merge,
+tag, or release claims.
 
 ## Delivery sequence
 
 ```text
-P7 reality and evidence reconciliation
-  -> P8 entry contract
-  -> T0 golden corpora, thresholds, verifier manifest, rubric, and ADR freeze
-  -> natural-language intake, charter, criterion, and report contract
-  -> provider-neutral discovery and governed source snapshots
-  -> parsing, spans, entailment, lineage, freshness, and claim admission
-  -> persisted semantic topology and role-specific evidence packets
-  -> bounded coverage-gap, contradiction, and falsification cycles
-  -> admitted-only report manifest and Markdown/HTML exports
-  -> operator/API inspection, resume, cancel, and partial-report behavior
-  -> restart, budget, security, and adversarial acceptance
-  -> offline golden-path verifier and clean-checkout ladder
-  -> obtain live-exhibition credential and billing authorization
-  -> non-author review, code PR, and code-bearing main CI
-  -> mandatory live exhibition and exact-bundle editorial review
-  -> annotated code tag, receipt-only PR, and final receipt-bearing main CI
+P8 reality and post-P8 adversarial assessment
+  -> P9 entry plan and 2.0 product boundary
+  -> T0 four-domain plan corpus, hostile fixtures, verifier and receipt freeze
+  -> hard pre-transport budgets and honest unknown cost
+  -> truthful source dates, robots, rights, retrieval and retention residue
+  -> pinned public-network acquisition and bounded media/parser registry
+  -> independent quote-to-claim entailment and deterministic admission
+  -> accepted question-derived plan and domain policy packs
+  -> plan-driven discovery, cycles, reporting and plan-relative verification
+  -> unrelated offline report and P8 regression
+  -> clean-checkout ladder and independent code/security/epistemic review
+  -> explicitly authorized unrelated live exhibition
+  -> exact-bundle editorial and entailment audit
+  -> code PR/main CI, annotated tag, receipt PR, final receipt-bearing main CI
 ```
 
-Contracts land before consumers. Discovery needs intake/search contracts;
-authority needs snapshot identities; orchestration needs discovery and authority
-ports; reporting needs admitted ledger views. Verification fixtures may begin once
-contracts freeze but cannot certify a composition that does not exist.
+Contracts land before consumers. Budget/metadata authority and acquisition policy
+may proceed in parallel only after T0 freezes their shared identities. Plan-driven
+composition waits for planning, acquisition, and entailment ports. Release work
+cannot certify missing composition.
 
 ## Execution cycle
 
-1. **Orient** — reconcile plan, ledger, main, CI, worktrees, workers, dependencies,
-   migrations, receipts, and the highest unproved predicate.
-2. **Claim** — define one bounded task with owner, paths, base SHA, contracts,
-   dependencies, exact gates, adversarial risks, and independent reviewer.
-3. **Launch** — use a fresh worktree, prove the exact runtime/model pair with a
-   bounded probe, then verify active and producing states.
-4. **Build** — implement the smallest vertical contract-to-receipt slice.
-5. **Attack** — test hostile sources, authority drift, duplicate effects, budget
-   exhaustion, cancellation, crashes, future schemas, and malformed model output.
-6. **Review** — inspect dependency direction, hidden stores, direct authority
-   writes, deleted rejection residue, synthetic citations, report-added facts,
-   unsafe tools, and process-order assumptions.
-7. **Verify** — run lane gates, the offline data-center path, all existing phase
-   verifiers through P7, `verify:p8`, and the clean-checkout ladder.
-8. **Integrate** — coordinator reviews and serially incorporates commits, resyncs
-   dependents, pushes, opens/updates PR, repairs CI, and resolves review findings.
+1. **Orient** — reconcile main, plan, ledger, dependencies, receipts, and highest
+   unproved predicate.
+2. **Claim** — record one bounded task, paths, contracts, dependencies, gates,
+   risks, and reviewer.
+3. **Launch** — use a fresh worktree and prove exact runtime/model identity before
+   calling a worker active.
+4. **Build** — implement the smallest contract-to-receipt vertical slice.
+5. **Attack** — test concurrency, overspend, retries, unknown cost, metadata lies,
+   SSRF, redirects, rebinding, parser hostility, prompt injection, non-entailment,
+   cancellation, crash, and future schemas.
+6. **Review** — inspect hidden authority, direct effects, deleted residue,
+   fabricated provenance, unbounded tools, verifier gaming, and process-order
+   assumptions.
+7. **Verify** — run focused gates, P8 regression, `verify:p9`, and the applicable
+   clean-checkout ladder.
+8. **Integrate** — review and serially incorporate accepted work, resync
+   dependents, push, open/update PR, repair CI, and resolve findings.
 9. **Reconcile** — update plan, ledger, roadmap, receipt, and tag only from proof.
-10. **Continue** — claim the next unproved predicate; a green slice is not a pause.
+10. **Continue** — claim the next unproved predicate; one green slice is not P9.
 
-## Research product loop
-
-The implemented product must execute and persist this bounded state machine:
+## P9 research product loop
 
 ```text
-frame question/theory
-  -> compile charter, subquestions, coverage, falsifiers, and stop policy
-  -> independently propose typed search queries
-  -> governed search and source selection
-  -> acquire, snapshot, parse, classify, and chunk hostile sources
-  -> extract atomic claims and exact evidence spans
-  -> independently assess entailment, lineage, freshness, and contradictions
-  -> deterministically admit or reject claims
-  -> update coverage and unresolved-gap map
-  -> generate gap/falsification queries and repeat within policy
-  -> independent critique
-  -> stop or continue
-  -> synthesize admitted claims into a manifest
-  -> render and publish the report bundle
+frame question
+  -> propose typed research plan
+  -> deterministically validate policy, coverage and worst-case budget
+  -> preview and accept immutable plan revision
+  -> reserve search effect before transport
+  -> discover candidates as non-evidence hints
+  -> reserve and execute policy-pinned acquisition per URL/redirect hop
+  -> record every terminal acquisition outcome
+  -> parse only through bounded registered media handlers
+  -> extract exact spans and claim proposals
+  -> independently assess entailment, lineage, freshness and contradiction
+  -> deterministically admit/reject and preserve residue
+  -> evaluate plan-relative coverage and gaps
+  -> reserve bounded follow-up work or stop honestly
+  -> build admitted-only plan-relative report manifest
+  -> render report, provenance, failure, cost and retention receipts
 ```
 
-Stop decisions are deterministic and consider mandatory coverage, per-section
-evidence sufficiency, critical unsupported conclusions, unresolved contradictions,
-new-source/query information gain, configured saturation rounds, maximum cycles,
-wall time, tokens, currency, request/byte limits, and cancellation. Budget or
-provider exhaustion yields an honest partial report, never fabricated completion.
+Budgets are checked before effects, not reconstructed afterward. Stop decisions
+consider plan coverage, source classes, unresolved contradictions, information
+gain, failures, currency/tokens/time/requests/bytes, cancellation, and provider
+availability. Exhaustion produces an honest partial bundle.
+
+## Future solver boundary
+
+P9 may research coding or mathematical questions and produce an accepted plan. It
+may not execute arbitrary code, modify repositories, install dependencies, or
+represent a proposal as solved. Any early Colibri analysis is research-only.
+
+P11 will define the separate bounded lifecycle:
+
+```text
+problem contract -> hypotheses -> experiment contracts -> sandbox grants
+  -> isolated patches/runs -> mechanical evaluation -> solution verdict
+```
+
+Until that plan and acceptance baseline merge, those actions remain prohibited.
 
 ## Failure and recovery
 
-- Retry transient effects only when the stable effect identity makes retry safe.
+- Retry transient effects only with stable identity and remaining reservation.
+- A retry, fallback, or split never creates implicit spend authority.
 - After two identical failures, change strategy or request independent diagnosis.
 - After three, quarantine and record root cause; never weaken or delete a gate.
-- Preserve rejected proposals, failed migrations, contradictions, dissent, partial
-  output, source bytes, and diagnostics.
-- Before replacing a worker, prove terminal/absence in the correct registry, audit
-  its process/session/worktree/diff, preserve output, retire the lease, and use a
-  fresh worktree.
+- Preserve rejected plans/claims, failed attempts, contradictions, invalid runs,
+  partial output, source bytes, diagnostics, and unknown cost.
+- Before replacing a worker, prove terminal/absence in the correct registry,
+  inspect session/process/worktree/diff, preserve output, retire ownership, and use
+  a fresh worktree.
 - Resolve authority ambiguity with an ADR before implementation continues.
-- During external outages, continue valid offline work without claiming the live
-  service gate.
 
 ## Human escalation
 
-Escalate only for irreversible/destructive actions, missing credentials or billing
-authority, unresolved legal/licensing or security incidents, a product decision
-that changes authority/privacy/distribution/deployment, a blocker surviving three
-strategies with no useful work left, or acceptance genuinely requiring human
-judgment. Routine reversible design, delegation, PR, CI repair, and sequencing are
-coordinator decisions.
+Escalate for irreversible/destructive actions; new credentials or billing; legal,
+licensing, privacy, or security incidents; a product decision that changes
+authority/deployment/distribution; publishing to a third-party repository; or a
+blocker surviving three strategies with no useful work left. Routine reversible
+design, implementation, PR, CI repair, and sequencing remain coordinator work.
 
 ## Stopping condition
 
-P8 stopped only when the plain-language data-center command produced the complete
-report bundle; every factual sentence passed claim/policy/locator/snapshot
-provenance; mandatory coverage was covered or explicitly insufficient; at least
-one evidence-driven follow-up cycle was proved; dissent, contradictions,
-uncertainty, limitations, method, cost, and partiality remained visible; restart,
-idempotency, budgets, cancellation, and adversarial security passed; independent
-review was non-blocking; and merged-main CI, release receipt, and the annotated
-P8 tag proved the exact candidate. Future release loops must define their own
-stopping condition before implementation begins.
+P9 stops only when every predicate in `P9_PLAN.md` is proved: P8 regressions pass;
+hard budgets cannot be exceeded; metadata states only observed facts; hosted-safe
+network/parser fixtures pass; every rendered fact has independent entailment;
+three unrelated questions produce distinct plans; one unrelated offline report
+passes while canned prose fails; one authorized unrelated live exhibition passes
+exact-bundle review; clean-checkout `verify:p9`, exact-head and merged-main CI,
+annotated tag, release receipt, and final receipt-bearing main CI all pass.
+
+P10-P12 remain unclaimed until their own plan and acceptance baselines merge.
