@@ -1,29 +1,31 @@
-# Mammoth Worker Contract
+# Mammoth P9 Worker Contract
 
 ## Mission and authority
 
 Mammoth P8 Turnkey Research is complete as the local CLI release recorded in
 [`evals/reports/v0.8.0-turnkey-research.md`](evals/reports/v0.8.0-turnkey-research.md).
-P8 proves question-driven discovery, evidence extraction, iterative research, and
-a cited Markdown/HTML report bundle on top of the P7 governed execution
-substrate.
+P9 Trustworthy General Research is the active plan-first checkpoint. It makes the
+live path truthful and hostile-input safe, enforces hard budgets, and replaces the
+data-center-specific program with an accepted question-derived research plan.
 
-`ARCHITECTURE.md` remains normative. `P8_PLAN.md` is the completed acceptance
-authority for the P8 release, and `LOOP.md` records the delivery protocol. Future
-work must use a new plan, ledger entry, and acceptance baseline instead of
-silently broadening P8.
+`ARCHITECTURE.md` remains normative. `MAMMOTH_2.md` records the approved product
+direction, `P9_PLAN.md` is the active acceptance authority, and `LOOP.md` records
+the delivery protocol. P9 implementation is blocked until the entry-plan PR and a
+distinct T0 acceptance-baseline PR merge. Do not silently broaden P8 or claim the
+future `lab solve` product during P9.
 
 ## Required reading and assignment record
 
 Read, in order:
 
 1. `AGENTS.md`;
-2. `P8_PLAN.md`;
-3. `ARCHITECTURE.md` sections 6, 11-16, 21, 23-25, and 27-32;
-4. `P7_PLAN.md` and the actual merged P7 implementation/evidence;
-5. `LOOP.md`;
-6. `docs/reviews/p8-coordinator-ledger.md`;
-7. relevant packages, tests, ADRs, and fixtures.
+2. `MAMMOTH_2.md` and `P9_PLAN.md`;
+3. `ADVERSARIAL_ANALYSIS_POST_P8.md`;
+4. `ARCHITECTURE.md` sections 6, 11-16, 19-21, 23-25, 27-33, and 44;
+5. `P8_PLAN.md` and the actual merged P8 implementation/evidence;
+6. `LOOP.md`;
+7. `docs/reviews/p9-coordinator-ledger.md`;
+8. relevant packages, tests, ADRs, and fixtures.
 
 Every assignment must record:
 
@@ -46,20 +48,20 @@ contracts, root manifests and lockfile unless explicitly assigned, CI decisions,
 release receipt, tag, and final product claim. Mammoth has four execution slots:
 the coordinator retains one and runs at most three implementation lanes at once.
 
-Path-disjoint P8 lanes are:
+Path-disjoint P9 lanes are:
 
-- **A — intake/contracts:** research brief, charter, criterion, coverage, plan,
-  cycle, and publication contracts;
-- **B — discovery/retrieval/security:** search port/adapters, governed egress,
-  acquisition, snapshots, parsing, exact locators, and hostile-content controls;
-- **C — authority/admission:** migrations, Postgres/CAS authority, claim/span
-  admission, entailment, lineage, freshness, contradiction, and budgets;
-- **D — orchestration/operator:** semantic topology, iterative cycle controller,
-  Temporal Activities, application service, and CLI;
-- **E — report/projection:** admitted-only manifest, Markdown/HTML compiler,
-  bibliography, inspection, and read-only projection;
-- **F — verification/release:** offline fixtures, adversarial verifier, CI, live
-  exhibition, independent review, receipt, and tag.
+- **A — plan/contracts:** P9 identities, accepted research plan, domain policy
+  packs, coverage, freshness, contradiction, stop, outline, and budget allocation;
+- **B — budget/metadata authority:** pre-transport reservations, settlement,
+  unknown cost, source dates, robots, rights, retrieval residue, and retention;
+- **C — acquisition/parsers/security:** URL/DNS/redirect policy, pinned transport,
+  media registry, parser sandboxes, snapshots, and hostile-input controls;
+- **D — entailment/admission:** claim proposal, independent entailment, exact
+  quotes/locators, lineage, deterministic admission, and rejection residue;
+- **E — composition/operator/report:** plan-driven discovery/cycles/reporting,
+  compatibility facade, CLI, inspection, and plan-relative manifest;
+- **F — verification/release:** four planning fixtures, non-data-center report,
+  adversarial verifier, CI, live exhibition, independent review, receipt, and tag.
 
 Record actual dependencies per assignment: B needs A search/snapshot contracts; C
 needs A identities and B manifests; D needs A, B, and C ports; E needs A and C
@@ -108,6 +110,16 @@ workers to one worktree or overlapping paths.
   attributable cost/effect receipts.
 - Postgres/CAS is authoritative; Temporal carries identifiers and reconstructs.
 - Memory and model output are proposals, not truth.
+- Unobserved source dates, robots decisions, rights, costs, or retrieval outcomes
+  are `unknown`/`not_checked`; they are never filled with convenient defaults.
+- External effects reserve their worst-case accepted cost before transport.
+- A retry, fallback, or batch split cannot spend unreserved authority.
+- Claim generation and entailment review are distinct works; quote identity alone
+  does not prove support.
+- Verification is relative to the accepted research plan, never one domain's
+  keywords or source count.
+- `lab solve` has no executable authority in P9. Future solution states are
+  policy-owned and cannot be promoted by model confidence or test count.
 
 A green test that violates an invariant is a failing implementation. A successful
 provider call, completed cells, or structurally valid dossier is not proof of
@@ -145,7 +157,7 @@ P3-P7 worktrees for P8. Prefer one fresh branch and worktree per lane.
 
 ## Implementation discipline
 
-Build the smallest vertical slice satisfying a measured P8 gate. Keep clocks, IDs,
+Build the smallest vertical slice satisfying a measured P9 gate. Keep clocks, IDs,
 network calls, storage, parsers, and effects injectable. Validate every trust
 boundary, use strict types and exhaustive unions, and classify errors by
 retryability and policy effect. ADRs are required for architecture choices.
@@ -158,11 +170,13 @@ works only in process order.
 During work, run affected tests, typecheck, build, and the lane verifier. Handoffs
 must include P8 golden-path evidence relevant to the lane, not only package tests.
 Before merge or checkpoint, run the complete existing ladder through
-`pnpm verify:p7`, plus the non-recursive `pnpm verify:p8` that is visible in CI.
+`pnpm verify:p8`, plus the non-recursive `pnpm verify:p9` introduced by T0 and
+visible in CI.
 Also run format, lint, typecheck, tests, and build from a clean checkout.
 
-The deterministic P8 verifier uses a frozen data-center corpus and must not require
-the public web or paid providers. Live search/model exhibitions are separate and
+The deterministic P9 verifier uses frozen planning/security/evidence fixtures and
+must not require the public web or paid providers. P8's data-center verifier
+remains a required regression. Live search/model exhibitions are separate and
 must record provider/model identity, source snapshots, configuration/prompt/report
 digests, costs, runtime, failures, and limitations. Never claim a command passed
 unless it ran and its exact result is recorded.
@@ -180,6 +194,6 @@ risks and unverified areas / blockers / next owner and integration predecessor
 The coordinator reviews diffs and evidence before integration. Blocking review
 findings return to the original owner and require independent re-review. Workers
 do not rebase or force-push the integration branch. An item is done only when its
-acceptance evidence exists, required gates pass, it is merged, and the P8 plan,
+acceptance evidence exists, required gates pass, it is merged, and the P9 plan,
 ledger, and receipt reflect reality. Continue to the highest unproved predicate;
 do not stop because one task or PR is green.
