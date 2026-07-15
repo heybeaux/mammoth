@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join, resolve } from 'node:path';
+import { evaluateP9LiveAuthority } from '../apps/cli/src/p9-live-authority.js';
 import {
   canonicalDigest,
   P9ClaimProposalSchema,
@@ -49,6 +50,8 @@ import {
   type TransportResponse,
 } from '../packages/retrieval/src/index.js';
 import {
+  P9_LIVE_EXHIBITION_QUESTION,
+  buildAcceptedP9LivePlan,
   P9GenericResearchError,
   runP9PlanDrivenResearch,
   verifyP9ExactBundle,
@@ -2347,12 +2350,73 @@ async function verifyT5GenericExecution(): Promise<void> {
   );
 }
 
+function verifyT6LiveAuthorityGate(): void {
+  const blocked = evaluateP9LiveAuthority({});
+  invariant(
+    blocked.status === 'blocked_live_exhibition' && !blocked.safeForEffects,
+    'T6 live authority gate fails closed without explicit P9 authorization',
+  );
+
+  const p8Only = evaluateP9LiveAuthority({
+    MAMMOTH_P8_LIVE_RESEARCH: 'authorized',
+    MAMMOTH_SEARCH_BRAVE_API_KEY: 'fixture-search-secret',
+    MAMMOTH_SEARCH_BRAVE_BILLING_AUTHORIZATION: 'authorized',
+    MAMMOTH_P8_PROVIDER_BASE_URL: 'https://provider.example.test/v1',
+    MAMMOTH_P8_PROVIDER_MODEL: 'fixture-live',
+  });
+  invariant(
+    p8Only.status === 'blocked_live_exhibition' &&
+      !p8Only.safeForEffects &&
+      p8Only.liveAuthorization.includes('MAMMOTH_P9_LIVE_RESEARCH') &&
+      p8Only.liveBilling.includes('MAMMOTH_P9_LIVE_BILLING_AUTHORIZATION'),
+    'T6 authority gate does not treat P8 live flags as P9 authorization',
+  );
+
+  const ready = evaluateP9LiveAuthority({
+    MAMMOTH_P9_LIVE_RESEARCH: 'authorized',
+    MAMMOTH_SEARCH_BRAVE_API_KEY: 'fixture-search-secret',
+    MAMMOTH_P9_LIVE_BILLING_AUTHORIZATION: 'authorized',
+    MAMMOTH_P9_LIVE_BUDGET_USD: '5',
+    MAMMOTH_P9_PROVIDER_BASE_URL: 'https://provider.example.test/v1',
+    MAMMOTH_P9_PROPOSER_MODEL: 'fixture-proposer',
+    MAMMOTH_P9_EVALUATOR_MODEL: 'fixture-evaluator',
+    MAMMOTH_P9_PROVIDER_API_KEY_ENV: 'MAMMOTH_P9_PROVIDER_API_KEY',
+    MAMMOTH_P9_PROVIDER_API_KEY: 'fixture-provider-secret',
+  });
+  invariant(
+    ready.status === 'ready' && ready.safeForEffects,
+    'T6 authority gate recognizes complete explicit P9 live authority',
+  );
+
+  const acceptedLivePlan = buildAcceptedP9LivePlan({
+    budgetUsd: 5,
+    now: '2026-07-15T18:00:00.000Z',
+    proposerProfile: {
+      profileVersionId: 'verify-live-plan-proposer',
+      profileFamilyId: 'verify-live-plan-family',
+      modelId: 'fixture/live-plan-proposer',
+    },
+  });
+  invariant(
+    acceptedLivePlan.plan.question === P9_LIVE_EXHIBITION_QUESTION &&
+      acceptedLivePlan.plan.domainPackId === 'technical-due-diligence/v1' &&
+      acceptedLivePlan.plan.budget.currencyUsd === 5 &&
+      acceptedLivePlan.acceptanceReceipt.decision === 'accepted' &&
+      acceptedLivePlan.plan.sourceClassTargets.some(
+        (target) => target.sourceClass === 'hardware_vendor_docs',
+      ) &&
+      acceptedLivePlan.plan.contradictionRequirements.length >= 2,
+    'T6 frozen live Colibri question derives an accepted technical due-diligence plan',
+  );
+}
+
 await verifyT1BudgetAndMetadata();
 await verifyT2AcquisitionAndParsers();
 verifyT3IndependentEntailment();
 await verifyT4QuestionDerivedPlanning();
 await verifyT5GenericExecution();
+verifyT6LiveAuthorityGate();
 
 console.log(
-  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5 generic_execution=pass; T6=blocked',
+  'P9 acceptance ok — T0 fixtures=10 plans=4 hostile=21; T1 budget_metadata=pass; T2 acquisition_parsers=pass; T3 entailment=pass; T4 planning=pass; T5 generic_execution=pass; T6 live_authority_gate=pass blocked_pending_authorization',
 );

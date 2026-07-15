@@ -85,6 +85,38 @@ describe('OpenAI-compatible provider adapter', () => {
     });
   });
 
+  it('discovers OpenRouter model-list capability responses', async () => {
+    const transport = new FixtureTransport();
+    transport.responses.push(
+      jsonResponse({
+        data: [
+          {
+            id: 'openai/gpt-4.1-mini',
+            name: 'GPT-4.1 Mini',
+            context_length: 1_047_576,
+          },
+        ],
+      }),
+    );
+    const adapter = new OpenAICompatibleModelProvider({
+      baseUrl: 'https://openrouter.ai/api/v1',
+      configuredModel: 'openai/gpt-4.1-mini',
+      providerName: 'openrouter',
+      mode: 'governed',
+      approvedOrigins: ['https://openrouter.ai'],
+      capabilityPath: '/models',
+      chatCompletionsPath: '/chat/completions',
+      transport,
+      resolveHost: () => Promise.resolve(['104.18.33.45']),
+    });
+
+    await expect(adapter.discoverCapabilities()).resolves.toMatchObject({
+      provider: 'openrouter',
+      concreteModel: 'openai/gpt-4.1-mini',
+      contextWindowTokens: 1_047_576,
+    });
+  });
+
   it('pins discovered model identity, injects secrets only in headers, deduplicates, and reconciles', async () => {
     const transport = new FixtureTransport();
     transport.responses.push(

@@ -48,6 +48,7 @@ import {
   P9CoverageEvidenceRecordSchema,
   priceCatalogDigest,
   type P9ClaimEvidenceBinding,
+  type P9BudgetAuthoritySnapshot,
   type P9StopCriterionFinding,
   type PlanCoverageThresholds,
 } from '@mammoth/governance';
@@ -262,6 +263,32 @@ export interface P9AcceptedPlanChain {
   readonly plan: ResearchPlan;
   readonly acceptanceReceipt: PlanAcceptanceReceipt;
   readonly pack: DomainPolicyPack;
+}
+
+export interface P9ObservedSourceSnapshot {
+  readonly candidateId: string;
+  readonly body: string;
+  readonly sourceClass: string;
+  readonly sourceFamilyId: string;
+}
+
+export interface P9ObservedResearchInput {
+  readonly executionId: string;
+  readonly now: string;
+  readonly planProposal: ResearchPlanProposal;
+  readonly plan: ResearchPlan;
+  readonly acceptanceReceipt: PlanAcceptanceReceipt;
+  readonly pack: DomainPolicyPack;
+  readonly thresholds: PlanCoverageThresholds;
+  readonly budgetSnapshot: P9BudgetAuthoritySnapshot;
+  readonly attempts: readonly RetrievalAttempt[];
+  readonly parserReceipts: readonly ParserReceipt[];
+  readonly proposals: readonly P9ClaimProposal[];
+  readonly verdicts: readonly P9EntailmentVerdict[];
+  readonly admissions: readonly P9ClaimAdmission[];
+  readonly bindings: readonly P9ClaimEvidenceBinding[];
+  readonly snapshots: readonly P9ObservedSourceSnapshot[];
+  readonly stopCriterionFindings: readonly P9StopCriterionFinding[];
 }
 
 const P9SerializedEvidenceSourceSchema = z
@@ -1364,6 +1391,455 @@ export function runP9PlanDrivenResearch(
     receipt,
     artifacts,
   };
+}
+
+/**
+ * Pure P9 bundle compiler for live or adapter-observed execution. Unlike the
+ * offline wrapper above, this function does not fabricate effect prices, source
+ * attempts, parser receipts, or model-work identities from a corpus. Callers must
+ * supply the already observed terminal attempts, budget snapshot, model
+ * proposals, independent verdicts, admissions, coverage bindings, and immutable
+ * source bytes.
+ */
+export function compileP9ObservedResearchBundle(
+  input: P9ObservedResearchInput,
+): P9GenericResearchRun {
+  const planProposal = ResearchPlanProposalSchema.parse(input.planProposal);
+  const plan = ResearchPlanSchema.parse(input.plan);
+  const acceptanceReceipt = PlanAcceptanceReceiptSchema.parse(
+    input.acceptanceReceipt,
+  );
+  const pack = DomainPolicyPackSchema.parse(input.pack);
+  const thresholds = PlanCoverageThresholdsSchema.parse(input.thresholds);
+  const { executionId, now } = input;
+  if (
+    !z.string().min(1).safeParse(executionId).success ||
+    !z.string().datetime().safeParse(now).success
+  ) {
+    throw new P9GenericResearchError(
+      'execution_input_invalid',
+      'execution identity and clock must be valid before compiling observed work',
+    );
+  }
+  assertAcceptedPlanChain(planProposal, plan, acceptanceReceipt, pack);
+
+  const attempts = input.attempts.map((attempt) =>
+    RetrievalAttemptSchema.parse(attempt),
+  );
+  const parserReceipts = input.parserReceipts.map((receipt) =>
+    ParserReceiptSchema.parse(receipt),
+  );
+  const proposals = input.proposals.map((proposal) =>
+    P9ClaimProposalSchema.parse(proposal),
+  );
+  const verdicts = input.verdicts.map((verdict) =>
+    P9EntailmentVerdictSchema.parse(verdict),
+  );
+  const admissions = input.admissions.map((admission) =>
+    P9ClaimAdmissionSchema.parse(admission),
+  );
+  const bindings = input.bindings.map((binding) => ({
+    proposal: P9ClaimProposalSchema.parse(binding.proposal),
+    admission: P9ClaimAdmissionSchema.parse(binding.admission),
+    evidence: P9CoverageEvidenceRecordSchema.parse(binding.evidence),
+  }));
+  const snapshots = input.snapshots.map((snapshot) => ({
+    ...snapshot,
+    snapshotDigest: canonicalDigest(snapshot.body),
+  }));
+  const snapshotByCandidateId = new Map(
+    snapshots.map((snapshot) => [snapshot.candidateId, snapshot]),
+  );
+  const attemptById = new Map(
+    attempts.map((attempt) => [attempt.attemptId, attempt]),
+  );
+  const verdictById = new Map(
+    verdicts.map((verdict) => [verdict.verdictId, verdict]),
+  );
+  const admissionByProposalId = new Map(
+    admissions.map((admission) => [admission.proposalId, admission]),
+  );
+  if (
+    new Set(attempts.map((attempt) => attempt.attemptId)).size !==
+      attempts.length ||
+    new Set(proposals.map((proposal) => proposal.proposalId)).size !==
+      proposals.length ||
+    new Set(verdicts.map((verdict) => verdict.verdictId)).size !==
+      verdicts.length ||
+    new Set(admissions.map((admission) => admission.admissionId)).size !==
+      admissions.length
+  ) {
+    throw new P9GenericResearchError(
+      'observed_identity_duplicate',
+      'observed attempts, proposals, verdicts, and admissions require unique identities',
+    );
+  }
+  for (const binding of bindings) {
+    const matchingAdmission = admissionByProposalId.get(
+      binding.proposal.proposalId,
+    );
+    if (
+      !matchingAdmission ||
+      matchingAdmission.admissionDigest !== binding.admission.admissionDigest
+    ) {
+      throw new P9GenericResearchError(
+        'observed_admission_mismatch',
+        `binding for ${binding.proposal.proposalId} must use an observed admission`,
+      );
+    }
+    const attempt = attemptById.get(binding.evidence.attemptId);
+    const snapshot = snapshotByCandidateId.get(binding.evidence.candidateId);
+    if (
+      !attempt ||
+      !snapshot ||
+      attempt.candidateId !== binding.evidence.candidateId ||
+      binding.evidence.attemptDigest !== canonicalDigest(attempt) ||
+      binding.evidence.snapshotDigest !== snapshot.snapshotDigest ||
+      binding.evidence.sourceClass !== snapshot.sourceClass ||
+      binding.evidence.sourceFamilyId !== snapshot.sourceFamilyId
+    ) {
+      throw new P9GenericResearchError(
+        'observed_evidence_mismatch',
+        `binding for ${binding.proposal.proposalId} does not replay against observed attempt and snapshot metadata`,
+      );
+    }
+    const quote = snapshot.body.slice(
+      binding.proposal.locator.startOffset,
+      binding.proposal.locator.endOffset,
+    );
+    const verdict = verdictById.get(binding.admission.verdictId);
+    if (
+      !verdict ||
+      verdict.proposalId !== binding.proposal.proposalId ||
+      verdict.proposalDigest !== binding.proposal.proposalDigest ||
+      quote !== verdict.evaluatedQuote ||
+      canonicalDigest(quote) !== binding.proposal.locator.quoteDigest ||
+      canonicalDigest(snapshot.body) !==
+        binding.proposal.locator.snapshotDigest ||
+      boundedSentenceContext(
+        snapshot.body,
+        binding.proposal.locator.startOffset,
+        binding.proposal.locator.endOffset,
+      ) !== verdict.boundedContext
+    ) {
+      throw new P9GenericResearchError(
+        'observed_entailment_mismatch',
+        `binding for ${binding.proposal.proposalId} does not replay against observed entailment inputs`,
+      );
+    }
+  }
+
+  const admitted = bindings.filter(
+    (binding) => binding.admission.decision === 'admitted',
+  );
+  const contradicted = bindings.filter(
+    (binding) => binding.admission.decision === 'contradicted',
+  );
+  const rejected = bindings.filter(
+    (binding) => binding.admission.decision === 'rejected',
+  );
+  const relevantAdmitted = admitted.filter((binding) =>
+    isClaimRelevantToPlan(binding, plan),
+  );
+
+  const outlineSections = [
+    ...plan.reportOutline.sections,
+    { sectionId: 'references_provenance', title: 'references and provenance' },
+  ];
+  const sections: P9ReportSection[] = [];
+  for (const outline of outlineSections) {
+    const sentences: P9ReportSentence[] = [
+      {
+        sentenceId: `s:${outline.sectionId}:lead`,
+        kind: 'interpretive',
+        text: `Interpretive synthesis for ${outline.title}, grounded only in admitted claims below.`,
+        claimIds: [],
+      },
+    ];
+    for (const binding of relevantAdmitted) {
+      if (binding.evidence.reportSectionId !== outline.sectionId) continue;
+      sentences.push({
+        sentenceId: `s:${outline.sectionId}:${binding.proposal.proposalId}`,
+        kind: 'factual',
+        text: binding.proposal.statement,
+        claimIds: [binding.proposal.proposalId],
+      });
+    }
+    if (outline.sectionId === 'references_provenance') {
+      for (const binding of relevantAdmitted) {
+        const attempt = attemptById.get(binding.evidence.attemptId);
+        if (!attempt) continue;
+        sentences.push({
+          sentenceId: `s:references:${binding.proposal.proposalId}`,
+          kind: 'factual',
+          text: `Claim ${binding.proposal.proposalId} is grounded in ${attempt.requestedUrl} (${binding.evidence.sourceClass}, family ${binding.evidence.sourceFamilyId}).`,
+          claimIds: [binding.proposal.proposalId],
+        });
+      }
+    }
+    sections.push({
+      sectionId: outline.sectionId,
+      title: outline.title,
+      sentences,
+    });
+  }
+  assertEveryP9FactualSentenceAdmitted(
+    sections.flatMap((section) =>
+      section.sentences.map((sentence) => ({
+        id: sentence.sentenceId,
+        kind: sentence.kind,
+        claimIds: sentence.claimIds,
+      })),
+    ),
+    admissions,
+  );
+
+  const assessment = assessPlanCoverage({
+    plan,
+    pack,
+    claims: bindings,
+    attempts,
+    reportSectionTexts: sections.map((section) => ({
+      sectionId: section.sectionId,
+      text: section.sentences.map((sentence) => sentence.text).join(' '),
+    })),
+    stopCriterionFindings: [...input.stopCriterionFindings],
+    thresholds,
+    assessedAt: now,
+    assessmentId: `coverage:${executionId}`,
+  });
+
+  const citations = relevantAdmitted.map((binding) => {
+    const attempt = attemptById.get(binding.evidence.attemptId);
+    const verdict = verdictById.get(binding.admission.verdictId);
+    if (!attempt || !verdict || verdict.verdict !== 'entailed') {
+      throw new P9GenericResearchError(
+        'citation_entailment_missing',
+        `admitted claim ${binding.proposal.proposalId} lacks observed entailment provenance`,
+      );
+    }
+    return {
+      claimId: binding.proposal.proposalId,
+      admissionId: binding.admission.admissionId,
+      admissionPolicyId: binding.admission.policyId,
+      admissionDecision: 'admitted' as const,
+      admissionDigest: binding.admission.admissionDigest,
+      verdictId: binding.admission.verdictId,
+      verdictDigest: binding.admission.verdictDigest,
+      entailmentVerdictId: verdict.verdictId,
+      entailmentVerdict: 'entailed' as const,
+      entailmentVerdictDigest: verdict.verdictDigest,
+      attemptId: attempt.attemptId,
+      requestedUrl: attempt.requestedUrl,
+      sourceClass: binding.evidence.sourceClass,
+      sourceFamilyId: binding.evidence.sourceFamilyId,
+      evidenceSpanId: binding.proposal.locator.evidenceSpanId,
+      locator: binding.proposal.locator,
+      snapshotDigest: binding.proposal.locator.snapshotDigest,
+      quoteDigest: binding.proposal.locator.quoteDigest,
+      coordinateSpace: binding.proposal.locator.coordinateSpace,
+      startOffset: binding.proposal.locator.startOffset,
+      endOffset: binding.proposal.locator.endOffset,
+    };
+  });
+  const contradictions = contradicted.map((binding) => ({
+    proposalId: binding.proposal.proposalId,
+    admissionId: binding.admission.admissionId,
+    verdictId: binding.admission.verdictId,
+    attemptId: binding.evidence.attemptId,
+    contradictionIds: [...binding.evidence.contradictionIds],
+    statement: binding.proposal.statement,
+    evidenceSpanId: binding.proposal.locator.evidenceSpanId,
+    snapshotDigest: binding.proposal.locator.snapshotDigest,
+    quoteDigest: binding.proposal.locator.quoteDigest,
+    coordinateSpace: binding.proposal.locator.coordinateSpace,
+    startOffset: binding.proposal.locator.startOffset,
+    endOffset: binding.proposal.locator.endOffset,
+  }));
+  const manifestIdentity = {
+    schemaVersion: '1.0.0' as const,
+    contractFamily: 'p9.v1' as const,
+    manifestId: `manifest:${executionId}`,
+    planId: plan.planId,
+    planDigest: plan.planDigest,
+    question: plan.question,
+    coverageAssessmentDigest: assessment.assessmentDigest,
+    sections,
+    citations,
+    contradictions,
+    compiledAt: now,
+  };
+  const manifest = P9ReportManifestSchema.parse({
+    ...manifestIdentity,
+    manifestDigest: canonicalDigest(manifestIdentity),
+  });
+  const report = renderP9Report(manifest, assessment);
+  const budgetSummary = summarizeBudget(
+    input.budgetSnapshot,
+    plan.budget.currencyUsd,
+  );
+  const typedResidue = {
+    retrieval_failures: attempts
+      .filter((attempt) => attempt.status !== 'admitted')
+      .map((attempt) => attempt.attemptId)
+      .sort(),
+    parser_failures: parserReceipts
+      .filter((receipt) => receipt.status !== 'parsed')
+      .map((receipt) => receipt.receiptId)
+      .sort(),
+    rejected_claims: rejected
+      .map((binding) => binding.proposal.proposalId)
+      .sort(),
+    unknown_costs: [...budgetSummary.unknownCostReservationIds],
+    redactions: [],
+    coverage_gaps: [...assessment.gaps],
+  };
+  const counts = {
+    selectedCandidates: attempts.length,
+    terminalAttempts: attempts.length,
+    admittedSources: attempts.filter((attempt) => attempt.status === 'admitted')
+      .length,
+    retrievalFailures: typedResidue.retrieval_failures.length,
+    parserReceipts: parserReceipts.length,
+    parserFailures: typedResidue.parser_failures.length,
+    claimProposals: proposals.length,
+    admittedClaims: admitted.length,
+    rejectedClaims: rejected.length,
+    contradictedClaims: contradicted.length,
+    criticalClaims: admitted.filter((binding) => binding.proposal.critical)
+      .length,
+    factualSentences: sections
+      .flatMap((section) => section.sentences)
+      .filter((sentence) => sentence.kind === 'factual').length,
+  };
+  const evidenceSources = snapshots.map((snapshot) => {
+    const admittedAttempt = attempts.find(
+      (attempt) =>
+        attempt.candidateId === snapshot.candidateId &&
+        attempt.status === 'admitted',
+    );
+    if (!admittedAttempt) {
+      throw new P9GenericResearchError(
+        'exact_bundle_source_missing',
+        `admitted source ${snapshot.candidateId} lacks an admitted attempt`,
+      );
+    }
+    return {
+      candidateId: snapshot.candidateId,
+      attemptId: admittedAttempt.attemptId,
+      requestedUrl: admittedAttempt.requestedUrl,
+      sourceClass: snapshot.sourceClass,
+      sourceFamilyId: snapshot.sourceFamilyId,
+      snapshotDigest: snapshot.snapshotDigest,
+    };
+  });
+  const artifacts: Record<string, string> = {
+    'research-plan-proposal.json': JSON.stringify(planProposal, null, 2),
+    'research-plan.json': JSON.stringify(plan, null, 2),
+    'plan-acceptance-receipt.json': JSON.stringify(acceptanceReceipt, null, 2),
+    'retrieval-attempts.jsonl': toJsonLines(attempts),
+    'budget-ledger.json': JSON.stringify(
+      { snapshot: input.budgetSnapshot, summary: budgetSummary },
+      null,
+      2,
+    ),
+    'parser-receipts.jsonl': toJsonLines(parserReceipts),
+    'claim-proposals.jsonl': toJsonLines(proposals),
+    'claim-evidence.jsonl': toJsonLines(
+      bindings.map((binding) => ({
+        proposalId: binding.proposal.proposalId,
+        evidence: binding.evidence,
+      })),
+    ),
+    'entailment-verdicts.jsonl': toJsonLines(
+      verdicts.map((verdict) => ({
+        verdict,
+        admission: admissionByProposalId.get(verdict.proposalId),
+      })),
+    ),
+    'evidence-sources.jsonl': toJsonLines(evidenceSources),
+    'plan-coverage-assessment.json': JSON.stringify(assessment, null, 2),
+    'report-manifest.json': JSON.stringify(manifest, null, 2),
+    'report.md': report,
+  };
+  for (const snapshot of snapshots) {
+    artifacts[
+      `source-snapshots/${snapshot.snapshotDigest.slice('sha256:'.length)}.txt`
+    ] = snapshot.body;
+  }
+  const artifactDigests = Object.fromEntries(
+    Object.entries(artifacts).map(([name, content]) => [
+      name,
+      sha256Text(content),
+    ]),
+  );
+  const receiptIdentity = {
+    schemaVersion: '1.0.0' as const,
+    contractFamily: 'p9.v1' as const,
+    executionId,
+    planId: plan.planId,
+    planDigest: plan.planDigest,
+    question: plan.question,
+    budget: budgetSummary,
+    counts,
+    typedResidue,
+    coverageVerdict: assessment.verdict,
+    coverageAssessmentDigest: assessment.assessmentDigest,
+    artifactDigests,
+    startedAt: now,
+    finishedAt: now,
+  };
+  const receipt = P9ExecutionReceiptSchema.parse({
+    ...receiptIdentity,
+    receiptDigest: canonicalDigest(receiptIdentity),
+  });
+  artifacts['execution-receipt.json'] = JSON.stringify(receipt, null, 2);
+
+  return {
+    corpusId: `observed:${executionId}`,
+    attempts,
+    parserReceipts,
+    proposals,
+    verdicts,
+    admissions,
+    bindings,
+    assessment,
+    manifest,
+    report,
+    receipt,
+    artifacts,
+  };
+}
+
+function assertAcceptedPlanChain(
+  planProposal: ResearchPlanProposal,
+  plan: ResearchPlan,
+  acceptanceReceipt: PlanAcceptanceReceipt,
+  pack: DomainPolicyPack,
+): void {
+  if (
+    acceptanceReceipt.decision !== 'accepted' ||
+    acceptanceReceipt.proposalId !== planProposal.proposalId ||
+    acceptanceReceipt.proposalDigest !== planProposal.proposalDigest ||
+    acceptanceReceipt.planId !== plan.planId ||
+    acceptanceReceipt.planDigest !== plan.planDigest ||
+    acceptanceReceipt.packId !== pack.packId ||
+    acceptanceReceipt.packDigest !== pack.packDigest ||
+    plan.proposalId !== planProposal.proposalId ||
+    plan.proposalDigest !== planProposal.proposalDigest ||
+    plan.domainPackId !== pack.packId ||
+    plan.packDigest !== pack.packDigest ||
+    plan.acceptancePolicyId !== acceptanceReceipt.acceptancePolicyId ||
+    plan.acceptedAt !== acceptanceReceipt.decidedAt ||
+    plan.acceptedBy !== acceptanceReceipt.actorId ||
+    canonicalDigest(p9PlanContentProjection(planProposal)) !==
+      canonicalDigest(p9PlanContentProjection(plan))
+  ) {
+    throw new P9GenericResearchError(
+      'plan_binding_mismatch',
+      'execution requires the exact accepted plan, proposal, and receipt chain',
+    );
+  }
 }
 
 /**
