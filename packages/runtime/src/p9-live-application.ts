@@ -65,6 +65,7 @@ import {
 } from './p9-generic-research.js';
 import {
   P9LiveEffectExecutor,
+  priceObservedUsage,
   type P9LiveEffectObservation,
 } from './p9-live-executor.js';
 
@@ -93,6 +94,7 @@ export interface P9LiveSearchOutcome {
 }
 
 export interface P9LiveSearchAdapter {
+  readonly destinationOrigin: string;
   readonly search: (query: string) => Promise<P9LiveSearchOutcome>;
 }
 
@@ -198,6 +200,19 @@ export function verifyP9LiveBundle(
   const acceptanceReceipt = PlanAcceptanceReceiptSchema.parse(
     parseRequiredJson(artifacts, 'plan-acceptance-receipt.json'),
   );
+  const executionReceipt = P9ExecutionReceiptSchema.parse(
+    parseRequiredJson(artifacts, 'execution-receipt.json'),
+  );
+  if (
+    Date.parse(executionReceipt.startedAt) <
+      Date.parse(authorityReceipt.notBeforeAt) ||
+    Date.parse(executionReceipt.finishedAt) >
+      Date.parse(authorityReceipt.expiresAt)
+  ) {
+    throw new Error(
+      'P9 live bundle execution falls outside its authority window',
+    );
+  }
   const lineage = assertP9LiveAuthorityLineage({
     receipt: authorityReceipt,
     profileCatalog,
@@ -210,7 +225,7 @@ export function verifyP9LiveBundle(
     question: P9_LIVE_EXHIBITION_QUESTION,
     sourceClassificationPolicyDigest:
       P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
-    now: authorityReceipt.authorizedAt,
+    now: executionReceipt.startedAt,
   });
   if (
     lineage.proposerProfile.destinationOrigin !==
@@ -248,9 +263,9 @@ export function verifyP9LiveBundle(
     .trimEnd()
     .split('\n')
     .filter(Boolean);
-  for (const line of journalLines) {
-    P9DurableJournalRecordSchema.parse(JSON.parse(line));
-  }
+  const journalRecords = journalLines.map((line) =>
+    P9DurableJournalRecordSchema.parse(JSON.parse(line)),
+  );
   const replayStore = new MemoryP9DurableJournalStore(
     authorityReceipt.consumptionStoreId,
   );
@@ -281,17 +296,65 @@ export function verifyP9LiveBundle(
   for (const reservation of snapshot.reservations) {
     if (reservation.state === 'released') continue;
     const receipt = receiptByEffectId.get(reservation.bound.effectId);
-    if (
-      !receipt ||
-      receipt.catalogDigest !== catalog.catalogDigest ||
-      receipt.catalogEntryId !== reservation.bound.catalogEntryId ||
-      receipt.provider !== reservation.bound.provider ||
-      receipt.effectKind !== reservation.bound.effectKind ||
-      receipt.idempotencyKey !== reservation.bound.idempotencyKey ||
-      canonicalDigest(receipt.charged) !== canonicalDigest(reservation.charged)
-    ) {
+    const entry = catalog.entries.find(
+      (candidate) => candidate.id === reservation.bound.catalogEntryId,
+    );
+    const expectedReceiptCostState =
+      reservation.settlementCostState === 'known'
+        ? 'observed'
+        : reservation.settlementCostState;
+    const expectedUsageSource =
+      receipt?.costState === 'observed'
+        ? reservation.bound.effectKind === 'model'
+          ? 'provider_reported'
+          : 'measured_transport'
+        : 'absent';
+    const observedCharge =
+      receipt?.observedUsage && entry
+        ? priceObservedUsage(entry, receipt.observedUsage)
+        : null;
+    const terminalRecord = journalRecords.findLast(
+      (record) =>
+        (record.entry.kind === 'settle' || record.entry.kind === 'cancel') &&
+        record.entry.reservationId === reservation.id,
+    );
+    const transportRecord = journalRecords.find(
+      (record) =>
+        record.entry.kind === 'transport_started' &&
+        record.entry.reservationId === reservation.id,
+    );
+    const settledAt = receipt ? Date.parse(receipt.settledAt) : Number.NaN;
+    const mismatches = [
+      !receipt && 'missing receipt',
+      !entry && 'missing catalog entry',
+      receipt?.catalogDigest !== catalog.catalogDigest && 'catalog digest',
+      receipt?.receiptId !== `effect-receipt:${reservation.id}` && 'receipt id',
+      receipt?.catalogEntryId !== reservation.bound.catalogEntryId &&
+        'catalog entry',
+      receipt?.provider !== reservation.bound.provider && 'provider',
+      receipt?.effectKind !== reservation.bound.effectKind && 'effect kind',
+      receipt?.idempotencyKey !== reservation.bound.idempotencyKey &&
+        'idempotency key',
+      receipt?.costState !== expectedReceiptCostState && 'cost state',
+      receipt?.usageSource !== expectedUsageSource && 'usage source',
+      (!transportRecord ||
+        !terminalRecord ||
+        settledAt < Date.parse(transportRecord.at) ||
+        settledAt > Date.parse(terminalRecord.at)) &&
+        'settled timestamp',
+      receipt?.costState === 'observed' &&
+        (!observedCharge ||
+          canonicalDigest(observedCharge) !==
+            canonicalDigest(reservation.charged)) &&
+        'observed usage pricing',
+      receipt &&
+        canonicalDigest(receipt.charged) !==
+          canonicalDigest(reservation.charged) &&
+        'charged amount',
+    ].filter((value): value is string => typeof value === 'string');
+    if (mismatches.length > 0) {
       throw new Error(
-        `P9 live bundle effect receipt does not match journaled reservation ${reservation.id}`,
+        `P9 live bundle effect receipt does not match journaled reservation ${reservation.id}: ${mismatches.join(', ')}`,
       );
     }
     receiptByEffectId.delete(reservation.bound.effectId);
@@ -495,6 +558,15 @@ async function runP9LiveApplicationExclusive(
   );
   const parserProfile = requiredLiveRoleProfile(lineage.profiles, 'parser');
   assertCatalogEntryAuthorized(searchProfile, 'brave-search');
+  if (
+    new URL(searchProfile.destinationOrigin).origin !==
+    input.search.destinationOrigin
+  ) {
+    throw new GovernanceError(
+      'search_transport_destination_mismatch',
+      'authorized search profile does not match the concrete search transport destination',
+    );
+  }
   assertCatalogEntryAuthorized(retrievalProfile, 'public-retrieval');
   assertCatalogEntryAuthorized(parserProfile, 'bounded-parser');
   assertCatalogEntryAuthorized(lineage.proposerProfile, 'model-proposer-live');
@@ -1452,6 +1524,8 @@ export interface BraveP9LiveSearchAdapterInput {
 }
 
 export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
+  readonly destinationOrigin = 'https://api.search.brave.com';
+
   constructor(private readonly input: BraveP9LiveSearchAdapterInput) {
     if (!input.apiKeyEnvironmentVariable.trim()) {
       throw new Error(
