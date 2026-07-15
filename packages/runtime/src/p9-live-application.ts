@@ -1,8 +1,11 @@
 import {
   canonicalDigest,
   ParserReceiptSchema,
+  PlanAcceptanceReceiptSchema,
   P9ClaimProposalSchema,
+  P9EffectReceiptSchema,
   P9EntailmentVerdictSchema,
+  P9ExecutionReceiptSchema,
   ProviderPriceCatalogSchema,
   ResearchPlanProposalSchema,
   type DomainPolicyPack,
@@ -22,13 +25,18 @@ import {
   type ResearchPlan,
   type ResearchPlanProposal,
   type RetrievalAttempt,
+  ResearchPlanSchema,
+  RetrievalAttemptSchema,
 } from '@mammoth/domain';
+import { createHash } from 'node:crypto';
 import { evaluateP9ClaimAdmission } from '@mammoth/evidence';
 import {
   acceptResearchPlan,
   assertP9LiveAuthorityLineage,
   GovernanceError,
   P9DurableBudgetAuthority,
+  MemoryP9DurableJournalStore,
+  P9DurableJournalRecordSchema,
   P9_DOMAIN_POLICY_PACKS,
   type P9BudgetAuthority,
   type P9BudgetReservation,
@@ -157,6 +165,232 @@ export interface P9LiveApplicationRun extends P9GenericResearchRun {
   readonly providerProfileCatalog: P9ProviderProfileCatalog;
   readonly effectReceipts: readonly P9EffectReceipt[];
   readonly recoveredReservations: readonly P9BudgetReservation[];
+}
+
+export interface P9LiveBundleVerification {
+  readonly manifest: ReturnType<typeof verifyP9ExactBundle>['manifest'];
+  readonly verifiedCitationCount: number;
+  readonly effectReceiptCount: number;
+  readonly journalRecordCount: number;
+  readonly spent: ReturnType<P9DurableBudgetAuthority['snapshot']>['spent'];
+}
+
+export function verifyP9LiveBundle(
+  artifacts: Readonly<Record<string, string>>,
+  trust: {
+    readonly expectedAuthorityDigest: string;
+    readonly trustedIssuerId: string;
+  },
+): P9LiveBundleVerification {
+  const exact = verifyP9ExactBundle(artifacts);
+  const authorityReceipt = P9LiveAuthorityReceiptSchema.parse(
+    parseRequiredJson(artifacts, 'live-authority-receipt.json'),
+  );
+  const catalog = ProviderPriceCatalogSchema.parse(
+    parseRequiredJson(artifacts, 'live-price-catalog.json'),
+  );
+  const profileCatalog = P9ProviderProfileCatalogSchema.parse(
+    parseRequiredJson(artifacts, 'live-provider-profile-catalog.json'),
+  );
+  const plan = ResearchPlanSchema.parse(
+    parseRequiredJson(artifacts, 'research-plan.json'),
+  );
+  const acceptanceReceipt = PlanAcceptanceReceiptSchema.parse(
+    parseRequiredJson(artifacts, 'plan-acceptance-receipt.json'),
+  );
+  const lineage = assertP9LiveAuthorityLineage({
+    receipt: authorityReceipt,
+    profileCatalog,
+    priceCatalog: catalog,
+    plan,
+    acceptanceReceipt,
+    expectedAuthorityDigest: trust.expectedAuthorityDigest,
+    trustedIssuerId: trust.trustedIssuerId,
+    executionId: authorityReceipt.executionId,
+    question: P9_LIVE_EXHIBITION_QUESTION,
+    sourceClassificationPolicyDigest:
+      P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
+    now: authorityReceipt.authorizedAt,
+  });
+  if (
+    lineage.proposerProfile.destinationOrigin !==
+      lineage.evaluatorProfile.destinationOrigin ||
+    lineage.proposerProfile.credentialEnvVar !==
+      lineage.evaluatorProfile.credentialEnvVar ||
+    lineage.proposerProfile.billingAccountId !==
+      lineage.evaluatorProfile.billingAccountId ||
+    lineage.proposerProfile.provider !== lineage.evaluatorProfile.provider
+  ) {
+    throw new Error(
+      'P9 live bundle model profiles do not match the shared model transport',
+    );
+  }
+  const authorizedRetrievalOrigins = new Set(
+    authorityReceipt.authorizedRetrievalOrigins.map(
+      (value) => new URL(value).origin,
+    ),
+  );
+  for (const attempt of parseRequiredJsonLines(
+    artifacts,
+    'retrieval-attempts.jsonl',
+  ).map((value) => RetrievalAttemptSchema.parse(value))) {
+    for (const value of [attempt.requestedUrl, attempt.finalUrl].filter(
+      (candidate): candidate is string => Boolean(candidate),
+    )) {
+      if (!authorizedRetrievalOrigins.has(new URL(value).origin)) {
+        throw new Error(
+          `P9 live bundle retrieval origin is unauthorized: ${new URL(value).origin}`,
+        );
+      }
+    }
+  }
+  const journalLines = requiredArtifact(artifacts, 'live-budget-journal.jsonl')
+    .trimEnd()
+    .split('\n')
+    .filter(Boolean);
+  for (const line of journalLines) {
+    P9DurableJournalRecordSchema.parse(JSON.parse(line));
+  }
+  const replayStore = new MemoryP9DurableJournalStore(
+    authorityReceipt.consumptionStoreId,
+  );
+  for (const line of journalLines) replayStore.appendDurable(line);
+  const replay = P9DurableBudgetAuthority.open(
+    {
+      accountId: `p9-live:${authorityReceipt.executionId}`,
+      programId: authorityReceipt.executionId,
+      catalog,
+      limit: authorityReceipt.budgetLimit,
+      authorizationReceipt: authorityReceipt,
+      store: replayStore,
+      actorId: 'p9-live-bundle-verifier',
+    },
+    () => authorityReceipt.authorizedAt,
+  );
+  const snapshot = replay.snapshot();
+  const effectReceipts = parseRequiredJsonLines(
+    artifacts,
+    'live-effect-receipts.jsonl',
+  ).map((value) => P9EffectReceiptSchema.parse(value));
+  const receiptByEffectId = new Map(
+    effectReceipts.map((receipt) => [receipt.effectId, receipt]),
+  );
+  if (receiptByEffectId.size !== effectReceipts.length) {
+    throw new Error('P9 live bundle contains duplicate effect receipts');
+  }
+  for (const reservation of snapshot.reservations) {
+    if (reservation.state === 'released') continue;
+    const receipt = receiptByEffectId.get(reservation.bound.effectId);
+    if (
+      !receipt ||
+      receipt.catalogDigest !== catalog.catalogDigest ||
+      receipt.catalogEntryId !== reservation.bound.catalogEntryId ||
+      receipt.provider !== reservation.bound.provider ||
+      receipt.effectKind !== reservation.bound.effectKind ||
+      receipt.idempotencyKey !== reservation.bound.idempotencyKey ||
+      canonicalDigest(receipt.charged) !== canonicalDigest(reservation.charged)
+    ) {
+      throw new Error(
+        `P9 live bundle effect receipt does not match journaled reservation ${reservation.id}`,
+      );
+    }
+    receiptByEffectId.delete(reservation.bound.effectId);
+  }
+  if (receiptByEffectId.size > 0) {
+    throw new Error('P9 live bundle contains effects absent from the journal');
+  }
+  const recovered = parseRequiredJsonLines(
+    artifacts,
+    'live-recovered-reservations.jsonl',
+  );
+  for (const value of recovered) {
+    const id =
+      typeof value === 'object' && value !== null && 'id' in value
+        ? String(value.id)
+        : '';
+    const reservation = snapshot.reservations.find((entry) => entry.id === id);
+    if (
+      !reservation ||
+      canonicalDigest(value) !== canonicalDigest(reservation)
+    ) {
+      throw new Error(
+        `P9 live bundle recovered reservation ${id || '<missing>'} does not match the journal`,
+      );
+    }
+  }
+  return {
+    manifest: exact.manifest,
+    verifiedCitationCount: exact.verifiedCitationCount,
+    effectReceiptCount: effectReceipts.length,
+    journalRecordCount: journalLines.length,
+    spent: snapshot.spent,
+  };
+}
+
+export function resealP9LiveArtifacts(
+  input: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const artifacts = { ...input };
+  const previous = P9ExecutionReceiptSchema.parse(
+    JSON.parse(requiredArtifact(artifacts, 'execution-receipt.json')),
+  );
+  delete artifacts['execution-receipt.json'];
+  const artifactDigests = Object.fromEntries(
+    Object.entries(artifacts).map(([name, content]) => [
+      name,
+      `sha256:${createHash('sha256').update(content, 'utf8').digest('hex')}`,
+    ]),
+  );
+  const receiptIdentity = {
+    schemaVersion: previous.schemaVersion,
+    contractFamily: previous.contractFamily,
+    executionId: previous.executionId,
+    planId: previous.planId,
+    planDigest: previous.planDigest,
+    question: previous.question,
+    budget: previous.budget,
+    counts: previous.counts,
+    typedResidue: previous.typedResidue,
+    coverageVerdict: previous.coverageVerdict,
+    coverageAssessmentDigest: previous.coverageAssessmentDigest,
+    artifactDigests,
+    startedAt: previous.startedAt,
+    finishedAt: previous.finishedAt,
+  };
+  const receipt = P9ExecutionReceiptSchema.parse({
+    ...receiptIdentity,
+    receiptDigest: canonicalDigest(receiptIdentity),
+  });
+  artifacts['execution-receipt.json'] = JSON.stringify(receipt, null, 2);
+  return artifacts;
+}
+
+function requiredArtifact(
+  artifacts: Readonly<Record<string, string>>,
+  name: string,
+): string {
+  const value = artifacts[name];
+  if (value === undefined) {
+    throw new Error(`P9 live bundle is missing ${name}`);
+  }
+  return value;
+}
+
+function parseRequiredJson(
+  artifacts: Readonly<Record<string, string>>,
+  name: string,
+): unknown {
+  return JSON.parse(requiredArtifact(artifacts, name));
+}
+
+function parseRequiredJsonLines(
+  artifacts: Readonly<Record<string, string>>,
+  name: string,
+): unknown[] {
+  const content = requiredArtifact(artifacts, name).trimEnd();
+  return content
+    ? content.split('\n').map((line) => JSON.parse(line) as unknown)
+    : [];
 }
 
 /**
@@ -310,6 +544,11 @@ async function runP9LiveApplicationExclusive(
   };
 
   const candidatesById = new Map<string, P9LiveCandidate>();
+  const authorizedRetrievalOrigins = new Set(
+    authorityReceipt.authorizedRetrievalOrigins.map(
+      (value) => new URL(value).origin,
+    ),
+  );
   const candidateLimit = Math.min(
     input.maxCandidates ?? retrievalProfile.requestCeiling.requests,
     retrievalProfile.requestCeiling.requests,
@@ -343,6 +582,9 @@ async function runP9LiveApplicationExclusive(
         : new Error(String(result.error));
     }
     for (const candidate of result.value) {
+      if (!authorizedRetrievalOrigins.has(new URL(candidate.url).origin)) {
+        continue;
+      }
       if (!candidatesById.has(candidate.candidateId)) {
         candidatesById.set(candidate.candidateId, candidate);
       }

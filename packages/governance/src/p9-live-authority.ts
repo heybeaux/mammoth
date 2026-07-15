@@ -181,6 +181,13 @@ export function assertP9LiveAuthorityLineage(input: {
   if (!sameSet(billingAccounts, new Set(receipt.authorizedBillingAccountIds))) {
     fail('authorized_billing_account_set_mismatch');
   }
+  if (
+    receipt.authorizedRetrievalOrigins.some(
+      (value) => new URL(value).protocol !== 'https:',
+    )
+  ) {
+    fail('authorized_retrieval_origin_insecure');
+  }
   if (receipt.budgetLimit.currencyUsd !== plan.budget.currencyUsd) {
     fail('live_authority_exceeds_accepted_plan_budget');
   }

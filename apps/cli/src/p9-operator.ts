@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { mkdir, open, readdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -6,7 +5,6 @@ import {
   canonicalDigest,
   P9LiveAuthorityReceiptSchema,
   P9ProviderProfileCatalogSchema,
-  P9ExecutionReceiptSchema,
   type P9LiveAuthorityReceipt,
   type P9ProviderProfile,
   type P9ProviderProfileCatalog,
@@ -37,8 +35,10 @@ import {
   P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
   buildAcceptedP9LivePlan,
   runP9LiveApplication,
+  resealP9LiveArtifacts,
   runP9PlanDrivenResearch,
   verifyP9ExactBundle,
+  verifyP9LiveBundle,
 } from '@mammoth/runtime';
 import { PlanCoverageThresholdsSchema } from '@mammoth/governance';
 
@@ -98,11 +98,12 @@ export async function inspectP9LiveReadiness(
   const catalogPath = env.MAMMOTH_P9_PRICE_CATALOG_PATH;
   const profileCatalogPath = env.MAMMOTH_P9_PROVIDER_PROFILE_CATALOG_PATH;
   const authorityPath = env.MAMMOTH_P9_LIVE_AUTHORITY_RECEIPT_PATH;
+  const journalPath = env.MAMMOTH_P9_BUDGET_JOURNAL_PATH;
   const expectedAuthorityDigest = env.MAMMOTH_P9_EXPECTED_AUTHORITY_DIGEST;
   const trustedIssuerId = env.MAMMOTH_P9_TRUSTED_AUTHORIZER_ID;
   if (!expectedAuthorityDigest) blockers.push('authority_trust_anchor_missing');
   if (!trustedIssuerId) blockers.push('trusted_authorizer_missing');
-  if (!env.MAMMOTH_P9_BUDGET_JOURNAL_PATH) {
+  if (!journalPath) {
     blockers.push('authority_consumption_store_missing');
   }
   let catalog: ProviderPriceCatalog | null = null;
@@ -144,6 +145,19 @@ export async function inspectP9LiveReadiness(
       blockers.push('scoped_live_authority_receipt_invalid');
     }
   }
+  if (authority && journalPath) {
+    const resolvedJournalPath = resolve(journalPath);
+    if (
+      authority.consumptionStoreId !== resolvedJournalPath ||
+      authority.consumptionStoreDigest !==
+        canonicalDigest({
+          kind: 'p9-consumption-store/v1',
+          id: resolvedJournalPath,
+        })
+    ) {
+      blockers.push('authorization_consumption_store_mismatch');
+    }
+  }
   if (!expected.plan) blockers.push('accepted_plan_missing');
   if (!expected.acceptanceReceipt)
     blockers.push('plan_acceptance_receipt_missing');
@@ -181,6 +195,17 @@ export async function inspectP9LiveReadiness(
       });
       proposerFamily = lineage.proposerProfile.profileFamilyId;
       evaluatorFamily = lineage.evaluatorProfile.profileFamilyId;
+      if (
+        lineage.proposerProfile.destinationOrigin !==
+          lineage.evaluatorProfile.destinationOrigin ||
+        lineage.proposerProfile.credentialEnvVar !==
+          lineage.evaluatorProfile.credentialEnvVar ||
+        lineage.proposerProfile.billingAccountId !==
+          lineage.evaluatorProfile.billingAccountId ||
+        lineage.proposerProfile.provider !== lineage.evaluatorProfile.provider
+      ) {
+        blockers.push('model_transport_profiles_not_cohosted');
+      }
       for (const profile of lineage.profiles) {
         if (
           profile.credentialEnvVar &&
@@ -574,6 +599,9 @@ async function liveCommand(
   const dependencyNow = dependencies.now;
   const liveNow = dependencyNow ? () => new Date(dependencyNow()) : undefined;
   const maxCandidates = numericOption(argv, '--max-candidates');
+  const journal = new FileP9DurableJournalStore(
+    resolve(requiredEnv(env, 'MAMMOTH_P9_BUDGET_JOURNAL_PATH')),
+  );
   const run = await runP9LiveApplication({
     executionId: authorityReceipt.executionId,
     budgetUsd: authorityReceipt.budgetLimit.currencyUsd,
@@ -587,9 +615,7 @@ async function liveCommand(
     trustedIssuerId: requiredEnv(env, 'MAMMOTH_P9_TRUSTED_AUTHORIZER_ID'),
     sourceClassificationPolicyDigest:
       P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
-    journal: new FileP9DurableJournalStore(
-      resolve(requiredEnv(env, 'MAMMOTH_P9_BUDGET_JOURNAL_PATH')),
-    ),
+    journal,
     search: new BraveP9LiveSearchAdapter({
       apiKeyEnvironmentVariable: requiredCredentialEnv(searchProfile),
       environment: env,
@@ -610,7 +636,7 @@ async function liveCommand(
     ...(liveNow ? { now: liveNow } : {}),
     ...(maxCandidates !== undefined ? { maxCandidates } : {}),
   });
-  const artifacts = resealWithLiveLineage({
+  const artifacts = resealP9LiveArtifacts({
     ...run.artifacts,
     'live-authority-receipt.json': JSON.stringify(
       run.authorizationReceipt,
@@ -625,13 +651,21 @@ async function liveCommand(
     ),
     'live-effect-receipts.jsonl': toJsonLines(run.effectReceipts),
     'live-recovered-reservations.jsonl': toJsonLines(run.recoveredReservations),
+    'live-budget-journal.jsonl': `${journal.readLines().join('\n')}\n`,
   });
   const outputDirectory = resolve(
     option(argv, '--output') ?? `research/p9-live-${slug(timestamp)}`,
   );
   await writeFreshP9Bundle(outputDirectory, artifacts);
-  const verification = verifyP9ExactBundle(
+  const verification = verifyP9LiveBundle(
     await loadP9BundleDirectory(outputDirectory),
+    {
+      expectedAuthorityDigest: requiredEnv(
+        env,
+        'MAMMOTH_P9_EXPECTED_AUTHORITY_DIGEST',
+      ),
+      trustedIssuerId: requiredEnv(env, 'MAMMOTH_P9_TRUSTED_AUTHORIZER_ID'),
+    },
   );
   io.stdout(
     JSON.stringify({
@@ -740,47 +774,6 @@ function toModelProfile(profile: P9ProviderProfile): {
     profileFamilyId: profile.profileFamilyId,
     modelId: profile.modelId,
   };
-}
-
-function resealWithLiveLineage(
-  artifacts: Record<string, string>,
-): Record<string, string> {
-  const previous = P9ExecutionReceiptSchema.parse(
-    JSON.parse(artifacts['execution-receipt.json'] ?? '{}'),
-  );
-  delete artifacts['execution-receipt.json'];
-  const artifactDigests = Object.fromEntries(
-    Object.entries(artifacts).map(([name, content]) => [
-      name,
-      sha256Text(content),
-    ]),
-  );
-  const receiptIdentity = {
-    schemaVersion: previous.schemaVersion,
-    contractFamily: previous.contractFamily,
-    executionId: previous.executionId,
-    planId: previous.planId,
-    planDigest: previous.planDigest,
-    question: previous.question,
-    budget: previous.budget,
-    counts: previous.counts,
-    typedResidue: previous.typedResidue,
-    coverageVerdict: previous.coverageVerdict,
-    coverageAssessmentDigest: previous.coverageAssessmentDigest,
-    artifactDigests,
-    startedAt: previous.startedAt,
-    finishedAt: previous.finishedAt,
-  };
-  const receipt = P9ExecutionReceiptSchema.parse({
-    ...receiptIdentity,
-    receiptDigest: canonicalDigest(receiptIdentity),
-  });
-  artifacts['execution-receipt.json'] = JSON.stringify(receipt, null, 2);
-  return artifacts;
-}
-
-function sha256Text(value: string): string {
-  return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`;
 }
 
 function toJsonLines(values: readonly unknown[]): string {

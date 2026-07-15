@@ -2862,6 +2862,7 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
     packDigest: planBundle.plan.packDigest,
     budgetAllocation: planBundle.plan.budget,
   };
+  const journal = new MemoryP9DurableJournalStore();
   const receiptIdentity = {
     schemaVersion: '1.0.0' as const,
     contractFamily: 'p9.v1' as const,
@@ -2871,6 +2872,8 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
     reason: 'verify the durable live executor with offline adapters',
     executionId: 'verify-p9-live',
     consumptionNonce: 'verify-p9-live-nonce-1234567890',
+    consumptionStoreId: journal.identityId(),
+    consumptionStoreDigest: journal.identityDigest(),
     maximumExecutions: 1 as const,
     planScope,
     priceCatalogId: catalog.catalogId,
@@ -2900,6 +2903,7 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
         providerProfileCatalog.profiles.map((entry) => entry.destinationOrigin),
       ),
     ],
+    authorizedRetrievalOrigins: ['https://github.com/'],
     authorizedBillingAccountIds: [
       ...new Set(
         providerProfileCatalog.profiles.map((entry) => entry.billingAccountId),
@@ -2923,7 +2927,6 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
     ...withExecution,
     receiptDigest: canonicalDigest(withExecution),
   };
-  const journal = new MemoryP9DurableJournalStore();
   const quote = 'The router reuses cached experts between decode steps.';
   const body = `Colibri caches mmap-backed experts on Apple silicon. ${quote}`;
   const candidateId = 'verify-colibri-source';

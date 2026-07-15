@@ -237,6 +237,7 @@ function authority(
   const { plan, acceptanceReceipt } = acceptedPlan();
   const executionId = 'execution:p9-live-test';
   const consumptionNonce = 'nonce:single-use:0001';
+  const consumptionStoreId = 'p9-test-consumption-store';
   const requestBudget = profiles.profiles.reduce(
     (total, profile) => ({
       requests:
@@ -272,6 +273,11 @@ function authority(
       consumptionNonce,
     }),
     consumptionNonce,
+    consumptionStoreId,
+    consumptionStoreDigest: canonicalDigest({
+      kind: 'p9-consumption-store/v1',
+      id: consumptionStoreId,
+    }),
     maximumExecutions: 1,
     planScope: {
       proposalId: plan.proposalId,
@@ -300,6 +306,7 @@ function authority(
     authorizedDestinationOrigins: [
       ...new Set(profiles.profiles.map((p) => p.destinationOrigin)),
     ],
+    authorizedRetrievalOrigins: ['https://github.com/'],
     authorizedBillingAccountIds: [
       ...new Set(profiles.profiles.map((p) => p.billingAccountId)),
     ],
