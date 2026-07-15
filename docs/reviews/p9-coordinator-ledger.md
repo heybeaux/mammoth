@@ -19,7 +19,7 @@ Never use a branch, worktree, or accepted spawn as proof that work is active.
 | ---------- | --------- | ------------------------- | --------------------------------------------------------------------------- | -------------- | ---------------------------- | ----------------------------- |
 | `P9-PLAN`  | merged    | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                        | `1de5b37`      | [P9-PLAN](#p9-plan-record)   | complete                      |
 | `P9-T0`    | merged    | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`         | `2aeb3db`      | [P9-T0](#p9-t0-record)       | complete                      |
-| `P9-T1`    | producing | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata` | `5db0fc9`      | [P9-T1](#p9-t1-record)       | implement, attack, review, PR |
+| `P9-T1`    | candidate | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata` | `5db0fc9`      | [P9-T1](#p9-t1-record)       | push, PR review, head CI      |
 | `P9-T2-T6` | blocked   | unassigned                | fresh worktrees required                                                    | later T1 merge | [P9-T2-T6](#p9-t2-t6-record) | claim after accepted T1 merge |
 
 ## Required state fields for implementation lanes
@@ -110,12 +110,13 @@ handoff, integration commit, blockers, and replacement audit.
 - Current local results: focused T1 tests PASS (governance 8, retrieval 6);
   format PASS; lint PASS; typecheck PASS; full workspace tests PASS; build PASS;
   P8 regression PASS; `verify:p9` PASS with `T1_budget_metadata=pass` and
-  T2-T6 still blocked. Clean-checkout and PR evidence remain pending.
+  T2-T6 still blocked. Detached clean checkout at candidate `ac26fb7` passed
+  frozen install and the same complete ladder with a clean worktree.
 - Reviewer: GitHub PR review plus exact-head CI; actual findings must be resolved
   or truthfully recorded before merge.
 - Registry/artifact proof: current-session Git worktree, branch, diff, test output,
   verifier output, PR head, and CI. No worker registry claim applies.
-- Handoff/integration commit: unavailable while producing.
+- Handoff/integration candidate: `ac26fb7`; PR and merge commit unavailable.
 - Blockers: none.
 - Replacement audit: none.
 
