@@ -235,6 +235,35 @@ export const P9CriticalClaimPolicySchema = z.enum([
 ]);
 export type P9CriticalClaimPolicy = z.infer<typeof P9CriticalClaimPolicySchema>;
 
+export const PlanAcceptanceReasonSchema = z.literal('plan_policy_satisfied');
+export type PlanAcceptanceReason = z.infer<typeof PlanAcceptanceReasonSchema>;
+
+export const PlanRejectionReasonSchema = z.union([
+  z.literal('pack_id_mismatch'),
+  z.literal('pack_digest_mismatch'),
+  z.literal('subquestions_below_minimum'),
+  z.literal('source_classes_below_minimum'),
+  z.literal('contradictions_below_minimum'),
+  z.literal('budget_exceeds_authorized'),
+  z.literal('insufficient_question_derivation'),
+  z.literal('budget_not_operator_authorized'),
+  z.literal('revision_without_material_change'),
+  z.string().regex(/^pack_required_source_class_missing:[a-z0-9_-]+$/u),
+  z.string().regex(/^subquestion_uncovered:[a-z0-9_-]+$/u),
+  z.string().regex(/^subquestion_unqueried:[a-z0-9_-]+$/u),
+  z.string().regex(/^group_not_question_derived:[a-z_]+$/u),
+  z.string().regex(/^derivation_term_not_in_question:[a-z_]+$/u),
+  z.string().regex(/^derivation_term_not_in_group_content:[a-z_]+$/u),
+  z.string().regex(/^template_vocabulary:[a-z0-9 -]+$/u),
+]);
+export type PlanRejectionReason = z.infer<typeof PlanRejectionReasonSchema>;
+
+export const PlanDecisionReasonSchema = z.union([
+  PlanAcceptanceReasonSchema,
+  PlanRejectionReasonSchema,
+]);
+export type PlanDecisionReason = z.infer<typeof PlanDecisionReasonSchema>;
+
 export const PlanProposerWorkRefSchema = z
   .object({
     workId: z.string().min(1),
@@ -271,8 +300,13 @@ function uniqueIds(values: readonly string[]): boolean {
 
 function addPlanContentIssues(
   content: {
+    scope: ResearchScope;
     subquestions: readonly PlannedSubquestion[];
     coverageRequirements: readonly CoverageRequirement[];
+    contradictionRequirements: readonly ContradictionRequirement[];
+    freshnessRequirements: readonly FreshnessRequirement[];
+    stopCriteria: readonly StopCriterion[];
+    reportOutline: ReportOutline;
     searchQueries: readonly PlannedSearchQuery[];
     sourceClassTargets: readonly SourceClassTarget[];
   },
@@ -295,6 +329,65 @@ function addPlanContentIssues(
       code: z.ZodIssueCode.custom,
       path: ['sourceClassTargets'],
       message: 'source class targets must be unique',
+    });
+  }
+  if (!uniqueIds(content.scope.exclusions.map((entry) => entry.exclusionId))) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['scope', 'exclusions'],
+      message: 'exclusion ids must be unique',
+    });
+  }
+  if (
+    !uniqueIds(content.coverageRequirements.map((entry) => entry.coverageId))
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['coverageRequirements'],
+      message: 'coverage ids must be unique',
+    });
+  }
+  if (!uniqueIds(content.searchQueries.map((entry) => entry.queryId))) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['searchQueries'],
+      message: 'query ids must be unique',
+    });
+  }
+  if (
+    !uniqueIds(
+      content.contradictionRequirements.map((entry) => entry.contradictionId),
+    )
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['contradictionRequirements'],
+      message: 'contradiction ids must be unique',
+    });
+  }
+  if (
+    !uniqueIds(content.freshnessRequirements.map((entry) => entry.freshnessId))
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['freshnessRequirements'],
+      message: 'freshness ids must be unique',
+    });
+  }
+  if (!uniqueIds(content.stopCriteria.map((entry) => entry.stopId))) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['stopCriteria'],
+      message: 'stop criterion ids must be unique',
+    });
+  }
+  if (
+    !uniqueIds(content.reportOutline.sections.map((entry) => entry.sectionId))
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['reportOutline', 'sections'],
+      message: 'report section ids must be unique',
     });
   }
   const knownSubquestions = new Set(subquestionIds);
@@ -399,7 +492,7 @@ export const PlanAcceptanceReceiptSchema = z
     decision: z.enum(['accepted', 'rejected']),
     planId: z.string().min(1).nullable(),
     planDigest: DigestSchema.nullable(),
-    reasonCodes: z.array(z.string().min(1)).min(1),
+    reasonCodes: z.array(PlanDecisionReasonSchema).min(1),
     policyThresholds: z
       .object({
         minSubquestions: PositiveIntegerSchema,
@@ -427,6 +520,26 @@ export const PlanAcceptanceReceiptSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'rejected plan receipt cannot claim an accepted plan',
+      });
+    }
+    if (
+      accepted &&
+      receipt.reasonCodes.some((reason) => reason !== 'plan_policy_satisfied')
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['reasonCodes'],
+        message: 'accepted plan receipt can only use acceptance reasons',
+      });
+    }
+    if (
+      !accepted &&
+      receipt.reasonCodes.some((reason) => reason === 'plan_policy_satisfied')
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['reasonCodes'],
+        message: 'rejected plan receipt can only use rejection reasons',
       });
     }
     const identity = { ...receipt, receiptDigest: undefined };
@@ -462,6 +575,13 @@ export const PlanRevisionRecordSchema = z
         code: z.ZodIssueCode.custom,
         path: ['newPlanDigest'],
         message: 'plan revision must change the plan identity',
+      });
+    }
+    if (!uniqueIds(record.changedFieldGroups)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['changedFieldGroups'],
+        message: 'changed field groups must be unique',
       });
     }
     const identity = { ...record, revisionDigest: undefined };

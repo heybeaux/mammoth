@@ -107,25 +107,55 @@ export function planFieldGroupContent(
 ): string {
   switch (group) {
     case 'scope':
-      return JSON.stringify(content.scope);
+      return JSON.stringify({
+        content: content.scope,
+        derivation: content.derivations.scope,
+      });
     case 'subquestions':
-      return JSON.stringify(content.subquestions);
+      return JSON.stringify({
+        content: content.subquestions,
+        derivation: content.derivations.subquestions,
+      });
     case 'coverage':
-      return JSON.stringify(content.coverageRequirements);
+      return JSON.stringify({
+        content: content.coverageRequirements,
+        derivation: content.derivations.coverage,
+      });
     case 'source_classes':
-      return JSON.stringify(content.sourceClassTargets);
+      return JSON.stringify({
+        content: content.sourceClassTargets,
+        derivation: content.derivations.source_classes,
+      });
     case 'search_queries':
-      return JSON.stringify(content.searchQueries);
+      return JSON.stringify({
+        content: content.searchQueries,
+        derivation: content.derivations.search_queries,
+      });
     case 'contradictions':
-      return JSON.stringify(content.contradictionRequirements);
+      return JSON.stringify({
+        content: content.contradictionRequirements,
+        derivation: content.derivations.contradictions,
+      });
     case 'freshness':
-      return JSON.stringify(content.freshnessRequirements);
+      return JSON.stringify({
+        content: content.freshnessRequirements,
+        derivation: content.derivations.freshness,
+      });
     case 'stop_criteria':
-      return JSON.stringify(content.stopCriteria);
+      return JSON.stringify({
+        content: content.stopCriteria,
+        derivation: content.derivations.stop_criteria,
+      });
     case 'outline':
-      return JSON.stringify(content.reportOutline);
+      return JSON.stringify({
+        content: content.reportOutline,
+        derivation: content.derivations.outline,
+      });
     case 'budget':
-      return JSON.stringify(content.budget);
+      return JSON.stringify({
+        content: content.budget,
+        derivation: content.derivations.budget,
+      });
   }
 }
 
@@ -291,13 +321,41 @@ export const P9_DOMAIN_POLICY_PACKS: Readonly<
   }),
 };
 
-function questionTokenSet(question: string): Set<string> {
-  QUESTION_TOKEN.lastIndex = 0;
-  return new Set(
-    [...question.toLowerCase().matchAll(QUESTION_TOKEN)].map(
-      (match) => match[0],
-    ),
-  );
+function stringValues(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value))
+    return value.flatMap((entry) => stringValues(entry));
+  if (value && typeof value === 'object')
+    return Object.values(value).flatMap((entry) => stringValues(entry));
+  return [];
+}
+
+function fieldStringValues(
+  content: PlanContent,
+  group: PlanFieldGroup,
+): string[] {
+  switch (group) {
+    case 'scope':
+      return stringValues(content.scope);
+    case 'subquestions':
+      return stringValues(content.subquestions);
+    case 'coverage':
+      return stringValues(content.coverageRequirements);
+    case 'source_classes':
+      return stringValues(content.sourceClassTargets);
+    case 'search_queries':
+      return stringValues(content.searchQueries);
+    case 'contradictions':
+      return stringValues(content.contradictionRequirements);
+    case 'freshness':
+      return stringValues(content.freshnessRequirements);
+    case 'stop_criteria':
+      return stringValues(content.stopCriteria);
+    case 'outline':
+      return stringValues(content.reportOutline);
+    case 'budget':
+      return [];
+  }
 }
 
 export function validateResearchPlanProposal(
@@ -344,7 +402,7 @@ export function validateResearchPlanProposal(
       reasons.add(`subquestion_unqueried:${subquestion.subquestionId}`);
   }
 
-  const questionTokens = questionTokenSet(proposal.question);
+  const questionTokens = new Set(materialQuestionTerms(proposal.question));
   const verifiedQuestionTerms = new Set<string>();
   for (const group of PLAN_FIELD_GROUPS) {
     const derivation = proposal.derivations[group];
@@ -358,14 +416,16 @@ export function validateResearchPlanProposal(
       reasons.add('budget_not_operator_authorized');
     }
     if (derivation.source !== 'question') continue;
-    const groupContent = planFieldGroupContent(proposal, group).toLowerCase();
+    const groupTokens = new Set(
+      materialQuestionTerms(fieldStringValues(proposal, group).join(' ')),
+    );
     for (const term of derivation.questionTerms) {
       const normalized = term.toLowerCase();
       if (!questionTokens.has(normalized)) {
         reasons.add(`derivation_term_not_in_question:${group}`);
         continue;
       }
-      if (!groupContent.includes(normalized)) {
+      if (!groupTokens.has(normalized)) {
         reasons.add(`derivation_term_not_in_group_content:${group}`);
         continue;
       }
@@ -397,7 +457,6 @@ export interface PlanAcceptanceInput {
   readonly decidedAt: string;
   readonly actorId: string;
   readonly planId?: string;
-  readonly previousPlan?: ResearchPlan;
 }
 
 export interface PlanAcceptanceResult {
@@ -466,8 +525,8 @@ function makeReceipt(input: {
   });
 }
 
-export function acceptResearchPlan(
-  input: PlanAcceptanceInput,
+function acceptResearchPlanInternal(
+  input: PlanAcceptanceInput & { readonly previousPlan?: ResearchPlan },
 ): PlanAcceptanceResult {
   const proposal = ResearchPlanProposalSchema.parse(input.proposal);
   const pack = P9_DOMAIN_POLICY_PACKS[proposal.domainPackId];
@@ -526,6 +585,12 @@ export function acceptResearchPlan(
   };
 }
 
+export function acceptResearchPlan(
+  input: PlanAcceptanceInput,
+): PlanAcceptanceResult {
+  return acceptResearchPlanInternal(input);
+}
+
 export interface ResearchPlanPreview {
   readonly proposalId: string;
   readonly proposalDigest: string;
@@ -580,6 +645,14 @@ export function reviseResearchPlan(
 ): PlanRevisionResult {
   const currentPlan = ResearchPlanSchema.parse(input.currentPlan);
   const proposal = ResearchPlanProposalSchema.parse(input.proposal);
+  if (
+    proposal.domainPackId !== currentPlan.domainPackId ||
+    proposal.packDigest !== currentPlan.packDigest
+  )
+    throw new GovernanceError(
+      'plan_revision_authority_changed',
+      'domain pack changes require a new accepted plan',
+    );
   const changedFieldGroups = changedPlanFieldGroups(
     currentPlan,
     planContent(proposal),
@@ -607,7 +680,7 @@ export function reviseResearchPlan(
       revisionRecord: null,
     };
   }
-  const result = acceptResearchPlan({
+  const result = acceptResearchPlanInternal({
     proposal,
     thresholds: input.thresholds,
     decidedAt: input.decidedAt,

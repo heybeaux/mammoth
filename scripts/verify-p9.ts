@@ -840,6 +840,7 @@ function verifyT3IndependentEntailment(): void {
 const T4_PACK_BY_FIXTURE_DOMAIN: Readonly<
   Record<string, ResearchDomainPackId>
 > = {
+  general_web: 'general-web/v1',
   technical_due_diligence: 'technical-due-diligence/v1',
   public_policy: 'public-policy/v1',
   scientific_review: 'scientific-review/v1',
@@ -879,8 +880,19 @@ function fixtureFreshnessRequirements(
 }
 
 function questionTermsInContent(question: string, content: unknown): string[] {
-  const body = JSON.stringify(content).toLowerCase();
-  return materialQuestionTerms(question).filter((term) => body.includes(term));
+  const bodyTokens = new Set(
+    materialQuestionTerms(stringValues(content).join(' ')),
+  );
+  return materialQuestionTerms(question).filter((term) => bodyTokens.has(term));
+}
+
+function stringValues(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value))
+    return value.flatMap((entry) => stringValues(entry));
+  if (value && typeof value === 'object')
+    return Object.values(value).flatMap((entry) => stringValues(entry));
+  return [];
 }
 
 function fixtureNumber(
@@ -985,7 +997,7 @@ function planProposalFromFixture(
     retrievalParsingUsd: budgetFixture.retrievalParsing,
     modelsUsd: budgetFixture.models,
   };
-  const identity = {
+  const planFields = {
     schemaVersion: '1.0.0' as const,
     contractFamily: 'p9.v1' as const,
     proposalId: overrides.proposalId ?? `proposal-${String(fixture.fixtureId)}`,
@@ -1027,12 +1039,22 @@ function planProposalFromFixture(
       outline: { source: 'domain_pack' as const, questionTerms: [] },
       budget: { source: 'operator' as const, questionTerms: [] },
     },
+  };
+  const proposerPayload = {
+    proposalId: planFields.proposalId,
+    question: planFields.question,
+    domainPackId: planFields.domainPackId,
+    scope: planFields.scope,
+    subquestions: planFields.subquestions,
+    searchQueries: planFields.searchQueries,
+    budget: planFields.budget,
+  };
+  const identity = {
+    ...planFields,
     proposerWork: {
       workId: `plan-work-${String(fixture.fixtureId)}`,
-      workDigest: canonicalDigest(`plan-work-${String(fixture.fixtureId)}`),
-      rawResponseDigest: canonicalDigest(
-        `plan-response-${String(fixture.fixtureId)}`,
-      ),
+      workDigest: canonicalDigest({ work: proposerPayload }),
+      rawResponseDigest: canonicalDigest({ rawResponse: proposerPayload }),
       role: 'plan_proposer' as const,
       profileVersionId: 'planner-profile-v1',
       profileFamilyId: 'planner-family',
@@ -1044,6 +1066,54 @@ function planProposalFromFixture(
     proposalDigest: canonicalDigest(identity),
   });
 }
+
+const T4_GENERAL_WEB_FIXTURE = {
+  fixtureId: 'general-web-plan',
+  question:
+    'What should a small city understand before selecting a public library technology vendor?',
+  domainPack: 'general_web',
+  scope: {
+    include: [
+      'public library technology vendor selection',
+      'community service and procurement risks',
+    ],
+    exclude: ['No legal advice or procurement award recommendation.'],
+  },
+  subquestions: [
+    'Which user needs and access constraints should shape vendor evaluation?',
+    'What vendor lock-in and migration risks matter for public libraries?',
+    'Which procurement, privacy, and accessibility duties should be checked?',
+    'What implementation evidence distinguishes pilots from reliable operations?',
+  ],
+  requiredSourceClasses: [
+    'primary_source',
+    'independent_analysis',
+    'secondary_reporting',
+    'official_guidance',
+    'implementation_case_study',
+  ],
+  requiredContradictions: [
+    'vendor_claims_vs_user_outcomes',
+    'cost_savings_vs_service_quality',
+  ],
+  freshness: { procurementGuidanceDays: 730, marketEvidenceDays: 365 },
+  stopCriteria: [
+    'mandatory_source_classes_accounted',
+    'vendor_lock_in_risks_evaluated',
+  ],
+  reportOutline: [
+    'decision_context',
+    'evidence_by_vendor_risk',
+    'implementation_uncertainties',
+    'procurement_questions',
+  ],
+  budgetAllocation: {
+    currencyUsd: 5,
+    search: 0.5,
+    retrievalParsing: 1,
+    models: 3.5,
+  },
+};
 
 async function verifyT4QuestionDerivedPlanning(): Promise<void> {
   const thresholdsFixture = await json('thresholds.json');
@@ -1075,6 +1145,7 @@ async function verifyT4QuestionDerivedPlanning(): Promise<void> {
   const now = '2026-07-15T05:00:00.000Z';
   const domainFixtures = plans.filter((plan) => plan.domainPack);
   invariant(domainFixtures.length === 3, 'T4 three unrelated plan fixtures');
+  const t4PlanningFixtures = [...domainFixtures, T4_GENERAL_WEB_FIXTURE];
   const referenceFixture = plans.find((plan) => !plan.domainPack);
   invariant(
     referenceFixture?.status === 'frozen_reference_only',
@@ -1085,7 +1156,7 @@ async function verifyT4QuestionDerivedPlanning(): Promise<void> {
     'T4 hostile fixture future-schema-unknown-field',
   );
 
-  const acceptedPlans = domainFixtures.map((fixture) => {
+  const acceptedPlans = t4PlanningFixtures.map((fixture) => {
     const proposal = planProposalFromFixture(fixture);
     const preview = previewResearchPlan(proposal);
     invariant(
@@ -1109,11 +1180,10 @@ async function verifyT4QuestionDerivedPlanning(): Promise<void> {
   });
 
   invariant(
-    new Set(acceptedPlans.map((plan) => plan.domainPackId)).size === 3 &&
-      new Set(acceptedPlans.map((plan) => plan.packDigest)).size === 3 &&
-      new Set(acceptedPlans.map((plan) => plan.planDigest)).size ===
-        planning.requiredDistinctAcceptedPlans,
-    'T4 unrelated questions select distinct packs and plan identities',
+    new Set(acceptedPlans.map((plan) => plan.domainPackId)).size === 4 &&
+      new Set(acceptedPlans.map((plan) => plan.packDigest)).size === 4 &&
+      new Set(acceptedPlans.map((plan) => plan.planDigest)).size === 4,
+    'T4 unrelated questions select all four distinct packs and plan identities',
   );
   for (let left = 0; left < acceptedPlans.length; left += 1) {
     for (let right = left + 1; right < acceptedPlans.length; right += 1) {
@@ -1242,6 +1312,13 @@ async function verifyT4QuestionDerivedPlanning(): Promise<void> {
     proposal: planProposalFromFixture(technicalFixture, {
       proposalId: 'proposal-technical-localized',
       question: `${String(technicalFixture.question)} Prioritize evidence relevant to teams in Canada.`,
+      extraQueries: [
+        {
+          queryId: 'q-canada',
+          query: 'Canada colibri runtime limited memory hardware evidence',
+          subquestionIds: ['sq-1'],
+        },
+      ],
     }),
     thresholds,
     decidedAt: now,
@@ -1250,8 +1327,14 @@ async function verifyT4QuestionDerivedPlanning(): Promise<void> {
   invariant(
     localized.receipt.decision === 'accepted' &&
       localized.plan !== null &&
-      localized.plan.planDigest !== baselineAccepted.plan.planDigest,
-    'T4 metamorphic question change shifts the accepted plan identity',
+      localized.plan.planDigest !== baselineAccepted.plan.planDigest &&
+      changedPlanFieldGroups(baselineAccepted.plan, localized.plan).includes(
+        'search_queries',
+      ) &&
+      localized.plan.searchQueries.some((query) =>
+        query.query.toLowerCase().includes('canada'),
+      ),
+    'T4 metamorphic question change shifts accepted plan identity and search queries',
   );
 
   const revision = reviseResearchPlan({

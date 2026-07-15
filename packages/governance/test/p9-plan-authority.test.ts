@@ -208,10 +208,43 @@ describe('p9 plan authority', () => {
     const reasons = validateResearchPlanProposal(
       buildProposal(),
       P9_DOMAIN_POLICY_PACKS['technical-due-diligence/v1'],
-      { ...THRESHOLDS, minSubquestions: 3, minContradictionRequirements: 2 },
+      {
+        ...THRESHOLDS,
+        minSubquestions: 3,
+        minSourceClasses: 4,
+        minContradictionRequirements: 2,
+      },
     );
     expect(reasons).toContain('subquestions_below_minimum');
+    expect(reasons).toContain('source_classes_below_minimum');
     expect(reasons).toContain('contradictions_below_minimum');
+  });
+
+  it('rejects pack identity mismatches with fail-closed receipts', () => {
+    const packIdMismatch = validateResearchPlanProposal(
+      buildProposal((identity) => ({
+        ...identity,
+        domainPackId: 'public-policy/v1',
+      })),
+      P9_DOMAIN_POLICY_PACKS['technical-due-diligence/v1'],
+      THRESHOLDS,
+    );
+    expect(packIdMismatch).toContain('pack_id_mismatch');
+
+    const digestMismatch = acceptResearchPlan({
+      proposal: buildProposal((identity) => ({
+        ...identity,
+        packDigest: digest('wrong-pack-digest'),
+      })),
+      thresholds: THRESHOLDS,
+      decidedAt: NOW,
+      actorId: 'operator-1',
+    });
+    expect(digestMismatch.plan).toBeNull();
+    expect(digestMismatch.receipt.decision).toBe('rejected');
+    expect(digestMismatch.receipt.reasonCodes).toContain(
+      'pack_digest_mismatch',
+    );
   });
 
   it('rejects budgets that exceed operator authorization or lack it', () => {
@@ -356,6 +389,9 @@ describe('p9 plan authority', () => {
     const proposal = buildProposal();
     const first = previewResearchPlan(proposal);
     const second = previewResearchPlan(proposal);
+    expect(first.previewDigest).toBe(
+      'sha256:d74160bc66bd975f45d295fd496c67d11a056f6aae52297639573ceb802540de',
+    );
     expect(first.previewDigest).toBe(second.previewDigest);
     const different = previewResearchPlan(
       buildProposal((identity) => ({

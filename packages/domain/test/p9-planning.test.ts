@@ -348,6 +348,46 @@ describe('p9 planning contracts', () => {
     expect(() => ResearchPlanProposalSchema.parse(duplicated)).toThrow(
       /subquestion ids must be unique/u,
     );
+    for (const [field, message] of [
+      ['coverageRequirements', /coverage ids must be unique/u],
+      ['searchQueries', /query ids must be unique/u],
+      ['contradictionRequirements', /contradiction ids must be unique/u],
+      ['freshnessRequirements', /freshness ids must be unique/u],
+      ['stopCriteria', /stop criterion ids must be unique/u],
+    ] as const) {
+      const values = planContentFixture()[field];
+      expect(() =>
+        ResearchPlanProposalSchema.parse(
+          buildProposal((identity) => ({
+            ...identity,
+            [field]: [values[0], values[0]],
+          })),
+        ),
+      ).toThrow(message);
+    }
+    const duplicatedExclusion = planContentFixture().scope.exclusions[0];
+    expect(() =>
+      ResearchPlanProposalSchema.parse(
+        buildProposal((identity) => ({
+          ...identity,
+          scope: {
+            ...(identity.scope as Record<string, unknown>),
+            exclusions: [duplicatedExclusion, duplicatedExclusion],
+          },
+        })),
+      ),
+    ).toThrow(/exclusion ids must be unique/u);
+    const duplicatedSection = planContentFixture().reportOutline.sections[0];
+    expect(() =>
+      ResearchPlanProposalSchema.parse(
+        buildProposal((identity) => ({
+          ...identity,
+          reportOutline: {
+            sections: [duplicatedSection, duplicatedSection],
+          },
+        })),
+      ),
+    ).toThrow(/report section ids must be unique/u);
   });
 
   it('binds acceptance receipts to the decision outcome', () => {
@@ -371,6 +411,25 @@ describe('p9 planning contracts', () => {
         })),
       ),
     ).toThrow(/rejected plan receipt cannot claim/u);
+    expect(() =>
+      PlanAcceptanceReceiptSchema.parse(
+        buildReceipt((identity) => ({
+          ...identity,
+          decision: 'accepted',
+          planId: 'plan-1',
+          planDigest: digest('plan'),
+          reasonCodes: ['budget_exceeds_authorized'],
+        })),
+      ),
+    ).toThrow(/only use acceptance reasons/u);
+    expect(() =>
+      PlanAcceptanceReceiptSchema.parse(
+        buildReceipt((identity) => ({
+          ...identity,
+          reasonCodes: ['plan_policy_satisfied'],
+        })),
+      ),
+    ).toThrow(/only use rejection reasons/u);
   });
 
   it('requires plan revisions to change the plan identity', () => {
@@ -403,5 +462,15 @@ describe('p9 planning contracts', () => {
         revisionDigest: canonicalDigest(changed),
       }),
     ).not.toThrow();
+    expect(() =>
+      PlanRevisionRecordSchema.parse({
+        ...changed,
+        changedFieldGroups: ['budget', 'budget'],
+        revisionDigest: canonicalDigest({
+          ...changed,
+          changedFieldGroups: ['budget', 'budget'],
+        }),
+      }),
+    ).toThrow(/changed field groups must be unique/u);
   });
 });

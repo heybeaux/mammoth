@@ -223,12 +223,13 @@ handoff, integration commit, blockers, and replacement audit.
   preview, immutable acceptance, linked revisions, four domain policy packs, and
   plan-derived search, coverage, contradiction, freshness, stop, outline, and
   budget fields.
-- Acceptance evidence: the three unrelated non-data-center plan fixtures produce
-  materially different accepted plans with distinct policy packs and identities;
-  a structurally valid template swap that ignores the question is rejected;
-  forbidden data-center vocabulary cannot leak into unrelated plans; closed
-  schemas reject future fields; material changes create linked revisions that
-  invalidate downstream work.
+- Acceptance evidence: the three frozen unrelated non-data-center plan fixtures
+  plus a T4-owned `general-web/v1` proposal produce materially different accepted
+  plans covering all four policy packs with distinct identities; a structurally
+  valid template swap that ignores the question is rejected; forbidden data-center
+  vocabulary cannot leak into unrelated plans; closed schemas reject future
+  fields; material changes create linked revisions that invalidate downstream
+  work.
 - Runtime identity: Scout OpenClaw subagent session
   `agent:scout:subagent:eee6346d-761a-4742-b039-9a3cd205eb1b`; requester run
   `5387bca6-d44d-4d94-ae35-8a04c2c664a3`; resolved model identity is not
@@ -252,15 +253,16 @@ handoff, integration commit, blockers, and replacement audit.
   full tests; build; `pnpm verify:p8`; `pnpm verify:p9`; detached clean-checkout
   frozen install and repeat before merge recommendation.
 - Current local results: domain planning tests PASS (9); governance plan-authority
-  tests PASS (15); format PASS; lint PASS; typecheck PASS; full workspace tests
+  tests PASS (16); format PASS; lint PASS; typecheck PASS; full workspace tests
   PASS; build PASS; P8 regression PASS; `verify:p9` PASS with T4 planning enabled
   and T5-T6 still blocked. The known install-induced
   `packages/temporal-adapter/src/research-cli.ts` mode toggle was restored before
   staging.
-- Reviewer: PR #66. CodeRabbit started processing but had produced no substantive
-  findings or completed review by exact-head merge readiness; this is recorded as
-  no reviewer result, not approval. Exact-head CI `29419299917` passed every lane
-  and the aggregate check at `ccf135d`.
+- Reviewer: PR #66. CodeRabbit posted 11 actionable comments; the branch added
+  structured reason contracts, duplicate-ID checks, exact token derivation,
+  stricter revision authority, frozen preview identity, payload-bound proposer
+  work digests, four-pack verifier coverage, localization field checks, and
+  ledger replacement detail. Exact-head CI must be re-run at the final head.
 - Registry/artifact proof: OpenClaw subagent assignment, exact-base worktree,
   frozen install, attributable diff/tests, verifier output, and later PR/CI. The
   previous failed/timed-out attempt was replaced only after this retry inspected
@@ -269,8 +271,12 @@ handoff, integration commit, blockers, and replacement audit.
   merge and merged-main CI remain the final proof.
 - Blockers: none at assignment time.
 - Replacement audit: previous model attempt failed/timed out after creating the
-  correct worktree and partial T4 diff. This coordinator verified branch/base and
-  status before continuing; no parallel live worker was claimed.
+  correct worktree and partial T4 diff. The requester supplied the retry as a
+  terminal replacement event for that attempt; no active registry entry remained
+  available in this subagent context. Handoff recipient is the P9 coordinator
+  parent session; independent reviewer is PR #66/CodeRabbit plus exact-head CI.
+  This coordinator verified branch/base and status before continuing; no parallel
+  live worker was claimed.
 
 ### P9-T5-T6 record
 
