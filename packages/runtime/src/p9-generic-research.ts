@@ -1079,24 +1079,38 @@ export function runP9PlanDrivenResearch(
   const citations = relevantAdmitted.map((binding) => {
     const claim = claimsById.get(binding.proposal.proposalId);
     const attempt = attemptBySource.get(claim?.candidateId ?? '');
+    const verdict = verdicts.find(
+      (record) => record.verdictId === binding.admission.verdictId,
+    );
     if (!claim || !attempt) {
       throw new P9GenericResearchError(
         'citation_provenance_missing',
         `admitted claim ${binding.proposal.proposalId} lacks retrieval provenance`,
       );
     }
+    if (!verdict || verdict.verdict !== 'entailed') {
+      throw new P9GenericResearchError(
+        'citation_entailment_missing',
+        `admitted claim ${binding.proposal.proposalId} lacks entailment provenance`,
+      );
+    }
     return {
       claimId: claim.claimId,
       admissionId: binding.admission.admissionId,
       admissionPolicyId: binding.admission.policyId,
+      admissionDecision: 'admitted' as const,
       admissionDigest: binding.admission.admissionDigest,
       verdictId: binding.admission.verdictId,
       verdictDigest: binding.admission.verdictDigest,
+      entailmentVerdictId: verdict.verdictId,
+      entailmentVerdict: 'entailed' as const,
+      entailmentVerdictDigest: verdict.verdictDigest,
       attemptId: attempt.attemptId,
       requestedUrl: attempt.requestedUrl,
       sourceClass: binding.evidence.sourceClass,
       sourceFamilyId: binding.evidence.sourceFamilyId,
       evidenceSpanId: binding.proposal.locator.evidenceSpanId,
+      locator: binding.proposal.locator,
       snapshotDigest: binding.proposal.locator.snapshotDigest,
       quoteDigest: canonicalDigest(claim.quote),
       coordinateSpace: binding.proposal.locator.coordinateSpace,

@@ -15,16 +15,16 @@ Never use a branch, worktree, or accepted spawn as proof that work is active.
 
 ## Ownership
 
-| Assignment | State   | Owner/runtime             | Worktree / branch                                                                     | Base      | Record                     | Next                    |
-| ---------- | ------- | ------------------------- | ------------------------------------------------------------------------------------- | --------- | -------------------------- | ----------------------- |
-| `P9-PLAN`  | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                                  | `1de5b37` | [P9-PLAN](#p9-plan-record) | complete                |
-| `P9-T0`    | merged  | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`                   | `2aeb3db` | [P9-T0](#p9-t0-record)     | complete                |
-| `P9-T1`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9` | [P9-T1](#p9-t1-record)     | complete                |
-| `P9-T2`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8` | [P9-T2](#p9-t2-record)     | complete                |
-| `P9-T3`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38` | [P9-T3](#p9-t3-record)     | complete                |
-| `P9-T4`    | merged  | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f` | [P9-T4](#p9-t4-record)     | complete                |
-| `P9-T5`    | merged  | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t5-review-remediation` / `fix/p9-t5-review-remediation`      | `86f5c30` | [P9-T5](#p9-t5-record)     | complete                |
-| `P9-T6`    | blocked | Scout / primary session   | `/private/tmp/mammoth-p9-t6-live-authority` / `feat/p9-t6-live-authority`             | `fe0c96f` | [P9-T6](#p9-t6-record)     | explicit live authority |
+| Assignment | State           | Owner/runtime             | Worktree / branch                                                                     | Base      | Record                     | Next                                   |
+| ---------- | --------------- | ------------------------- | ------------------------------------------------------------------------------------- | --------- | -------------------------- | -------------------------------------- |
+| `P9-PLAN`  | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                                  | `1de5b37` | [P9-PLAN](#p9-plan-record) | complete                               |
+| `P9-T0`    | merged          | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`                   | `2aeb3db` | [P9-T0](#p9-t0-record)     | complete                               |
+| `P9-T1`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9` | [P9-T1](#p9-t1-record)     | complete                               |
+| `P9-T2`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8` | [P9-T2](#p9-t2-record)     | complete                               |
+| `P9-T3`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38` | [P9-T3](#p9-t3-record)     | complete                               |
+| `P9-T4`    | merged          | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f` | [P9-T4](#p9-t4-record)     | complete                               |
+| `P9-T5`    | merged/verified | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t5-generic-retry` / `feat/p9-t5-generic-execution-retry`     | `ff03482` | [P9-T5](#p9-t5-record)     | complete                               |
+| `P9-T6`    | active          | Scout / primary session   | `/private/tmp/mammoth-p9-t6-evidence-replay` / `feat/p9-t6-evidence-replay`           | `21513a2` | [P9-T6](#p9-t6-record)     | exact-bundle PR, then live application |
 
 ## Required state fields for implementation lanes
 
@@ -366,6 +366,9 @@ handoff, integration commit, blockers, and replacement audit.
 - Blockers: none for T5. The 16 original findings and their immutable body
   digests remain individually enumerated in
   `docs/reviews/p9-t5-remediation-evidence.md` for auditability.
+- Residual provenance: finding `3588636176` remains valid as a stronger
+  manifest/exact-bundle concern and is carried by PR #71; T6 cannot claim
+  bundle-level factual grounding until that PR lands.
 - Replacement audit: previous model attempt failed/timed out after creating a
   dirty `/private/tmp/mammoth-p9-t5-generic` worktree with partial T5 files. This
   retry did not reuse that branch/worktree, copied only useful uncommitted
@@ -374,20 +377,21 @@ handoff, integration commit, blockers, and replacement audit.
 
 ### P9-T6 record
 
-- Objective: live exhibition and release sequencing after T5 merge.
+- Objective: finish exact-bundle provenance hardening, then build the safe P9
+  live application/CLI/readiness path before any authorized exhibition.
 - Runtime identity: Scout primary session in fresh worktree
   `/private/tmp/mammoth-p9-t6-live-authority`, branch
   `feat/p9-t6-live-authority`, exact base
   `fe0c96f646d6a5821a43dff814affe53dadf621e`.
-- Owned paths for this audit slice: this ledger and
-  `docs/reviews/p9-t6-live-authority-audit.md`.
+- Owned paths: P9 report/exact-bundle contracts, runtime, verifier, this ledger,
+  and `docs/reviews/p9-t6-live-authority-audit.md`.
 - Prohibited paths: live provider execution, release/tag work, receipt-only PR,
-  code changes beyond authority evidence, unrelated user changes, and external
-  repositories.
-- Contracts changed: none; this is a coordination and authority-evidence update.
+  unrelated user changes, and external repositories.
+- Contracts changed: additive pre-release P9 citation and exact-bundle proof.
 - Dependencies: T5 PR #70 merged; default-branch CI run `29432359193` passed at
   `fe0c96f646d6a5821a43dff814affe53dadf621e`.
-- State: blocked on explicit T6 live credential and billing authorization.
+- State: active on safe implementation; live effects remain blocked on explicit
+  P9 credential and billing authorization.
 - Blocker: T6 live exhibition and any metered provider call still require a
   separate valid authorization check under `P9_PLAN.md`/`LOOP.md`. At
   2026-07-15T16:31:33Z, repository search found no P9 live-exhibition
@@ -399,6 +403,17 @@ handoff, integration commit, blockers, and replacement audit.
 - Handoff recipient: P9 coordinator after explicit credential and billing
   authorization is provided, or after a code slice adds a P9 live-readiness gate
   without making live effects.
+- Acceptance evidence for the current subtask: every serialized factual citation
+  must replay through proposal, admission, entailment verdict, retrieval attempt,
+  source metadata, exact locator, immutable snapshot, rendered report, and
+  receipt; adversarial resealing must fail closed.
+- Runtime identity: Scout primary session with independent native review; no live
+  provider call or metered effect owns this subtask.
+- Worktree/branch/base: `/private/tmp/mammoth-p9-t6-evidence-replay`;
+  `feat/p9-t6-evidence-replay`; rebased on main `21513a2`.
+- Reviewer: PR #71 plus independent adversarial re-review. The first review found
+  missing cross-artifact replay; the repaired head remains under review.
+- Handoff/integration: pending PR #71.
 
 ## Release evidence
 

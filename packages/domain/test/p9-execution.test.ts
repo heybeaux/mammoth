@@ -171,9 +171,13 @@ describe('P9 report provenance contracts', () => {
           claimId: 'claim:1',
           admissionId: 'admission:1',
           admissionPolicyId: 'p9-independent-entailment/v1',
+          admissionDecision: 'admitted' as const,
           admissionDigest: DIGEST,
           verdictId: 'verdict:1',
           verdictDigest: DIGEST,
+          entailmentVerdictId: 'verdict:1',
+          entailmentVerdict: 'entailed' as const,
+          entailmentVerdictDigest: DIGEST,
           attemptId: 'attempt:1',
           requestedUrl: 'https://example.test/source',
           sourceClass: 'primary',
@@ -184,6 +188,15 @@ describe('P9 report provenance contracts', () => {
           coordinateSpace: 'utf16-code-units/v1',
           startOffset: 0,
           endOffset: 10,
+          locator: {
+            evidenceSpanId: 'span:1',
+            snapshotDigest: DIGEST,
+            quoteDigest: DIGEST,
+            contextDigest: DIGEST,
+            coordinateSpace: 'utf16-code-units/v1',
+            startOffset: 0,
+            endOffset: 10,
+          },
         },
       ],
       contradictions: [
@@ -218,6 +231,17 @@ describe('P9 report provenance contracts', () => {
       P9ReportManifestSchema.safeParse({
         ...unbound,
         manifestDigest: canonicalDigest(unbound),
+      }).success,
+    ).toBe(false);
+
+    const mismatchedLocator = structuredClone(identity);
+    const mismatchedCitation = mismatchedLocator.citations[0];
+    if (!mismatchedCitation) throw new Error('citation fixture missing');
+    mismatchedCitation.quoteDigest = canonicalDigest('different');
+    expect(
+      P9ReportManifestSchema.safeParse({
+        ...mismatchedLocator,
+        manifestDigest: canonicalDigest(mismatchedLocator),
       }).success,
     ).toBe(false);
   });
