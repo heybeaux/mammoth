@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p9.v1",
+  "planning": {
+    "requiredDistinctAcceptedPlans": 3,
+    "minSubquestions": 4,
+    "minSourceClasses": 5,
+    "minContradictionRequirements": 2,
+    "questionDerivedFieldRatio": 1
+  },
+  "report": {
+    "requiredOfflineReports": 1,
+    "minAdmittedClaims": 10,
+    "minCriticalClaims": 3,
+    "criticalUnsupportedClaims": 0,
+    "factualSentenceEntailmentCoverage": 1,
+    "minIndependentFamiliesPerCriticalClaim": 2,
+    "minRequiredSourceClassCoverageRatio": 0.8,
+    "retrievalAttemptTerminalCoverage": 1
+  },
+  "budget": {
+    "maxAuthorizedUsd": 5,
+    "overspendToleranceUsd": 0,
+    "unknownCostSerializedAsZero": false
+  },
+  "hostile": { "requiredCasePassRatio": 1, "hiddenFailureTolerance": 0 },
+  "regression": {
+    "p8MustPassUnchanged": true,
+    "dataCenterVocabularyMayGateUnrelatedReport": false
+  }
+}

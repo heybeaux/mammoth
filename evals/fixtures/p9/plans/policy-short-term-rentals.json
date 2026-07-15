@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p9.v1",
+  "fixtureId": "plan-policy-short-term-rentals",
+  "domainPack": "public_policy",
+  "question": "What evidence would allow British Columbia to assess whether its short-term-rental rules improve long-term housing availability without disproportionate harms, and which implementation changes are justified?",
+  "scope": {
+    "include": [
+      "legislation and amendments",
+      "effective dates",
+      "implementation and enforcement",
+      "housing indicators",
+      "tourism and host effects",
+      "municipal and stakeholder disagreement"
+    ],
+    "exclude": [
+      "legal advice",
+      "causal claims from before-after correlation alone"
+    ]
+  },
+  "subquestions": [
+    "What rules apply where and when?",
+    "How is compliance implemented and measured?",
+    "What housing outcomes changed relative to credible comparisons?",
+    "Who bears benefits and costs?",
+    "Which evidence would falsify a material housing effect?"
+  ],
+  "requiredSourceClasses": [
+    "legislation",
+    "government_implementation",
+    "official_statistics",
+    "independent_evaluation",
+    "municipal",
+    "affected_stakeholder"
+  ],
+  "requiredContradictions": [
+    "provincial_vs_municipal_interpretation",
+    "housing_effect_vs_tourism_cost",
+    "enforcement_claim_vs_observed_compliance"
+  ],
+  "freshness": {
+    "lawAsOfRequired": true,
+    "implementationDays": 365,
+    "statisticsDays": 730
+  },
+  "stopCriteria": [
+    "law_and_dates_verified",
+    "implementation_residue_visible",
+    "stakeholder_disagreement_preserved",
+    "causal_limitations_stated"
+  ],
+  "reportOutline": [
+    "decision_summary",
+    "legal_timeline",
+    "implementation",
+    "outcome_evidence",
+    "distributional_effects",
+    "disagreement",
+    "options",
+    "uncertainty"
+  ],
+  "budgetAllocation": {
+    "currencyUsd": 5,
+    "search": 0.75,
+    "retrievalParsing": 0.75,
+    "models": 3.5
+  },
+  "criticalClaimPolicy": "independent_entailment_distinct_profile_family"
+}

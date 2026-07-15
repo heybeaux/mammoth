@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p9.v1",
+  "requiredPlanArtifacts": [
+    "research-plan-proposal.json",
+    "research-plan.json",
+    "plan-acceptance-receipt.json"
+  ],
+  "requiredRunArtifacts": [
+    "retrieval-attempts.jsonl",
+    "budget-ledger.json",
+    "parser-receipts.jsonl",
+    "entailment-verdicts.jsonl",
+    "plan-coverage-assessment.json",
+    "report-manifest.json",
+    "report.md",
+    "execution-receipt.json"
+  ],
+  "requiredTypedResidue": [
+    "retrieval_failures",
+    "parser_failures",
+    "rejected_claims",
+    "unknown_costs",
+    "redactions",
+    "coverage_gaps"
+  ],
+  "requiredImplementationGates": [
+    "T1_budget_metadata",
+    "T2_acquisition_parsers",
+    "T3_entailment",
+    "T4_planning",
+    "T5_generic_execution",
+    "T6_live_release"
+  ],
+  "baselineStatus": "frozen_implementation_blocked"
+}

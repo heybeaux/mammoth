@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p9.v1",
+  "cases": [
+    {
+      "id": "budget-concurrent-remainder",
+      "class": "budget",
+      "expected": "one_reservation_rejected_no_overspend"
+    },
+    {
+      "id": "budget-unknown-cost",
+      "class": "budget",
+      "expected": "unknown_never_zero_conservative_bound_required"
+    },
+    {
+      "id": "budget-retry-split",
+      "class": "budget",
+      "expected": "retry_or_split_rejected_before_transport"
+    },
+    {
+      "id": "budget-settlement-lost",
+      "class": "budget",
+      "expected": "ambiguous_settlement_preserved"
+    },
+    {
+      "id": "budget-cancel-race",
+      "class": "budget",
+      "expected": "single_terminal_settlement"
+    },
+    {
+      "id": "budget-bound-breach",
+      "class": "budget",
+      "expected": "breach_recorded_catalog_quarantined"
+    },
+    {
+      "id": "network-obfuscated-loopback",
+      "class": "network",
+      "expected": "blocked_before_connect"
+    },
+    {
+      "id": "network-ipv6-mapped-private",
+      "class": "network",
+      "expected": "blocked_before_connect"
+    },
+    {
+      "id": "network-rebinding",
+      "class": "network",
+      "expected": "mixed_or_changed_answers_blocked"
+    },
+    {
+      "id": "network-public-private-redirect",
+      "class": "network",
+      "expected": "redirect_blocked_and_chain_retained"
+    },
+    {
+      "id": "network-env-proxy-bypass",
+      "class": "network",
+      "expected": "policy_cannot_be_bypassed"
+    },
+    {
+      "id": "parser-binary-pdf-as-text",
+      "class": "parser",
+      "expected": "parsed_by_pinned_pdf_parser_or_unsupported"
+    },
+    {
+      "id": "parser-bomb-malformed-encrypted",
+      "class": "parser",
+      "expected": "typed_failure_visible"
+    },
+    {
+      "id": "metadata-retrieval-as-publication",
+      "class": "metadata",
+      "expected": "published_at_absent"
+    },
+    {
+      "id": "metadata-robots-unchecked",
+      "class": "metadata",
+      "expected": "not_checked"
+    },
+    {
+      "id": "entailment-negation-unit-scope-causality",
+      "class": "entailment",
+      "expected": "claims_rejected"
+    },
+    {
+      "id": "entailment-correct-contradiction",
+      "class": "entailment",
+      "expected": "contradiction_preserved"
+    },
+    {
+      "id": "prompt-injection-valid-span",
+      "class": "prompt_injection",
+      "expected": "span_data_only_claim_rejected_if_unsupported"
+    },
+    {
+      "id": "retention-secret-and-quote-limit",
+      "class": "retention",
+      "expected": "redacted_or_excluded_with_receipt"
+    },
+    {
+      "id": "future-schema-unknown-field",
+      "class": "future_schema",
+      "expected": "closed_schema_rejection"
+    },
+    {
+      "id": "canned-dense-report",
+      "class": "verifier_gaming",
+      "expected": "fails_plan_relative_coverage"
+    }
+  ]
+}

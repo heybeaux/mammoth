@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mammoth.local/schemas/p9-acceptance-receipt.v1.json",
+  "title": "P9 acceptance receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contractFamily",
+    "planDigest",
+    "verifierManifestDigest",
+    "gateResults",
+    "highestProvedPredicate",
+    "issuedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "contractFamily": { "const": "p9.v1" },
+    "planDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "verifierManifestDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "gateResults": {
+      "type": "array",
+      "minItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["gate", "status", "evidenceDigests"],
+        "properties": {
+          "gate": {
+            "enum": [
+              "T1_budget_metadata",
+              "T2_acquisition_parsers",
+              "T3_entailment",
+              "T4_planning",
+              "T5_generic_execution",
+              "T6_live_release"
+            ]
+          },
+          "status": { "enum": ["pass", "fail", "blocked", "not_run"] },
+          "evidenceDigests": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+          }
+        }
+      }
+    },
+    "highestProvedPredicate": { "type": "string" },
+    "issuedAt": { "type": "string", "format": "date-time" }
+  }
+}

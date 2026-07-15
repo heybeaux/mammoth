@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractFamily": "p9.v1",
+  "deterministicGates": [
+    "closed_schemas",
+    "accepted_plan_digest_identity",
+    "budget_preflight_and_no_overspend",
+    "truthful_metadata",
+    "hosted_safe_network",
+    "bounded_parser",
+    "independent_entailment",
+    "plan_relative_coverage",
+    "failure_residue",
+    "manifest_sentence_equivalence",
+    "p8_regression"
+  ],
+  "reviewDimensions": [
+    {
+      "id": "plan_fidelity",
+      "question": "Does execution answer the accepted plan rather than a canned domain template?",
+      "blockingBelow": 4
+    },
+    {
+      "id": "epistemic_warrant",
+      "question": "Are factual and causal statements no stronger than admitted evidence?",
+      "blockingBelow": 5
+    },
+    {
+      "id": "adversarial_honesty",
+      "question": "Are disagreement, failures, unknowns, and limitations visible?",
+      "blockingBelow": 5
+    },
+    {
+      "id": "decision_value",
+      "question": "Are recommendations tied to evidence and falsifiable next tests?",
+      "blockingBelow": 4
+    },
+    {
+      "id": "readability",
+      "question": "Can a technical reader trace the answer without reading machine artifacts?",
+      "blockingBelow": 4
+    }
+  ],
+  "scoreScale": { "minimum": 1, "maximum": 5 },
+  "automaticFailure": [
+    "fabricated_citation",
+    "unsupported_critical_claim",
+    "hidden_overspend",
+    "unobserved_metadata_asserted",
+    "canned_report_passes",
+    "hostile_instruction_changes_authority"
+  ]
+}
