@@ -384,6 +384,14 @@ export function verifyP9LiveBundle(
       );
     }
   }
+  if (
+    executionReceipt.coverageVerdict !== 'covered' ||
+    exact.verifiedCitationCount === 0
+  ) {
+    throw new Error(
+      'P9 live bundle is not releaseable: sufficient coverage and at least one verified citation are required',
+    );
+  }
   return {
     manifest: exact.manifest,
     verifiedCitationCount: exact.verifiedCitationCount,
@@ -618,7 +626,8 @@ async function runP9LiveApplicationExclusive(
     };
   };
 
-  const candidatesById = new Map<string, P9LiveCandidate>();
+  const candidatesByUrl = new Map<string, P9LiveCandidate>();
+  const candidatesPerQuery: P9LiveCandidate[][] = [];
   const authorizedRetrievalOrigins = new Set(
     authorityReceipt.authorizedRetrievalOrigins.map(
       (value) => new URL(value).origin,
@@ -656,16 +665,30 @@ async function runP9LiveApplicationExclusive(
         ? result.error
         : new Error(String(result.error));
     }
-    for (const candidate of result.value) {
-      if (!authorizedRetrievalOrigins.has(new URL(candidate.url).origin)) {
-        continue;
-      }
-      if (!candidatesById.has(candidate.candidateId)) {
-        candidatesById.set(candidate.candidateId, candidate);
-      }
-      if (candidatesById.size >= candidateLimit) break;
+    candidatesPerQuery.push(
+      result.value.filter((candidate) =>
+        authorizedRetrievalOrigins.has(new URL(candidate.url).origin),
+      ),
+    );
+  }
+  // Preserve plan diversity: take one result from every governed query before
+  // backfilling additional ranks. A global first-results cap lets the repository
+  // queries crowd out Apple, experiment, and security evidence.
+  const maximumQueryDepth = Math.max(
+    0,
+    ...candidatesPerQuery.map((candidates) => candidates.length),
+  );
+  for (
+    let rank = 0;
+    rank < maximumQueryDepth && candidatesByUrl.size < candidateLimit;
+    rank += 1
+  ) {
+    for (const candidates of candidatesPerQuery) {
+      const candidate = candidates[rank];
+      if (!candidate || candidatesByUrl.has(candidate.url)) continue;
+      candidatesByUrl.set(candidate.url, candidate);
+      if (candidatesByUrl.size >= candidateLimit) break;
     }
-    if (candidatesById.size >= candidateLimit) break;
   }
 
   const retrieve = input.retrieve ?? retrieveSource;
@@ -673,7 +696,7 @@ async function runP9LiveApplicationExclusive(
   const attempts: RetrievalAttempt[] = [];
   const parserReceipts: ParserReceipt[] = [];
   const snapshots: P9ObservedSourceSnapshot[] = [];
-  for (const candidate of candidatesById.values()) {
+  for (const candidate of candidatesByUrl.values()) {
     const retrievalResult = await executor.execute<RetrievedSource>({
       id: `retrieval:${candidate.candidateId}`,
       catalogEntryId: 'public-retrieval',
