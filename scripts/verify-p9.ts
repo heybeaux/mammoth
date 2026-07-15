@@ -2111,6 +2111,187 @@ async function verifyT5GenericExecution(): Promise<void> {
     forgedBudgetRejected,
     'T5 exact-bundle verifier rejects a fully resealed budget ledger attributed to another execution',
   );
+
+  const breachedBudget = { ...run.artifacts } as Record<string, string>;
+  const originalBudgetLedger = JSON.parse(
+    breachedBudget['budget-ledger.json'] ?? '{}',
+  ) as { snapshot?: unknown };
+  const originalBudgetSnapshot = P9BudgetAuthority.restore(
+    originalBudgetLedger.snapshot,
+  ).snapshot();
+  const originalReservation = originalBudgetSnapshot.reservations[0];
+  invariant(
+    originalReservation !== undefined,
+    'T5 breach attack fixture contains a priced reservation',
+  );
+  const breachedAuthority = new P9BudgetAuthority(
+    {
+      accountId: 'p9-t5-breach-attack',
+      programId: run.receipt.executionId,
+      catalog: originalBudgetSnapshot.catalog,
+      limit: originalBudgetSnapshot.limit,
+    },
+    () => now,
+  );
+  const breachedReservation = breachedAuthority.reserve({
+    reservationId: 'reservation:forged-breach',
+    workItemId: 'work:forged-breach',
+    effectId: 'effect:forged-breach',
+    idempotencyKey: 'idem:forged-breach',
+    catalogEntryId: originalReservation.bound.catalogEntryId,
+    ceiling: originalReservation.bound.ceiling,
+    actorId: 'p9-t5-verifier',
+  });
+  breachedAuthority.markTransportStarted(
+    breachedReservation.id,
+    'p9-t5-verifier',
+  );
+  try {
+    breachedAuthority.settle(breachedReservation.id, {
+      costState: 'known',
+      actual: {
+        currencyUsd: run.receipt.budget.authorizedUsd + 1,
+        requests: 1,
+        inputTokens: 0,
+        outputTokens: 0,
+        bytes: 0,
+        durationMs: 1,
+      },
+      actorId: 'p9-t5-verifier',
+    });
+  } catch (error) {
+    invariant(
+      error instanceof GovernanceError &&
+        error.code === 'provider_bound_breached',
+      'T5 breach attack creates an authoritative breached reservation',
+    );
+  }
+  const forgedUnderstatedSummary = {
+    authorizedUsd: run.receipt.budget.authorizedUsd,
+    reservedOpenUsd: 0,
+    spentKnownUsd: 0,
+    spentConservativeUnknownUsd: 0,
+    unknownCostReservationIds: [],
+    unknownCostSerializedAsZero: false,
+    withinAuthorization: true,
+  };
+  breachedBudget['budget-ledger.json'] = JSON.stringify(
+    {
+      snapshot: breachedAuthority.snapshot(),
+      summary: forgedUnderstatedSummary,
+    },
+    null,
+    2,
+  );
+  const breachedExecutionReceipt = JSON.parse(
+    breachedBudget['execution-receipt.json'] ?? '{}',
+  ) as Record<string, unknown>;
+  breachedExecutionReceipt.budget = forgedUnderstatedSummary;
+  breachedBudget['execution-receipt.json'] = JSON.stringify(
+    breachedExecutionReceipt,
+    null,
+    2,
+  );
+  resealP9Artifacts(breachedBudget);
+  let breachedBudgetRejected = false;
+  try {
+    verifyP9ExactBundle(breachedBudget);
+  } catch (error) {
+    breachedBudgetRejected = error instanceof P9GenericResearchError;
+  }
+  invariant(
+    breachedBudgetRejected,
+    'T5 exact-bundle verifier rejects a fully resealed breached budget hidden as zero spend',
+  );
+
+  const unrecognizedAdmissionPolicy = { ...run.artifacts } as Record<
+    string,
+    string
+  >;
+  const forgedEntailmentRecords = (
+    unrecognizedAdmissionPolicy['entailment-verdicts.jsonl'] ?? ''
+  )
+    .split('\n')
+    .filter(Boolean)
+    .map(
+      (line) =>
+        JSON.parse(line) as {
+          verdict: Record<string, unknown>;
+          admission: Record<string, unknown>;
+        },
+    );
+  const rejectedAdmissionRecord = forgedEntailmentRecords.find(
+    (record) => record.admission.decision === 'rejected',
+  );
+  invariant(
+    rejectedAdmissionRecord !== undefined,
+    'T5 policy attack fixture contains a rejected admission outside the citation set',
+  );
+  rejectedAdmissionRecord.admission.policyId =
+    'p9-independent-entailment/forged';
+  const forgedAdmissionIdentity = { ...rejectedAdmissionRecord.admission };
+  delete forgedAdmissionIdentity.admissionDigest;
+  rejectedAdmissionRecord.admission.admissionDigest = canonicalDigest(
+    forgedAdmissionIdentity,
+  );
+  unrecognizedAdmissionPolicy['entailment-verdicts.jsonl'] =
+    `${forgedEntailmentRecords
+      .map((record) => JSON.stringify(record))
+      .join('\n')}\n`;
+  resealP9Artifacts(unrecognizedAdmissionPolicy);
+  let unrecognizedAdmissionPolicyRejected = false;
+  try {
+    verifyP9ExactBundle(unrecognizedAdmissionPolicy);
+  } catch (error) {
+    unrecognizedAdmissionPolicyRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    unrecognizedAdmissionPolicyRejected,
+    'T5 exact-bundle verifier rejects a fully resealed unrecognized admission policy identity',
+  );
+
+  const forgedReportSection = { ...run.artifacts } as Record<string, string>;
+  const forgedClaimEvidence = (
+    forgedReportSection['claim-evidence.jsonl'] ?? ''
+  )
+    .split('\n')
+    .filter(Boolean)
+    .map(
+      (line) =>
+        JSON.parse(line) as {
+          proposalId: string;
+          evidence: Record<string, unknown>;
+        },
+    );
+  const misplacedEvidence = forgedClaimEvidence[0];
+  invariant(
+    misplacedEvidence !== undefined,
+    'T5 section attack fixture contains serialized claim evidence',
+  );
+  misplacedEvidence.evidence.reportSectionId = 'forged_unaccepted_section';
+  const forgedEvidenceIdentity = { ...misplacedEvidence.evidence };
+  delete forgedEvidenceIdentity.evidenceDigest;
+  misplacedEvidence.evidence.evidenceDigest = canonicalDigest(
+    forgedEvidenceIdentity,
+  );
+  forgedReportSection['claim-evidence.jsonl'] = `${forgedClaimEvidence
+    .map((record) => JSON.stringify(record))
+    .join('\n')}\n`;
+  resealP9Artifacts(forgedReportSection);
+  let forgedReportSectionRejected = false;
+  try {
+    verifyP9ExactBundle(forgedReportSection);
+  } catch (error) {
+    forgedReportSectionRejected =
+      error instanceof P9GenericResearchError &&
+      error.code === 'exact_bundle_chain_invalid';
+  }
+  invariant(
+    forgedReportSectionRejected,
+    'T5 exact-bundle verifier rejects fully resealed claim evidence targeting an unaccepted report section',
+  );
   const reportFixture = await json('non-data-center-report.json');
   const requiredSections = new Set(
     (reportFixture.requiredSections as readonly string[]).map(String),

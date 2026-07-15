@@ -1704,6 +1704,17 @@ export function compileP9ObservedResearchBundle(
     validatedBudgetSnapshot,
     plan.budget.currencyUsd,
   );
+  if (
+    validatedBudgetSnapshot.reservations.some(
+      (reservation) => reservation.state === 'breached',
+    ) ||
+    !budgetSummary.withinAuthorization
+  ) {
+    throw new P9GenericResearchError(
+      'observed_budget_breached',
+      'observed execution exceeded its accepted budget authority',
+    );
+  }
   const typedResidue = {
     retrieval_failures: attempts
       .filter((attempt) => attempt.status !== 'admitted')
@@ -2028,12 +2039,14 @@ export function verifyP9ExactBundle(
     budgetSnapshot.programId === receipt.executionId &&
       budgetSnapshot.limit.currencyUsd === plan.budget.currencyUsd &&
       budgetSnapshot.reservations.every(
-        (reservation) => reservation.state !== 'reserved',
+        (reservation) =>
+          reservation.state !== 'reserved' && reservation.state !== 'breached',
       ) &&
       canonicalDigest(serializedBudgetSummary) ===
         canonicalDigest(replayedBudgetSummary) &&
       canonicalDigest(receipt.budget) ===
-        canonicalDigest(replayedBudgetSummary),
+        canonicalDigest(replayedBudgetSummary) &&
+      replayedBudgetSummary.withinAuthorization,
     'budget ledger does not replay against the execution, accepted plan, terminal reservations, and receipt',
   );
   assert(
@@ -2087,7 +2100,6 @@ export function verifyP9ExactBundle(
       verdict: record.verdict,
       decidedAt: record.admission.decidedAt,
       admissionId: record.admission.admissionId,
-      policyId: record.admission.policyId,
     });
     assert(
       canonicalDigest(replayedAdmission) ===
@@ -2108,6 +2120,9 @@ export function verifyP9ExactBundle(
   const factualSentences = manifest.sections.flatMap((section) =>
     section.sentences.filter((sentence) => sentence.kind === 'factual'),
   );
+  const acceptedReportSectionIds = new Set(
+    plan.reportOutline.sections.map((section) => section.sectionId),
+  );
   for (const [proposalId, record] of claimEvidence) {
     const attempt = attempts.get(record.evidence.attemptId);
     const source = evidenceSources.get(record.evidence.attemptId);
@@ -2122,6 +2137,10 @@ export function verifyP9ExactBundle(
     assert(
       Boolean(source),
       `claim evidence ${proposalId} lacks its source metadata`,
+    );
+    assert(
+      acceptedReportSectionIds.has(record.evidence.reportSectionId),
+      `claim evidence ${proposalId} targets a section outside the accepted plan`,
     );
     if (!attempt || !source) continue;
     assert(
@@ -2170,17 +2189,26 @@ export function verifyP9ExactBundle(
   );
 
   const factualByClaim = new Map<string, P9ReportSentence[]>();
-  for (const sentence of factualSentences) {
-    assert(
-      sentence.claimIds.length === 1,
-      `factual sentence ${sentence.sentenceId} must bind exactly one proposal`,
-    );
-    const claimId = sentence.claimIds[0];
-    if (!claimId) continue;
-    factualByClaim.set(claimId, [
-      ...(factualByClaim.get(claimId) ?? []),
-      sentence,
-    ]);
+  for (const section of manifest.sections) {
+    for (const sentence of section.sentences.filter(
+      (entry) => entry.kind === 'factual',
+    )) {
+      assert(
+        sentence.claimIds.length === 1,
+        `factual sentence ${sentence.sentenceId} must bind exactly one proposal`,
+      );
+      const claimId = sentence.claimIds[0];
+      if (!claimId) continue;
+      assert(
+        claimEvidence.get(claimId)?.evidence.reportSectionId ===
+          section.sectionId,
+        `factual sentence ${sentence.sentenceId} is rendered outside its accepted evidence section`,
+      );
+      factualByClaim.set(claimId, [
+        ...(factualByClaim.get(claimId) ?? []),
+        sentence,
+      ]);
+    }
   }
   for (const section of manifest.sections) {
     const expectedLead = `Interpretive synthesis for ${section.title}, grounded only in admitted claims below.`;
@@ -2422,7 +2450,7 @@ function summarizeBudget(
   let spentConservativeUnknownUsd = 0;
   const unknownCostReservationIds: string[] = [];
   for (const reservation of snapshot.reservations) {
-    if (reservation.state === 'settled') {
+    if (reservation.state === 'settled' || reservation.state === 'breached') {
       spentKnownUsd = round12(spentKnownUsd + reservation.charged.currencyUsd);
     } else if (reservation.state === 'ambiguous') {
       spentConservativeUnknownUsd = round12(
