@@ -741,7 +741,7 @@ describe('P9 live application', () => {
       'https://raw.githubusercontent.com/JustVugg/colibri/main/c/backend_metal.mm',
       'https://github.com/JustVugg/colibri',
       'https://huggingface.co/zai-org/GLM-5',
-      'https://www.apple.com/macbook-pro/specs/',
+      'https://www.apple.com/newsroom/2024/10/apple-introduces-m4-pro-and-m4-max/',
       'https://arxiv.org/html/2509.24086v1',
       'https://www.cisa.gov/news-events/ics-advisories/icsa-24-205-03',
     ]);

@@ -14,7 +14,7 @@ import type {
 import type { P9ObservedSourceSnapshot } from './p9-generic-research.js';
 
 const MAX_RESPONSE_BYTES = 2_000_000;
-const MAX_SNAPSHOT_EXCERPT = 6_000;
+const MAX_SNAPSHOT_EXCERPT = 8_000;
 const REQUEST_TIMEOUT_MS = 90_000;
 
 export interface OpenAICompatibleP9LiveModelAdapterInput {

@@ -130,8 +130,8 @@ const P9_LIVE_MANDATORY_SOURCE_CANDIDATES: readonly P9LiveCandidate[] = [
   },
   {
     candidateId: 'pinned:apple-m4-max-specification',
-    url: 'https://www.apple.com/macbook-pro/specs/',
-    title: 'Apple MacBook Pro unified-memory specification',
+    url: 'https://www.apple.com/newsroom/2024/10/apple-introduces-m4-pro-and-m4-max/',
+    title: 'Apple M4 Max unified-memory specification',
     sourceClass: 'hardware_vendor_docs',
     sourceFamilyId: 'apple.com',
   },
