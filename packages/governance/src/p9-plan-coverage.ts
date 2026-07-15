@@ -132,9 +132,13 @@ export interface PlanCoverageInput {
 }
 
 function sharedMaterialTermCount(statement: string, question: string): number {
-  const statementTerms = new Set(materialQuestionTerms(statement));
+  const variants = (term: string): readonly string[] =>
+    term.endsWith('s') && term.length > 4 ? [term, term.slice(0, -1)] : [term];
+  const statementTerms = new Set(
+    materialQuestionTerms(statement).flatMap(variants),
+  );
   return materialQuestionTerms(question).filter((term) =>
-    statementTerms.has(term),
+    variants(term).some((variant) => statementTerms.has(variant)),
   ).length;
 }
 

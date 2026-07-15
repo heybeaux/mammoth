@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assessPlanCoverage,
   GovernanceError,
+  isClaimRelevantToSubquestion,
   P9_DOMAIN_POLICY_PACKS,
   type P9ClaimEvidenceBinding,
   type PlanCoverageThresholds,
@@ -286,6 +287,16 @@ function assess(
 }
 
 describe('P9 plan-relative coverage authority', () => {
+  it('matches simple plural variants without weakening the two-term relevance floor', () => {
+    expect(
+      isClaimRelevantToSubquestion(
+        buildBinding('Experiments separate measurement noise.'),
+        'sq-safety',
+        'Which experiment distinguishes improvement from measurement noise?',
+      ),
+    ).toBe(true);
+  });
+
   it('accepts only digest-bound evidence labels linked to the exact attempt', () => {
     expect(assess().verdict).toBe('covered');
 

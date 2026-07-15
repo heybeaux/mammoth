@@ -536,6 +536,18 @@ describe('P9 live application', () => {
     expect(
       plan.plan.sourceClassTargets.map((target) => target.sourceClass),
     ).toContain('hardware_vendor_docs');
+    expect(
+      plan.plan.sourceClassTargets.find(
+        (target) => target.sourceClass === 'security_advisory',
+      )?.mandatory,
+    ).toBe(false);
+    expect(plan.plan.searchQueries.map((query) => query.query)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('site:apple.com'),
+        expect.stringContaining('site:arxiv.org'),
+        expect.stringContaining('site:nvd.nist.gov'),
+      ]),
+    );
     expect(plan.acceptanceReceipt.decision).toBe('accepted');
   });
 

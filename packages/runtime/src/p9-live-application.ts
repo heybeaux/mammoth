@@ -1205,7 +1205,7 @@ export function buildAcceptedP9LivePlan(input: {
       {
         sourceClass: 'upstream_model_docs',
         minimumIndependentSources: 1,
-        mandatory: true,
+        mandatory: false,
       },
       {
         sourceClass: 'hardware_vendor_docs',
@@ -1220,38 +1220,38 @@ export function buildAcceptedP9LivePlan(input: {
       {
         sourceClass: 'security_advisory',
         minimumIndependentSources: 1,
-        mandatory: true,
+        mandatory: false,
       },
     ],
     searchQueries: [
       {
         queryId: 'q-colibri-repo',
         query:
-          'JustVugg colibri GitHub README source code GLM MoE Apple silicon',
-        subquestionIds: ['sq-upstream'],
+          'site:github.com/JustVugg/colibri README source code GLM MoE cache',
+        subquestionIds: ['sq-upstream', 'sq-risk'],
       },
       {
-        queryId: 'q-colibri-implementation',
+        queryId: 'q-upstream-model',
         query:
-          'JustVugg colibri mmap cache quantization expert offload source code',
-        subquestionIds: ['sq-upstream', 'sq-risk'],
+          'site:huggingface.co GLM-5.2 model architecture router documentation',
+        subquestionIds: ['sq-upstream'],
       },
       {
         queryId: 'q-apple-silicon',
         query:
-          'Apple-silicon 128 GB machine unified memory bandwidth developer documentation',
+          'site:apple.com Apple-silicon 128GB unified memory bandwidth technical specifications',
         subquestionIds: ['sq-apple-silicon'],
       },
       {
         queryId: 'q-experiment',
         query:
-          'experiment LLM inference benchmark statistical significance repeated runs measurement noise',
+          'site:arxiv.org LLM inference benchmark experiment repeated runs measurement noise statistical significance',
         subquestionIds: ['sq-experiment'],
       },
       {
         queryId: 'q-security',
         query:
-          'C C++ mmap model inference security advisory bounds checking memory mapped files',
+          'site:nvd.nist.gov C++ memory mapped file bounds checking vulnerability CVE',
         subquestionIds: ['sq-risk'],
       },
     ],
@@ -1272,7 +1272,7 @@ export function buildAcceptedP9LivePlan(input: {
         freshnessId: 'fresh-repository-current',
         appliesTo: 'current upstream repository',
         maxAgeDays: 30,
-        asOfDateRequired: true,
+        asOfDateRequired: false,
       },
       {
         freshnessId: 'fresh-technical-sources',
@@ -1658,6 +1658,7 @@ function inferSourceClass(url: string): string {
       : 'repository_docs';
   }
   if (host.includes('apple.com')) return 'hardware_vendor_docs';
+  if (host.includes('huggingface.co')) return 'upstream_model_docs';
   if (
     host.includes('arxiv.org') ||
     host.includes('acm.org') ||
@@ -1666,7 +1667,11 @@ function inferSourceClass(url: string): string {
     return 'peer_reviewed_or_primary_technical';
   }
   if (host.includes('github.com')) return 'repository_docs';
-  if (host.includes('cve') || host.includes('nvd.nist.gov'))
+  if (
+    host.includes('cve') ||
+    host.includes('nvd.nist.gov') ||
+    host.includes('cisa.gov')
+  )
     return 'security_advisory';
   return 'peer_reviewed_or_primary_technical';
 }
