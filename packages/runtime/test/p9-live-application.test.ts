@@ -1,6 +1,7 @@
 import { canonicalDigest, P9LiveAuthorityReceiptSchema } from '@mammoth/domain';
 import {
   GovernanceError,
+  isClaimRelevantToSubquestion,
   MemoryP9DurableJournalStore,
   P9DurableBudgetAuthority,
   type P9DurableJournalStore,
@@ -14,6 +15,8 @@ import {
   BraveP9LiveSearchAdapter,
   boundedP9SentenceContext,
   buildAcceptedP9LivePlan,
+  canonicalP9CandidateSelectionUrl,
+  assertP9LiveBundleReleaseable,
   resealP9LiveArtifacts,
   runP9LiveApplication,
   verifyP9LiveBundle,
@@ -26,8 +29,9 @@ import {
 const now = () => new Date('2026-07-15T18:00:00.000Z');
 
 const SOURCE_BODY =
-  'Colibri caches mmap-backed experts on Apple silicon. The router reuses cached experts between decode steps.';
-const QUOTE = 'The router reuses cached experts between decode steps.';
+  'Colibri caches mmap-backed experts on Apple silicon. Upstream Colibri documentation states the router reuses cached experts between decode steps.';
+const QUOTE =
+  'Upstream Colibri documentation states the router reuses cached experts between decode steps.';
 const CANDIDATE_ID = 'cand-colibri-readme';
 
 function makeCatalog() {
@@ -56,7 +60,13 @@ function makeCatalog() {
     entries: [
       entry('brave-search', 'brave/web-search', 'search', null, 0.005),
       entry('public-retrieval', 'public-web', 'retrieval', null, 0.0005),
-      entry('bounded-parser', 'local-parser', 'parser', 'text/plain', 0.0001),
+      entry(
+        'bounded-parser',
+        'local-parser',
+        'parser',
+        'mammoth-deterministic-text',
+        0.0001,
+      ),
       entry('model-proposer-live', 'openrouter', 'model', null, 0.001),
       entry('model-evaluator-live', 'openrouter', 'model', null, 0.001),
     ],
@@ -158,7 +168,14 @@ function makeProfileCatalog() {
         'local-parser',
         'parser',
         'bounded-parser',
-        requestCeiling(8, 16_000_000, 240_000, 0, 0, 'text/plain'),
+        requestCeiling(
+          8,
+          16_000_000,
+          240_000,
+          0,
+          0,
+          'mammoth-deterministic-text',
+        ),
       ),
       profile(
         'fixture-proposer-profile',
@@ -246,7 +263,10 @@ function makeReceipt(
         profileCatalog.profiles.map((profile) => profile.destinationOrigin),
       ),
     ],
-    authorizedRetrievalOrigins: ['https://github.com/'],
+    authorizedRetrievalOrigins: [
+      'https://github.com/',
+      'https://api.github.com/',
+    ],
     authorizedBillingAccountIds: [
       ...new Set(
         profileCatalog.profiles.map((profile) => profile.billingAccountId),
@@ -305,26 +325,35 @@ function makeSearch(counter: { calls: number }): P9LiveSearchAdapter {
   };
 }
 
-const fakeRetrieve: typeof retrieveSource = (request) =>
-  Promise.resolve({
+const fakeRetrieve: typeof retrieveSource = (request) => {
+  const currentCommit = request.url.startsWith('https://api.github.com/');
+  const body = currentCommit
+    ? JSON.stringify({
+        sha: '0123456789abcdef0123456789abcdef01234567',
+        commit: { committer: { date: '2026-07-10T12:00:00.000Z' } },
+      })
+    : SOURCE_BODY;
+  return Promise.resolve({
     requestedUrl: request.url,
     finalUrl: request.url,
     redirectChain: [],
     retrievedAt: now().toISOString(),
     status: 200,
-    headers: { 'content-type': 'text/plain' },
-    mediaType: 'text/plain',
-    bytes: new TextEncoder().encode(SOURCE_BODY),
+    headers: {
+      'content-type': currentCommit ? 'application/json' : 'text/plain',
+    },
+    mediaType: currentCommit ? 'application/json' : 'text/plain',
+    bytes: new TextEncoder().encode(body),
     networkReceipts: [],
   });
+};
 
 const seeds: readonly P9LiveClaimSeed[] = [
   {
     claimId: 'claim-router-reuse',
     candidateId: CANDIDATE_ID,
     quote: QUOTE,
-    statement:
-      'Upstream colibri documentation facts state the router reuses cached experts between decode steps.',
+    statement: QUOTE,
     subquestionIds: ['sq-upstream'],
     sectionId: 'upstream_colibri_facts',
     claimGroupId: 'group-upstream',
@@ -523,6 +552,98 @@ describe('P9 live application', () => {
     );
   });
 
+  it('canonicalizes candidate variants before diversity counting', () => {
+    expect(
+      canonicalP9CandidateSelectionUrl(
+        'https://github.com/JustVugg/colibri/?utm_source=test#readme',
+      ),
+    ).toBe(
+      canonicalP9CandidateSelectionUrl('https://github.com/JustVugg/colibri'),
+    );
+    expect(
+      canonicalP9CandidateSelectionUrl(
+        'https://example.test/resource?id=first&utm_source=test',
+      ),
+    ).toBe('https://example.test/resource?id=first');
+    expect(
+      canonicalP9CandidateSelectionUrl(
+        'https://example.test/resource?id=first',
+      ),
+    ).not.toBe(
+      canonicalP9CandidateSelectionUrl(
+        'https://example.test/resource?id=second',
+      ),
+    );
+  });
+
+  it('only classifies allowlisted official Hugging Face model cards as upstream docs', async () => {
+    const adapter = new BraveP9LiveSearchAdapter({
+      apiKeyEnvironmentVariable: 'TEST_BRAVE_KEY',
+      environment: { TEST_BRAVE_KEY: 'secret-value' },
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              web: {
+                results: [
+                  {
+                    title: 'Official model card',
+                    url: 'https://huggingface.co/zai-org/GLM-5',
+                  },
+                  {
+                    title: 'Community copy',
+                    url: 'https://huggingface.co/community/GLM-5',
+                  },
+                ],
+              },
+            }),
+            { status: 200 },
+          ),
+        )) as typeof fetch,
+    });
+
+    const result = await adapter.search('official model card');
+
+    expect(result.candidates.map((candidate) => candidate.sourceClass)).toEqual(
+      ['upstream_model_docs', 'unclassified_public_source'],
+    );
+  });
+
+  it('classifies only the CISA domain and its subdomains as security advisories', async () => {
+    const adapter = new BraveP9LiveSearchAdapter({
+      apiKeyEnvironmentVariable: 'TEST_BRAVE_KEY',
+      environment: { TEST_BRAVE_KEY: 'secret-value' },
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              web: {
+                results: [
+                  { title: 'CISA', url: 'https://www.cisa.gov/advisory' },
+                  { title: 'Impostor', url: 'https://fakecisa.gov/advisory' },
+                  {
+                    title: 'Nested impostor',
+                    url: 'https://cisa.gov.example.com/advisory',
+                  },
+                ],
+              },
+            }),
+            { status: 200 },
+          ),
+        )) as typeof fetch,
+    });
+
+    const result = await adapter.search('security advisory');
+
+    expect(result.candidates.map((candidate) => candidate.sourceClass)).toEqual(
+      [
+        'security_advisory',
+        'peer_reviewed_or_primary_technical',
+        'peer_reviewed_or_primary_technical',
+      ],
+    );
+  });
+
   it('freezes the exact Colibri question into an accepted technical due diligence plan', () => {
     const plan = buildAcceptedP9LivePlan({
       budgetUsd: 5,
@@ -536,6 +657,18 @@ describe('P9 live application', () => {
     expect(
       plan.plan.sourceClassTargets.map((target) => target.sourceClass),
     ).toContain('hardware_vendor_docs');
+    expect(
+      plan.plan.sourceClassTargets.find(
+        (target) => target.sourceClass === 'security_advisory',
+      )?.mandatory,
+    ).toBe(false);
+    expect(plan.plan.searchQueries.map((query) => query.query)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('site:apple.com'),
+        expect.stringContaining('site:arxiv.org'),
+        expect.stringContaining('site:nvd.nist.gov'),
+      ]),
+    );
     expect(plan.acceptanceReceipt.decision).toBe('accepted');
   });
 
@@ -575,20 +708,37 @@ describe('P9 live application', () => {
     };
 
     await runP9LiveApplication(
-      makeInput({ search, retrieve, maxCandidates: 2 }),
+      makeInput({ search, retrieve, maxCandidates: 3 }),
     );
 
     expect(searched).toHaveLength(5);
     expect(retrieved).toEqual([
-      'https://github.com/JustVugg/colibri/blob/main/source-1.md',
+      'https://api.github.com/repos/JustVugg/colibri/commits/main',
       'https://github.com/JustVugg/colibri/blob/main/source-2.md',
+      'https://github.com/JustVugg/colibri/blob/main/source-3.md',
     ]);
   });
 
   it('precedes every outbound effect with a durable journaled reservation and settles observed usage', async () => {
     const journal = new MemoryP9DurableJournalStore();
     const catalog = makeCatalog();
-    const run = await runP9LiveApplication(makeInput({ journal, catalog }));
+    const model = makeModel({ calls: 0 });
+    let proposedSnapshotIds: readonly string[] = [];
+    const run = await runP9LiveApplication(
+      makeInput({
+        journal,
+        catalog,
+        model: {
+          ...model,
+          proposeClaims: (input) => {
+            proposedSnapshotIds = input.snapshots.map(
+              (snapshot) => snapshot.candidateId,
+            );
+            return Promise.resolve({ value: seeds, usage: modelUsage });
+          },
+        },
+      }),
+    );
 
     expect(run.exactBundleVerified).toBe(true);
     expect(run.authorizationReceipt.actorId).toBe('beaux');
@@ -645,6 +795,18 @@ describe('P9 live application', () => {
     expect(proposerReceipt?.charged.inputTokens).toBe(modelUsage.inputTokens);
     expect(proposerReceipt?.charged.currencyUsd).toBeLessThan(0.0015);
     expect(run.manifest.citations.length).toBeGreaterThanOrEqual(1);
+    expect(run.proposals[0]?.statement).toBe(QUOTE);
+    const currentCommitAttempt = run.attempts.find(
+      (attempt) => attempt.candidateId === 'github-api:justvugg-colibri:main',
+    );
+    expect(currentCommitAttempt?.publishedAt).toBe('2026-07-10T12:00:00.000Z');
+    expect(currentCommitAttempt?.dateObservation?.exactLocator).toContain(
+      'sha:0123456789abcdef0123456789abcdef01234567',
+    );
+    expect(currentCommitAttempt?.dateVerdict?.verdict).toBe('accepted');
+    expect(proposedSnapshotIds).not.toContain(
+      'github-api:justvugg-colibri:main',
+    );
 
     const liveArtifacts = resealP9LiveArtifacts({
       ...run.artifacts,
@@ -663,12 +825,13 @@ describe('P9 live application', () => {
       'live-recovered-reservations.jsonl': `${run.recoveredReservations.map((value) => JSON.stringify(value)).join('\n')}${run.recoveredReservations.length ? '\n' : ''}`,
       'live-budget-journal.jsonl': `${journal.readLines().join('\n')}\n`,
     });
-    expect(() =>
-      verifyP9LiveBundle(liveArtifacts, {
-        expectedAuthorityDigest: run.authorizationReceipt.receiptDigest,
-        trustedIssuerId: run.authorizationReceipt.issuerId,
-      }),
-    ).toThrow(/not releaseable/u);
+    const insufficientVerification = verifyP9LiveBundle(liveArtifacts, {
+      expectedAuthorityDigest: run.authorizationReceipt.receiptDigest,
+      trustedIssuerId: run.authorizationReceipt.issuerId,
+    });
+    expect(() => {
+      assertP9LiveBundleReleaseable(insufficientVerification);
+    }).toThrow(/not releaseable/u);
 
     const forgedEffect = structuredClone(run.effectReceipts[0]);
     if (!forgedEffect) throw new Error('missing effect receipt to forge');
@@ -735,6 +898,50 @@ describe('P9 live application', () => {
         trustedIssuerId: run.authorizationReceipt.issuerId,
       }),
     ).toThrow(/does not match journaled reservation/u);
+  });
+
+  it('does not satisfy the bounded-change stop with a critical upstream claim alone', async () => {
+    const model = makeModel({ calls: 0 });
+    const run = await runP9LiveApplication(
+      makeInput({
+        model: {
+          ...model,
+          proposeClaims: () =>
+            Promise.resolve({
+              value: seeds.map((seed) => ({ ...seed, critical: true })),
+              usage: modelUsage,
+            }),
+        },
+      }),
+    );
+
+    const criticalBinding = run.bindings.find(
+      (binding) => binding.proposal.critical,
+    );
+    const plan = buildAcceptedP9LivePlan({
+      budgetUsd: 5,
+      now: now().toISOString(),
+      proposerProfile: model.proposerProfile,
+    }).plan;
+    const upstream = plan.subquestions.find(
+      (subquestion) => subquestion.subquestionId === 'sq-upstream',
+    );
+    if (!criticalBinding || !upstream) {
+      throw new Error('missing critical upstream fixture binding');
+    }
+    expect(
+      isClaimRelevantToSubquestion(
+        criticalBinding,
+        upstream.subquestionId,
+        upstream.question,
+      ),
+    ).toBe(true);
+
+    expect(
+      run.assessment.stopCriterionStatuses.find(
+        (criterion) => criterion.stopId === 'stop-bounded-change',
+      ),
+    ).toMatchObject({ status: 'not_met' });
   });
 
   it('treats environment-style flags as non-authority: a missing receipt blocks before any effect', async () => {
@@ -1043,6 +1250,27 @@ describe('P9 live application', () => {
         record.entry.reservationId === 'model:proposer',
     );
     expect(cancel).toBeDefined();
+  });
+
+  it('rejects a provider claim whose statement is not the exact quoted evidence', async () => {
+    const model = makeModel({ calls: 0 });
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          model: {
+            ...model,
+            proposeClaims: () =>
+              Promise.resolve({
+                value: seeds.map((seed) => ({
+                  ...seed,
+                  statement: `Paraphrase: ${seed.quote}`,
+                })),
+                usage: modelUsage,
+              }),
+          },
+        }),
+      ),
+    ).rejects.toThrow(/extractive claim normalization failed/u);
   });
 
   it('fails closed when the durable journal cannot accept the pre-transport record', async () => {
