@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import {
   P9_LIVE_EXHIBITION_QUESTION,
   P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST,
+  BraveP9LiveSearchAdapter,
   buildAcceptedP9LivePlan,
   resealP9LiveArtifacts,
   runP9LiveApplication,
@@ -423,6 +424,37 @@ function records(journal: MemoryP9DurableJournalStore): JournalRecord[] {
 }
 
 describe('P9 live application', () => {
+  it('spaces consecutive Brave fetches by the configured interval', async () => {
+    let monotonicMs = 10_000;
+    const sleeps: number[] = [];
+    const fetchTimes: number[] = [];
+    const adapter = new BraveP9LiveSearchAdapter({
+      apiKeyEnvironmentVariable: 'TEST_BRAVE_KEY',
+      environment: { TEST_BRAVE_KEY: 'secret-value' },
+      minimumIntervalMs: 1_100,
+      monotonicNow: () => monotonicMs,
+      sleep: (milliseconds) => {
+        sleeps.push(milliseconds);
+        monotonicMs += milliseconds;
+        return Promise.resolve();
+      },
+      fetchImpl: (() => {
+        fetchTimes.push(monotonicMs);
+        return Promise.resolve(
+          new Response(JSON.stringify({ web: { results: [] } }), {
+            status: 200,
+          }),
+        );
+      }) as typeof fetch,
+    });
+
+    await adapter.search('first query');
+    await adapter.search('second query');
+
+    expect(fetchTimes).toEqual([10_000, 11_100]);
+    expect(sleeps).toEqual([1_100]);
+  });
+
   it('freezes the exact Colibri question into an accepted technical due diligence plan', () => {
     const plan = buildAcceptedP9LivePlan({
       budgetUsd: 5,
