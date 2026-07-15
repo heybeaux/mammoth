@@ -83,4 +83,4 @@ validity interval. The operator must also pin the receipt digest with
 Credential environment variable names come from the immutable profiles; loose
 model/billing environment assertions are ignored. Even a valid artifact chain
 remains blocked until the next slice provides durable single-use consumption and
-mechanically budgeted effect ports.
+a protected issuer trust store plus mechanically budgeted effect ports.

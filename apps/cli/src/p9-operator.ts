@@ -183,8 +183,10 @@ export async function inspectP9LiveReadiness(
     }
   }
   // P9 live execution remains structurally unavailable until its effect ports
-  // durably consume the single-use authority and mechanically reserve every
-  // request through P9BudgetAuthority.
+  // resolve the issuer from a protected trust store, durably consume the
+  // single-use authority, and mechanically reserve every request through
+  // P9BudgetAuthority.
+  blockers.push('protected_authority_trust_store_unavailable');
   blockers.push('authority_consumption_store_unavailable');
   blockers.push('live_executor_unavailable');
   return {

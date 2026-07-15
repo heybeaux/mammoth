@@ -13,6 +13,7 @@ import {
   ResearchPlanSchema,
 } from '@mammoth/domain';
 import { GovernanceError } from './common.js';
+import { calculateP9EffectCostBound } from './p9-budget-authority.js';
 
 export interface P9LiveAuthorityLineage {
   readonly receipt: P9LiveAuthorityReceipt;
@@ -183,16 +184,49 @@ export function assertP9LiveAuthorityLineage(input: {
   if (receipt.budgetLimit.currencyUsd !== plan.budget.currencyUsd) {
     fail('live_authority_exceeds_accepted_plan_budget');
   }
-  const aggregateCeiling = profiles.reduce(
-    (total, profile) => ({
-      requests: total.requests + profile.requestCeiling.requests,
-      inputTokens: total.inputTokens + profile.requestCeiling.inputTokens,
-      outputTokens: total.outputTokens + profile.requestCeiling.outputTokens,
-      bytes: total.bytes + profile.requestCeiling.bytes,
-      durationMs: total.durationMs + profile.requestCeiling.durationMs,
-    }),
-    { requests: 0, inputTokens: 0, outputTokens: 0, bytes: 0, durationMs: 0 },
+  const zeroBound = {
+    currencyUsd: 0,
+    requests: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    bytes: 0,
+    durationMs: 0,
+  };
+  const aggregateCeiling = profiles.reduce((total, profile) => {
+    const entryId = profile.catalogEntryIds[0];
+    const entry = entryId ? priceEntryById.get(entryId) : undefined;
+    if (!entry) fail('provider_profile_price_entry_missing');
+    const bound = calculateP9EffectCostBound(entry, profile.requestCeiling);
+    return addVector(total, bound);
+  }, zeroBound);
+  const categoryCosts = profiles.reduce(
+    (costs, profile) => {
+      const entryId = profile.catalogEntryIds[0];
+      const entry = entryId ? priceEntryById.get(entryId) : undefined;
+      if (!entry) fail('provider_profile_price_entry_missing');
+      const cost = calculateP9EffectCostBound(
+        entry,
+        profile.requestCeiling,
+      ).currencyUsd;
+      if (profile.effectKind === 'search') costs.search += cost;
+      else if (
+        profile.effectKind === 'retrieval' ||
+        profile.effectKind === 'parser'
+      ) {
+        costs.retrievalParsing += cost;
+      } else costs.models += cost;
+      return costs;
+    },
+    { search: 0, retrievalParsing: 0, models: 0 },
   );
+  if (
+    categoryCosts.search > plan.budget.searchUsd ||
+    categoryCosts.retrievalParsing > plan.budget.retrievalParsingUsd ||
+    categoryCosts.models > plan.budget.modelsUsd ||
+    aggregateCeiling.currencyUsd > plan.budget.currencyUsd
+  ) {
+    fail('live_authority_category_budget_exceeded');
+  }
   for (const key of [
     'requests',
     'inputTokens',
@@ -212,6 +246,31 @@ export function assertP9LiveAuthorityLineage(input: {
     proposerProfile,
     evaluatorProfile,
   };
+}
+
+function addVector(
+  left: {
+    currencyUsd: number;
+    requests: number;
+    inputTokens: number;
+    outputTokens: number;
+    bytes: number;
+    durationMs: number;
+  },
+  right: typeof left,
+): typeof left {
+  return {
+    currencyUsd: roundCurrency(left.currencyUsd + right.currencyUsd),
+    requests: left.requests + right.requests,
+    inputTokens: left.inputTokens + right.inputTokens,
+    outputTokens: left.outputTokens + right.outputTokens,
+    bytes: left.bytes + right.bytes,
+    durationMs: left.durationMs + right.durationMs,
+  };
+}
+
+function roundCurrency(value: number): number {
+  return Math.ceil(value * 1_000_000_000_000) / 1_000_000_000_000;
 }
 
 function assertPlanScope(

@@ -239,11 +239,21 @@ function authority(
   const consumptionNonce = 'nonce:single-use:0001';
   const requestBudget = profiles.profiles.reduce(
     (total, profile) => ({
-      requests: total.requests + profile.requestCeiling.requests,
-      inputTokens: total.inputTokens + profile.requestCeiling.inputTokens,
-      outputTokens: total.outputTokens + profile.requestCeiling.outputTokens,
-      bytes: total.bytes + profile.requestCeiling.bytes,
-      durationMs: total.durationMs + profile.requestCeiling.durationMs,
+      requests:
+        total.requests +
+        profile.requestCeiling.requests * profile.requestCeiling.attempts,
+      inputTokens:
+        total.inputTokens +
+        profile.requestCeiling.inputTokens * profile.requestCeiling.attempts,
+      outputTokens:
+        total.outputTokens +
+        profile.requestCeiling.outputTokens * profile.requestCeiling.attempts,
+      bytes:
+        total.bytes +
+        profile.requestCeiling.bytes * profile.requestCeiling.attempts,
+      durationMs:
+        total.durationMs +
+        profile.requestCeiling.durationMs * profile.requestCeiling.attempts,
     }),
     { requests: 0, inputTokens: 0, outputTokens: 0, bytes: 0, durationMs: 0 },
   );
@@ -444,6 +454,62 @@ describe('P9 scoped live authority lineage', () => {
           expectedAuthorityDigest: changed.receiptDigest,
         }),
       'live_authority_exceeds_accepted_plan_budget',
+    );
+  });
+
+  it('prices every authorized attempt and rejects category-allocation overspend', () => {
+    const expensiveIdentity = {
+      ...priceCatalog(),
+      entries: priceCatalog().entries.map((entry) =>
+        entry.effectKind === 'search'
+          ? { ...entry, costPerRequestUsd: 100 }
+          : entry,
+      ),
+      catalogDigest: undefined,
+    };
+    const expensivePrices = {
+      ...expensiveIdentity,
+      catalogDigest: canonicalDigest(expensiveIdentity),
+    } as ProviderPriceCatalog;
+    const profiles = profileCatalog();
+    const expensiveReceipt = authority(expensivePrices, profiles);
+    expectCode(
+      () =>
+        assertP9LiveAuthorityLineage(
+          input(expensiveReceipt, profiles, expensivePrices),
+        ),
+      'live_authority_category_budget_exceeded',
+    );
+
+    const retryProfiles = profileCatalog((entries) =>
+      entries.map((profile) =>
+        profile.role === 'search'
+          ? {
+              ...profile,
+              requestCeiling: { ...profile.requestCeiling, attempts: 3 },
+            }
+          : profile,
+      ),
+    );
+    const retryReceipt = authority(priceCatalog(), retryProfiles);
+    expect(() =>
+      assertP9LiveAuthorityLineage(
+        input(retryReceipt, retryProfiles, priceCatalog()),
+      ),
+    ).not.toThrow();
+    const undercounted = reseal(retryReceipt, {
+      budgetLimit: {
+        ...retryReceipt.budgetLimit,
+        requests: retryReceipt.budgetLimit.requests - 2,
+      },
+    });
+    expectCode(
+      () =>
+        assertP9LiveAuthorityLineage({
+          ...input(undercounted, retryProfiles, priceCatalog()),
+          expectedAuthorityDigest: undercounted.receiptDigest,
+        }),
+      'live_authority_budget_vector_mismatch',
     );
   });
 

@@ -439,6 +439,13 @@ handoff, integration commit, blockers, and replacement audit.
   destinations, billing accounts, and complete model checkpoint/capability/
   prompt/output/configuration identities. Legacy environment flags, credentials,
   budgets, and model names are explicitly ignored as authority.
+- A second independent review of `95d144b676` found that raw request ceilings
+  omitted retry multiplication and were not conservatively priced against the
+  accepted search, retrieval/parsing, and model allocations. Remediation now
+  reuses the same exported cost-bound calculation as `P9BudgetAuthority`,
+  requires one unambiguous price entry per profile, prices every attempt/token/
+  byte/request, and rejects category or total overspend. The exact $100 search
+  request and three-attempt undercount attacks are regression tests.
 - Acceptance: digest-checked closed schemas; exact scoped plan, acceptance,
   catalog, pricing, profile, budget, actor, and validity validation; distinct
   proposer/evaluator families; adversarial resealed substitutions and replay

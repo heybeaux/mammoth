@@ -60,6 +60,9 @@ describe('P9 live readiness artifacts', () => {
     const readiness = await inspectP9LiveReadiness({});
     expect(readiness.ready).toBe(false);
     expect(readiness.blockers).toContain(
+      'protected_authority_trust_store_unavailable',
+    );
+    expect(readiness.blockers).toContain(
       'authority_consumption_store_unavailable',
     );
     expect(readiness.blockers).toContain('live_executor_unavailable');

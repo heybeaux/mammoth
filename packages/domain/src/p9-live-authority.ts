@@ -50,7 +50,7 @@ export const P9ProviderProfileSchema = z
       .nullable(),
     billingAuthorized: z.literal(true),
     billingAccountId: z.string().min(1),
-    catalogEntryIds: z.array(z.string().min(1)).min(1),
+    catalogEntryIds: z.array(z.string().min(1)).length(1),
     requestCeiling: EffectRequestCeilingSchema,
   })
   .strict()
