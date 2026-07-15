@@ -1554,7 +1554,10 @@ export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
       this.input.sleep ??
       ((milliseconds: number) =>
         new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
-    const minimumIntervalMs = this.input.minimumIntervalMs ?? 1_100;
+    // The existing Brave credential enforces a coarse per-request window.
+    // Three seconds leaves margin for provider-side bucket boundaries and
+    // clock skew while keeping every request separately journaled.
+    const minimumIntervalMs = this.input.minimumIntervalMs ?? 3_000;
     if (!Number.isFinite(minimumIntervalMs) || minimumIntervalMs < 0) {
       throw new Error(
         'Brave adapter minimum request interval must be a finite non-negative number',

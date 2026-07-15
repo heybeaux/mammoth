@@ -431,7 +431,7 @@ describe('P9 live application', () => {
     const adapter = new BraveP9LiveSearchAdapter({
       apiKeyEnvironmentVariable: 'TEST_BRAVE_KEY',
       environment: { TEST_BRAVE_KEY: 'secret-value' },
-      minimumIntervalMs: 1_100,
+      minimumIntervalMs: 3_000,
       monotonicNow: () => monotonicMs,
       sleep: (milliseconds) => {
         sleeps.push(milliseconds);
@@ -458,8 +458,8 @@ describe('P9 live application', () => {
       'rejected',
       'fulfilled',
     ]);
-    expect(fetchTimes).toEqual([10_000, 11_100, 12_200]);
-    expect(sleeps).toEqual([1_100, 1_100]);
+    expect(fetchTimes).toEqual([10_000, 13_000, 16_000]);
+    expect(sleeps).toEqual([3_000, 3_000]);
   });
 
   it('freezes the exact Colibri question into an accepted technical due diligence plan', () => {
