@@ -607,13 +607,18 @@ function parseCapabilityResponse(
   readonly contextWindowTokens: number;
 } {
   const record = parseJsonRecord(bytes, 'provider capability response');
-  const models = requireArray(record.models, 'provider models');
+  const models =
+    Array.isArray(record.models) || !Array.isArray(record.data)
+      ? requireArray(record.models, 'provider models')
+      : requireArray(record.data, 'provider models');
   const candidates = models.map((entry) =>
     requireRecord(entry, 'provider model'),
   );
   const selected = candidates.find(
     (candidate) =>
-      candidate.name === configuredModel || candidate.model === configuredModel,
+      candidate.name === configuredModel ||
+      candidate.model === configuredModel ||
+      candidate.id === configuredModel,
   );
   if (!selected) {
     throw new ProviderBoundaryError(
@@ -624,11 +629,20 @@ function parseCapabilityResponse(
     );
   }
   const concreteModel = requireNonempty(
-    typeof selected.model === 'string' ? selected.model : selected.name,
+    typeof selected.model === 'string'
+      ? selected.model
+      : typeof selected.id === 'string'
+        ? selected.id
+        : selected.name,
     'discovered concrete model',
   );
   const checkpoint = normalizeCheckpoint(
-    requireNonempty(selected.digest, 'discovered model digest'),
+    typeof selected.digest === 'string'
+      ? requireNonempty(selected.digest, 'discovered model digest')
+      : canonicalDigest({
+          providerModelId: concreteModel,
+          providerResponse: selected,
+        }),
   );
   const details =
     selected.details && typeof selected.details === 'object'
@@ -639,7 +653,11 @@ function parseCapabilityResponse(
     Number.isInteger(details.context_length) &&
     details.context_length > 0
       ? details.context_length
-      : 4096;
+      : typeof selected.context_length === 'number' &&
+          Number.isInteger(selected.context_length) &&
+          selected.context_length > 0
+        ? selected.context_length
+        : 4096;
   return { concreteModel, checkpoint, contextWindowTokens };
 }
 

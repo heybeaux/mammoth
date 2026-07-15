@@ -11,7 +11,26 @@ import {
   type P9LiveModelProfile,
   type P8ResearchAskInput,
 } from '@mammoth/runtime';
-import { P8DepthSchema } from '@mammoth/domain';
+import {
+  MODEL_WORK_POLICY_VERSION,
+  MODEL_WORK_REQUEST_SCHEMA_VERSION,
+  MODEL_WORK_RESULT_SCHEMA_VERSION,
+  P8DepthSchema,
+  canonicalDigest,
+  canonicalJson,
+  modelWorkIdentityDigest,
+  modelWorkPolicyDigest,
+  providerAttemptIdentityDigest,
+  providerEffectIdentityDigest,
+  type ModelWorkBudget,
+  type ModelWorkIdentity,
+  type ModelWorkPolicy,
+  type ModelWorkRequest,
+  type ProviderAttemptIdentity,
+  type ProviderCapabilityManifest,
+  type ProviderEffectIdentity,
+} from '@mammoth/domain';
+import { OpenAICompatibleModelProvider } from '@mammoth/openai-compatible-provider';
 import { evaluateP9LiveAuthority } from './p9-live-authority.js';
 
 export interface P8CliIo {
@@ -50,7 +69,6 @@ export async function executeP8ResearchCli(
         return 2;
       }
       const providerKeyEnv = process.env.MAMMOTH_P9_PROVIDER_API_KEY_ENV ?? '';
-      const providerKey = process.env[providerKeyEnv] ?? '';
       const run = await runP9LiveApplication({
         executionId: `p9-live:${Date.now().toString(36)}`,
         budgetUsd: parsed.budgetUsd,
@@ -59,7 +77,8 @@ export async function executeP8ResearchCli(
         ),
         model: new OpenRouterP9LiveModelAdapter({
           baseUrl: process.env.MAMMOTH_P9_PROVIDER_BASE_URL ?? '',
-          apiKey: providerKey,
+          apiKeyEnvironmentVariable: providerKeyEnv,
+          environment: process.env,
           proposerModel: process.env.MAMMOTH_P9_PROPOSER_MODEL ?? '',
           evaluatorModel: process.env.MAMMOTH_P9_EVALUATOR_MODEL ?? '',
         }),
@@ -204,7 +223,8 @@ class OpenRouterP9LiveModelAdapter implements P9LiveModelAdapter {
   constructor(
     private readonly options: {
       readonly baseUrl: string;
-      readonly apiKey: string;
+      readonly apiKeyEnvironmentVariable: string;
+      readonly environment: Readonly<Record<string, string | undefined>>;
       readonly proposerModel: string;
       readonly evaluatorModel: string;
     },
@@ -273,33 +293,140 @@ class OpenRouterP9LiveModelAdapter implements P9LiveModelAdapter {
   }
 
   private async completeJson(model: string, content: string): Promise<unknown> {
-    const base = this.options.baseUrl.replace(/\/+$/u, '');
-    const response = await fetch(`${base}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${this.options.apiKey}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content }],
-        response_format: { type: 'json_object' },
-        temperature: 0,
-        max_tokens: 4096,
-      }),
+    const provider = new OpenAICompatibleModelProvider({
+      baseUrl: this.options.baseUrl,
+      configuredModel: model,
+      providerName: 'openrouter',
+      mode: 'governed',
+      apiKeyEnvironmentVariable: this.options.apiKeyEnvironmentVariable,
+      environment: this.options.environment,
+      capabilityPath: '/models',
+      chatCompletionsPath: '/chat/completions',
+      timeoutMs: 60_000,
+      maximumResponseBytes: 2_000_000,
+      maximumRedirects: 0,
     });
-    if (!response.ok) {
-      throw new Error(
-        `P9 model provider failed with HTTP ${String(response.status)}`,
-      );
+    const manifest = await provider.discoverCapabilities();
+    const request = buildP9LiveModelWorkRequest({
+      manifest,
+      prompt: content,
+      profileVersionId: `openrouter:${model}`,
+    });
+    const result = await provider.dispatch({
+      ...request,
+      limits: request.modelWork.budget,
+    });
+    if (!result.ok) {
+      throw new Error(`P9 model provider failed: ${result.error.code}`);
     }
-    const envelope = (await response.json()) as {
+    const envelope = JSON.parse(
+      new TextDecoder('utf-8', { fatal: true }).decode(
+        result.envelope.rawResponseBytes,
+      ),
+    ) as {
       choices?: readonly { message?: { content?: string } }[];
     };
     const text = envelope.choices?.[0]?.message?.content;
     if (!text) throw new Error('P9 model provider returned no JSON content');
     return JSON.parse(text) as unknown;
   }
+}
+
+function buildP9LiveModelWorkRequest(input: {
+  readonly manifest: ProviderCapabilityManifest;
+  readonly prompt: string;
+  readonly profileVersionId: string;
+}): {
+  readonly modelWork: ModelWorkRequest;
+  readonly canonicalRequestBytes: Uint8Array;
+} {
+  const body = {
+    max_tokens: 4096,
+    messages: [{ content: input.prompt, role: 'user' }],
+    model: input.manifest.concreteModel,
+    response_format: { type: 'json_object' },
+    stream: false,
+    temperature: 0,
+  };
+  const canonicalRequestBytes = new TextEncoder().encode(canonicalJson(body));
+  const budget: ModelWorkBudget = {
+    currencyMicros: 500_000,
+    inputTokens: 24_000,
+    outputTokens: 4096,
+    toolCalls: 0,
+    wallClockMs: 60_000,
+  };
+  const policyBase: ModelWorkPolicy = {
+    version: MODEL_WORK_POLICY_VERSION,
+    digest: canonicalDigest('p9-live-policy-placeholder'),
+    dataClassification: 'cloud_allowed',
+    retainRawOutput: true,
+    maximumAttempts: 1,
+    budget,
+  };
+  const policy = {
+    ...policyBase,
+    digest: modelWorkPolicyDigest(policyBase),
+  };
+  const identityBase: ModelWorkIdentity = {
+    programId: 'p9-live-colibri',
+    topologyId: 'p9-live-single-boundary',
+    topologyDigest: canonicalDigest('p9-live-topology'),
+    cellId: `p9-live:${input.profileVersionId}`,
+    criterionId: 'p9-live-technical-due-diligence',
+    criterionVersion: 1,
+    criterionDigest: canonicalDigest('technical-due-diligence/v1'),
+    workItemContractDigest: canonicalDigest('p9-live-model-adapter/v1'),
+    promptTemplateDigest: canonicalDigest('p9-live-json-only-template/v1'),
+    canonicalInputDigest: canonicalDigest(input.prompt),
+    modelProfileVersionId: input.profileVersionId,
+    modelProfileVersionDigest: canonicalDigest(input.profileVersionId),
+    policyVersion: MODEL_WORK_POLICY_VERSION,
+    policyDigest: policy.digest,
+    toolContractDigest: canonicalDigest('no-tools'),
+    outputSchemaDigest: canonicalDigest('p9-live-json-object/v1'),
+    identityDigest: canonicalDigest('p9-live-identity-placeholder'),
+  };
+  const identity = {
+    ...identityBase,
+    identityDigest: modelWorkIdentityDigest(identityBase),
+  };
+  const attemptBase: ProviderAttemptIdentity = {
+    modelWorkIdentityDigest: identity.identityDigest,
+    attemptOrdinal: 1,
+    provider: input.manifest.provider,
+    concreteModel: input.manifest.concreteModel,
+    checkpoint: input.manifest.checkpoint,
+    attemptDigest: canonicalDigest('p9-live-attempt-placeholder'),
+  };
+  const attempt = {
+    ...attemptBase,
+    attemptDigest: providerAttemptIdentityDigest(attemptBase),
+  };
+  const effectBase: ProviderEffectIdentity = {
+    providerAttemptDigest: attempt.attemptDigest,
+    modelWorkIdentityDigest: identity.identityDigest,
+    operationKind: 'chat_completion',
+    canonicalRequestDigest: canonicalDigest(body),
+    idempotencyKey: canonicalDigest('p9-live-effect-placeholder'),
+  };
+  const effect = {
+    ...effectBase,
+    idempotencyKey: providerEffectIdentityDigest(effectBase),
+  };
+  return {
+    canonicalRequestBytes,
+    modelWork: {
+      schemaVersion: MODEL_WORK_REQUEST_SCHEMA_VERSION,
+      identity,
+      attempt,
+      effect,
+      capabilityManifestDigest: input.manifest.manifestDigest,
+      canonicalPromptDigest: canonicalDigest(input.prompt),
+      budget,
+      outputSchemaVersion: MODEL_WORK_RESULT_SCHEMA_VERSION,
+    },
+  };
 }
 
 function modelFamily(model: string): string {

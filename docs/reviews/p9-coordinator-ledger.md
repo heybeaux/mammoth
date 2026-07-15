@@ -397,7 +397,8 @@ handoff, integration commit, blockers, and replacement audit.
   P9 live application, a controlled `research p9-live` CLI path guarded by
   `evaluateP9LiveAuthority`, distinct profile-family rejection, and injected
   adapter tests for budget cap rejection, same-family rejection, terminal
-  acquisition residue, and exact-bundle replay.
+  acquisition residue, exact-bundle replay, and OpenRouter-shaped capability
+  discovery through `OpenAICompatibleModelProvider`.
 - Current local verification: `pnpm format:check` PASS; `pnpm lint` PASS after
   lint-only fixes; `pnpm typecheck` PASS; focused runtime live-application test
   PASS (5); focused CLI authority test PASS (6); full `pnpm test` PASS before
@@ -406,7 +407,9 @@ handoff, integration commit, blockers, and replacement audit.
   `pnpm verify:p9` PASS with T6 authority and frozen live-plan acceptance still
   reporting live effects blocked pending authorization/merge gates. The known
   `packages/temporal-adapter/src/research-cli.ts` mode toggle is absent after
-  build.
+  build. Follow-up provider-boundary refactor focused checks: OpenAI-compatible
+  provider test PASS (18), runtime live-application test PASS (5), CLI authority
+  test PASS (6), and `pnpm typecheck` PASS.
 - Next predicate: commit/push the code-bearing live operator PR, obtain
   independent code/security/epistemic review and exact-head CI, merge, verify
   fresh main CI, then and only then run one authorized live exhibition within the
