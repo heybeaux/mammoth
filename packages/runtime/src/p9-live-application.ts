@@ -1249,7 +1249,7 @@ export function buildAcceptedP9LivePlan(input: {
       {
         sourceClass: 'repository_code',
         minimumIndependentSources: 1,
-        mandatory: false,
+        mandatory: true,
       },
       {
         sourceClass: 'repository_docs',
@@ -1259,7 +1259,7 @@ export function buildAcceptedP9LivePlan(input: {
       {
         sourceClass: 'upstream_model_docs',
         minimumIndependentSources: 1,
-        mandatory: false,
+        mandatory: true,
       },
       {
         sourceClass: 'hardware_vendor_docs',
@@ -1274,7 +1274,7 @@ export function buildAcceptedP9LivePlan(input: {
       {
         sourceClass: 'security_advisory',
         minimumIndependentSources: 1,
-        mandatory: false,
+        mandatory: true,
       },
     ],
     searchQueries: [

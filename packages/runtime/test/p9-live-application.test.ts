@@ -661,7 +661,7 @@ describe('P9 live application', () => {
       plan.plan.sourceClassTargets.find(
         (target) => target.sourceClass === 'security_advisory',
       )?.mandatory,
-    ).toBe(false);
+    ).toBe(true);
     expect(plan.plan.searchQueries.map((query) => query.query)).toEqual(
       expect.arrayContaining([
         expect.stringContaining('site:apple.com'),
