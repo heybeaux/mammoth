@@ -22,7 +22,7 @@ Never use a branch, worktree, or accepted spawn as proof that work is active.
 | `P9-T1`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9`      | [P9-T1](#p9-t1-record)       | complete                      |
 | `P9-T2`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8`      | [P9-T2](#p9-t2-record)       | complete                      |
 | `P9-T3`    | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38`      | [P9-T3](#p9-t3-record)       | complete                      |
-| `P9-T4`    | active  | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f`      | [P9-T4](#p9-t4-record)       | verify, review, and merge     |
+| `P9-T4`    | ready   | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f`      | [P9-T4](#p9-t4-record)       | merge after exact-head CI     |
 | `P9-T5-T6` | blocked | unassigned                | fresh worktrees required                                                              | later T4 merge | [P9-T5-T6](#p9-t5-t6-record) | claim after accepted T4 merge |
 
 ## Required state fields for implementation lanes
@@ -257,13 +257,16 @@ handoff, integration commit, blockers, and replacement audit.
   and T5-T6 still blocked. The known install-induced
   `packages/temporal-adapter/src/research-cli.ts` mode toggle was restored before
   staging.
-- Reviewer: pending PR review plus exact-head CI; actual findings must be
-  inspected and resolved before merge recommendation.
+- Reviewer: PR #66. CodeRabbit started processing but had produced no substantive
+  findings or completed review by exact-head merge readiness; this is recorded as
+  no reviewer result, not approval. Exact-head CI `29419299917` passed every lane
+  and the aggregate check at `ccf135d`.
 - Registry/artifact proof: OpenClaw subagent assignment, exact-base worktree,
   frozen install, attributable diff/tests, verifier output, and later PR/CI. The
   previous failed/timed-out attempt was replaced only after this retry inspected
   the same worktree and took ownership of its partial artifacts.
-- Handoff/integration: pending.
+- Handoff/integration: PR #66 opened for merge after exact-head CI passed; remote
+  merge and merged-main CI remain the final proof.
 - Blockers: none at assignment time.
 - Replacement audit: previous model attempt failed/timed out after creating the
   correct worktree and partial T4 diff. This coordinator verified branch/base and
