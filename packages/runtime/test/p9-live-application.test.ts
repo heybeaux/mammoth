@@ -424,7 +424,7 @@ function records(journal: MemoryP9DurableJournalStore): JournalRecord[] {
 }
 
 describe('P9 live application', () => {
-  it('spaces consecutive Brave fetches by the configured interval', async () => {
+  it('serializes concurrent Brave fetch starts across a rejected request', async () => {
     let monotonicMs = 10_000;
     const sleeps: number[] = [];
     const fetchTimes: number[] = [];
@@ -442,17 +442,24 @@ describe('P9 live application', () => {
         fetchTimes.push(monotonicMs);
         return Promise.resolve(
           new Response(JSON.stringify({ web: { results: [] } }), {
-            status: 200,
+            status: fetchTimes.length === 1 ? 429 : 200,
           }),
         );
       }) as typeof fetch,
     });
 
-    await adapter.search('first query');
-    await adapter.search('second query');
+    const outcomes = await Promise.allSettled([
+      adapter.search('first query'),
+      adapter.search('second query'),
+    ]);
+    await adapter.search('third query');
 
-    expect(fetchTimes).toEqual([10_000, 11_100]);
-    expect(sleeps).toEqual([1_100]);
+    expect(outcomes.map((outcome) => outcome.status)).toEqual([
+      'rejected',
+      'fulfilled',
+    ]);
+    expect(fetchTimes).toEqual([10_000, 11_100, 12_200]);
+    expect(sleeps).toEqual([1_100, 1_100]);
   });
 
   it('freezes the exact Colibri question into an accepted technical due diligence plan', () => {

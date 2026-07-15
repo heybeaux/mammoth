@@ -29,6 +29,7 @@ import {
   RetrievalAttemptSchema,
 } from '@mammoth/domain';
 import { createHash } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { evaluateP9ClaimAdmission } from '@mammoth/evidence';
 import {
   acceptResearchPlan,
@@ -1529,6 +1530,7 @@ export interface BraveP9LiveSearchAdapterInput {
 export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
   readonly destinationOrigin = 'https://api.search.brave.com';
   #nextRequestAtMs = 0;
+  #admissionTail: Promise<void> = Promise.resolve();
 
   constructor(private readonly input: BraveP9LiveSearchAdapterInput) {
     if (!input.apiKeyEnvironmentVariable.trim()) {
@@ -1547,7 +1549,7 @@ export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
       );
     }
     const now = this.input.now ?? (() => new Date());
-    const monotonicNow = this.input.monotonicNow ?? Date.now;
+    const monotonicNow = this.input.monotonicNow ?? (() => performance.now());
     const sleep =
       this.input.sleep ??
       ((milliseconds: number) =>
@@ -1558,9 +1560,13 @@ export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
         'Brave adapter minimum request interval must be a finite non-negative number',
       );
     }
-    const waitMs = Math.max(0, this.#nextRequestAtMs - monotonicNow());
-    if (waitMs > 0) await sleep(waitMs);
-    this.#nextRequestAtMs = monotonicNow() + minimumIntervalMs;
+    const admission = this.#admissionTail.then(async () => {
+      const waitMs = Math.max(0, this.#nextRequestAtMs - monotonicNow());
+      if (waitMs > 0) await sleep(waitMs);
+      this.#nextRequestAtMs = monotonicNow() + minimumIntervalMs;
+    });
+    this.#admissionTail = admission.catch(() => undefined);
+    await admission;
     const fetchImpl = this.input.fetchImpl ?? fetch;
     const url = new URL('https://api.search.brave.com/res/v1/web/search');
     url.searchParams.set('q', query);
