@@ -1486,14 +1486,26 @@ function boundedSentenceContext(
     body.lastIndexOf('?', Math.max(0, startOffset - 1)),
     body.lastIndexOf('\n', Math.max(0, startOffset - 1)),
   );
-  const following = [
-    body.indexOf('.', endOffset),
-    body.indexOf('!', endOffset),
-    body.indexOf('?', endOffset),
-    body.indexOf('\n', endOffset),
-  ].filter((index) => index >= 0);
+  const lastSelected = body[endOffset - 1];
+  const endsAtBoundary =
+    lastSelected === '.' ||
+    lastSelected === '!' ||
+    lastSelected === '?' ||
+    lastSelected === '\n';
+  const following = endsAtBoundary
+    ? endOffset
+    : [
+        body.indexOf('.', endOffset),
+        body.indexOf('!', endOffset),
+        body.indexOf('?', endOffset),
+        body.indexOf('\n', endOffset),
+      ].filter((index) => index >= 0);
   const contextEnd =
-    following.length === 0 ? body.length : Math.min(...following) + 1;
+    typeof following === 'number'
+      ? following
+      : following.length === 0
+        ? body.length
+        : Math.min(...following) + 1;
   return body.slice(priorBoundary + 1, contextEnd).trim();
 }
 
