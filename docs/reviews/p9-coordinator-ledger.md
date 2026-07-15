@@ -15,12 +15,12 @@ Never use a branch, worktree, or accepted spawn as proof that work is active.
 
 ## Ownership
 
-| Assignment | State     | Owner/runtime             | Worktree / branch                                                           | Base           | Record                       | Next                          |
-| ---------- | --------- | ------------------------- | --------------------------------------------------------------------------- | -------------- | ---------------------------- | ----------------------------- |
-| `P9-PLAN`  | merged    | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                        | `1de5b37`      | [P9-PLAN](#p9-plan-record)   | complete                      |
-| `P9-T0`    | merged    | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`         | `2aeb3db`      | [P9-T0](#p9-t0-record)       | complete                      |
-| `P9-T1`    | candidate | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata` | `5db0fc9`      | [P9-T1](#p9-t1-record)       | push, PR review, head CI      |
-| `P9-T2-T6` | blocked   | unassigned                | fresh worktrees required                                                    | later T1 merge | [P9-T2-T6](#p9-t2-t6-record) | claim after accepted T1 merge |
+| Assignment | State   | Owner/runtime             | Worktree / branch                                                           | Base           | Record                       | Next                          |
+| ---------- | ------- | ------------------------- | --------------------------------------------------------------------------- | -------------- | ---------------------------- | ----------------------------- |
+| `P9-PLAN`  | merged  | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                        | `1de5b37`      | [P9-PLAN](#p9-plan-record)   | complete                      |
+| `P9-T0`    | merged  | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`         | `2aeb3db`      | [P9-T0](#p9-t0-record)       | complete                      |
+| `P9-T1`    | review  | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata` | `5db0fc9`      | [P9-T1](#p9-t1-record)       | resolve review; exact-head CI |
+| `P9-T2-T6` | blocked | unassigned                | fresh worktrees required                                                    | later T1 merge | [P9-T2-T6](#p9-t2-t6-record) | claim after accepted T1 merge |
 
 ## Required state fields for implementation lanes
 
@@ -107,17 +107,19 @@ handoff, integration commit, blockers, and replacement audit.
 - Dependencies: merged T0 `5db0fc9`; merged-main CI `29383000905` passed.
 - Exact gates: focused package tests; format; lint; typecheck; full tests; build;
   `pnpm verify:p8`; `pnpm verify:p9`; clean-checkout frozen install and repeat.
-- Current local results: focused T1 tests PASS (governance 8, retrieval 6);
+- Current local results: focused T1 tests PASS (governance 11, retrieval 10);
   format PASS; lint PASS; typecheck PASS; full workspace tests PASS; build PASS;
   P8 regression PASS; `verify:p9` PASS with `T1_budget_metadata=pass` and
-  T2-T6 still blocked. Detached clean checkout at candidate `ac26fb7` passed
-  frozen install and the same complete ladder with a clean worktree.
-- Reviewer: GitHub PR review plus exact-head CI; actual findings must be resolved
-  or truthfully recorded before merge.
+  T2-T6 still blocked. Detached clean checkout at `08c5aac` passed a frozen
+  install and the same complete ladder with a clean worktree. A repeat at the
+  final review-fix head is pending.
+- Reviewer: PR #62. CodeRabbit reviewed `5530eb4` and posted nine actionable
+  findings; hardened implementation candidate `da9ada4` addresses them. Review
+  confirmation and exact-latest-head CI are pending.
 - Registry/artifact proof: current-session Git worktree, branch, diff, test output,
   verifier output, PR head, and CI. No worker registry claim applies.
-- Handoff/integration candidate: `ac26fb7`; PR and merge commit unavailable.
-- Blockers: none.
+- Handoff/integration candidate: `da9ada4`; PR #62; merge commit unavailable.
+- Blockers: review confirmation and exact-head CI remain pending.
 - Replacement audit: none.
 
 ### P9-T2-T6 record
