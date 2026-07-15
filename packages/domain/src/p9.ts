@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { canonicalDigest } from './digest.js';
 
 const DigestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const NonNegativeFiniteSchema = z.number().finite().nonnegative();
@@ -66,7 +67,23 @@ export const ProviderPriceCatalogSchema = z
     entries: z.array(ProviderPriceCatalogEntrySchema).min(1),
     catalogDigest: DigestSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((catalog, context) => {
+    const identity = {
+      schemaVersion: catalog.schemaVersion,
+      contractFamily: catalog.contractFamily,
+      catalogId: catalog.catalogId,
+      version: catalog.version,
+      entries: catalog.entries,
+    };
+    if (catalog.catalogDigest !== canonicalDigest(identity)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['catalogDigest'],
+        message: 'catalog digest must bind the exact immutable price catalog',
+      });
+    }
+  });
 export type ProviderPriceCatalog = z.infer<typeof ProviderPriceCatalogSchema>;
 
 export const EffectCostBoundSchema = z
@@ -283,6 +300,17 @@ export const RetrievalAttemptSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'date verdict must reference the supplied observation',
+      });
+    }
+    if (
+      attempt.dateObservation &&
+      attempt.dateVerdict &&
+      attempt.dateVerdict.observationDigest !==
+        canonicalDigest(attempt.dateObservation)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'date verdict must bind the exact supplied observation',
       });
     }
     if (attempt.status === 'admitted' && attempt.failure !== null) {

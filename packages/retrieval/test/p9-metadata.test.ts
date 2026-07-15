@@ -1,5 +1,6 @@
 import {
   canonicalDigest,
+  RetrievalAttemptSchema,
   RobotsDecisionSchema,
   type DateExtractionVerdict,
   type SourceDateObservation,
@@ -117,6 +118,15 @@ describe('P9 truthful source metadata', () => {
         bytes: 100,
       }),
     ).toThrowError(/does not bind the exact observation/);
+    expect(() =>
+      RetrievalAttemptSchema.parse({
+        ...attempt,
+        dateVerdict: {
+          ...verdict,
+          observationDigest: canonicalDigest('wrong'),
+        },
+      }),
+    ).toThrowError(/must bind the exact supplied observation/);
   });
 
   it('requires actual robots evidence before claiming allowed or denied', () => {

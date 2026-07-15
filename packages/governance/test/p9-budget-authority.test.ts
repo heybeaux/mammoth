@@ -1,7 +1,8 @@
-import type {
-  EffectRequestCeiling,
-  P9BudgetVector,
-  ProviderPriceCatalog,
+import {
+  ProviderPriceCatalogSchema,
+  type EffectRequestCeiling,
+  type P9BudgetVector,
+  type ProviderPriceCatalog,
 } from '@mammoth/domain';
 import { describe, expect, it } from 'vitest';
 import {
@@ -212,6 +213,9 @@ describe('P9BudgetAuthority', () => {
         costPerRequestUsd: 0.01,
       })),
     };
+    expect(() => ProviderPriceCatalogSchema.parse(invalid)).toThrowError(
+      /digest must bind the exact immutable price catalog/,
+    );
     expect(
       () =>
         new P9BudgetAuthority({

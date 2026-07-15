@@ -131,16 +131,6 @@ function sameVector(a: P9BudgetVector, b: P9BudgetVector): boolean {
   return VECTOR_KEYS.every((key) => a[key] === b[key]);
 }
 
-function catalogIdentity(catalog: ProviderPriceCatalog): object {
-  return {
-    schemaVersion: catalog.schemaVersion,
-    contractFamily: catalog.contractFamily,
-    catalogId: catalog.catalogId,
-    version: catalog.version,
-    entries: catalog.entries,
-  };
-}
-
 export function priceCatalogDigest(
   input: Omit<ProviderPriceCatalog, 'catalogDigest'>,
 ): string {
@@ -215,17 +205,15 @@ export class P9BudgetAuthority {
     }
     this.accountId = input.accountId;
     this.programId = input.programId;
-    this.catalog = ProviderPriceCatalogSchema.parse(input.catalog);
-    this.limit = P9BudgetVectorSchema.parse(input.limit);
-    if (
-      canonicalDigest(catalogIdentity(this.catalog)) !==
-      this.catalog.catalogDigest
-    ) {
+    const catalogResult = ProviderPriceCatalogSchema.safeParse(input.catalog);
+    if (!catalogResult.success) {
       throw new GovernanceError(
         'catalog_digest_mismatch',
         'provider price catalog digest does not match its canonical contents',
       );
     }
+    this.catalog = catalogResult.data;
+    this.limit = P9BudgetVectorSchema.parse(input.limit);
     for (const entry of this.catalog.entries) {
       if (this.#entries.has(entry.id)) {
         throw new GovernanceError(
