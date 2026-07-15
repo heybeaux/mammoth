@@ -2,6 +2,7 @@ import {
   canonicalDigest,
   RetrievalAttemptSchema,
   RobotsDecisionSchema,
+  SourceRightsStatusSchema,
   type DateExtractionVerdict,
   type SourceDateObservation,
 } from '@mammoth/domain';
@@ -127,6 +128,12 @@ describe('P9 truthful source metadata', () => {
         },
       }),
     ).toThrowError(/must bind the exact supplied observation/);
+    expect(() =>
+      RetrievalAttemptSchema.parse({
+        ...attempt,
+        dateVerdict: null,
+      }),
+    ).toThrowError(/must be supplied together/);
   });
 
   it('requires actual robots evidence before claiming allowed or denied', () => {
@@ -138,9 +145,42 @@ describe('P9 truthful source metadata', () => {
       }),
     ).toThrowError(/requires evaluated bytes\/receipt/);
   });
+
+  it('requires an observed method before claiming declared source rights', () => {
+    expect(() =>
+      SourceRightsStatusSchema.parse({
+        ...rights(),
+        status: 'declared_permissive',
+        exactLocator: 'meta[name="license"]@content',
+        sourceValue: 'CC-BY-4.0',
+      }),
+    ).toThrowError(/requires an observed source method/);
+  });
 });
 
 describe('P9 retrieval residue', () => {
+  it.each([
+    'file:///etc/passwd',
+    'data:text/plain,secret',
+    'javascript:alert(1)',
+  ])(
+    'rejects a non-transport acquisition URL before selection: %s',
+    (requestedUrl) => {
+      const ledger = new P9RetrievalResidueLedger();
+      expect(() => {
+        ledger.select({
+          candidateId: 'unsafe-candidate',
+          sourceClass: 'independent_analysis',
+          requestedUrl,
+          selectedAt: NOW,
+        });
+      }).toThrowError(/violates acquisition policy/);
+      expect(
+        ledger.assess({ missingSourceClasses: [], assessedAt: NOW })
+          .selectedCandidateIds,
+      ).toEqual([]);
+    },
+  );
   it('fails until every selected candidate has typed terminal residue', () => {
     const ledger = new P9RetrievalResidueLedger();
     ledger.select({

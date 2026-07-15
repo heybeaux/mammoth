@@ -48,17 +48,22 @@ export function isPrivateAddress(address: string): boolean {
   return true;
 }
 
+/** Applies the transport-independent URL policy before a URL enters acquisition state. */
+export function assertPermittedUrl(url: URL, schemes: readonly string[]): void {
+  if (!schemes.includes(url.protocol)) {
+    throw new Error(`SCHEME_NOT_ALLOWED:${url.protocol}`);
+  }
+  if (url.username || url.password)
+    throw new Error('URL_CREDENTIALS_NOT_ALLOWED');
+}
+
 export async function assertSafeUrl(
   url: URL,
   schemes: readonly string[],
   allowPrivateNetwork: boolean,
   resolveHost: (hostname: string) => Promise<readonly string[]>,
 ): Promise<void> {
-  if (!schemes.includes(url.protocol)) {
-    throw new Error(`SCHEME_NOT_ALLOWED:${url.protocol}`);
-  }
-  if (url.username || url.password)
-    throw new Error('URL_CREDENTIALS_NOT_ALLOWED');
+  assertPermittedUrl(url, schemes);
   const addresses = await resolveHost(url.hostname);
   if (addresses.length === 0)
     throw new Error(`HOST_UNRESOLVED:${url.hostname}`);

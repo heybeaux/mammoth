@@ -16,6 +16,7 @@ import {
   type SourceDateObservation,
   type SourceRightsStatus,
 } from '@mammoth/domain';
+import { assertPermittedUrl } from './security.js';
 
 export interface SelectedRetrievalCandidate {
   readonly candidateId: string;
@@ -155,7 +156,14 @@ export class P9RetrievalResidueLedger {
         'selected candidate requires identities, source class, and timestamp',
       );
     }
-    new URL(candidate.requestedUrl);
+    try {
+      assertPermittedUrl(new URL(candidate.requestedUrl), ['http:', 'https:']);
+    } catch (error) {
+      throw new P9RetrievalResidueError(
+        'candidate_url_not_permitted',
+        `selected candidate URL violates acquisition policy: ${error instanceof Error ? error.message : 'invalid URL'}`,
+      );
+    }
     const existing = this.#selected.get(candidate.candidateId);
     if (existing) {
       if (canonicalDigest(existing) === canonicalDigest(candidate)) return;

@@ -77,6 +77,18 @@ export type P9SettlementInput =
       readonly actorId: string;
     };
 
+const ReserveInputSchema = z
+  .object({
+    reservationId: z.string().min(1),
+    workItemId: z.string().min(1),
+    effectId: z.string().min(1),
+    idempotencyKey: z.string().min(1),
+    catalogEntryId: z.string().min(1),
+    ceiling: EffectRequestCeilingSchema,
+    actorId: z.string().min(1),
+  })
+  .strict();
+
 const VECTOR_KEYS = [
   'currencyUsd',
   'requests',
@@ -98,7 +110,10 @@ function zero(): P9BudgetVector {
 }
 
 function roundedCurrency(value: number): number {
-  return Number(value.toFixed(12));
+  if (value === 0) return 0;
+  const scale = 1_000_000_000_000;
+  const scaled = value * scale;
+  return (value > 0 ? Math.ceil(scaled) : Math.floor(scaled)) / scale;
 }
 
 function add(a: P9BudgetVector, b: P9BudgetVector): P9BudgetVector {
@@ -234,8 +249,8 @@ export class P9BudgetAuthority {
     readonly ceiling: EffectRequestCeiling;
     readonly actorId: string;
   }): P9BudgetReservation {
-    const ceiling = EffectRequestCeilingSchema.parse(input.ceiling);
-    const existingId = this.#idempotency.get(input.idempotencyKey);
+    const request = ReserveInputSchema.parse(input);
+    const existingId = this.#idempotency.get(request.idempotencyKey);
     if (existingId) {
       const existing = this.#reservations.get(existingId);
       if (!existing) {
@@ -245,13 +260,18 @@ export class P9BudgetAuthority {
         );
       }
       const same =
-        existing.id === input.reservationId &&
-        existing.workItemId === input.workItemId &&
-        existing.bound.effectId === input.effectId &&
-        existing.bound.catalogEntryId === input.catalogEntryId &&
-        canonicalDigest(existing.bound.ceiling) === canonicalDigest(ceiling);
+        existing.id === request.reservationId &&
+        existing.workItemId === request.workItemId &&
+        existing.bound.effectId === request.effectId &&
+        existing.bound.catalogEntryId === request.catalogEntryId &&
+        canonicalDigest(existing.bound.ceiling) ===
+          canonicalDigest(request.ceiling);
       if (!same) {
-        this.#deny(input.reservationId, input.actorId, 'idempotency_conflict');
+        this.#deny(
+          request.reservationId,
+          request.actorId,
+          'idempotency_conflict',
+        );
         throw new GovernanceError(
           'idempotency_conflict',
           'idempotency key was reused for different P9 effect work',
@@ -259,18 +279,18 @@ export class P9BudgetAuthority {
       }
       return copy(existing);
     }
-    if (this.#reservations.has(input.reservationId)) {
-      this.#deny(input.reservationId, input.actorId, 'reservation_exists');
+    if (this.#reservations.has(request.reservationId)) {
+      this.#deny(request.reservationId, request.actorId, 'reservation_exists');
       throw new GovernanceError(
         'reservation_exists',
         'P9 reservation identity already exists',
       );
     }
-    const entry = this.#entries.get(input.catalogEntryId);
+    const entry = this.#entries.get(request.catalogEntryId);
     if (!entry) {
       this.#deny(
-        input.reservationId,
-        input.actorId,
+        request.reservationId,
+        request.actorId,
         'catalog_entry_unavailable',
       );
       throw new GovernanceError(
@@ -280,8 +300,8 @@ export class P9BudgetAuthority {
     }
     if (this.#quarantined.has(entry.id)) {
       this.#deny(
-        input.reservationId,
-        input.actorId,
+        request.reservationId,
+        request.actorId,
         'catalog_entry_quarantined',
       );
       throw new GovernanceError(
@@ -289,10 +309,10 @@ export class P9BudgetAuthority {
         'provider price catalog entry is quarantined after a bound breach',
       );
     }
-    const reserved = calculateBound(entry, ceiling);
+    const reserved = calculateBound(entry, request.ceiling);
     const prospective = add(add(this.#spent, this.#reserved), reserved);
     if (!within(prospective, this.limit)) {
-      this.#deny(input.reservationId, input.actorId, 'budget_exhausted');
+      this.#deny(request.reservationId, request.actorId, 'budget_exhausted');
       throw new GovernanceError(
         'budget_exhausted',
         'effect cost bound exceeds remaining P9 authorization',
@@ -302,22 +322,22 @@ export class P9BudgetAuthority {
     const bound = EffectCostBoundSchema.parse({
       schemaVersion: '1.0.0',
       contractFamily: 'p9.v1',
-      effectId: input.effectId,
-      idempotencyKey: input.idempotencyKey,
+      effectId: request.effectId,
+      idempotencyKey: request.idempotencyKey,
       catalogId: this.catalog.catalogId,
       catalogVersion: this.catalog.version,
       catalogDigest: this.catalog.catalogDigest,
       catalogEntryId: entry.id,
       provider: entry.provider,
       effectKind: entry.effectKind,
-      ceiling,
+      ceiling: request.ceiling,
       reserved,
       boundedAt,
     });
     const reservation: P9BudgetReservation = {
-      id: input.reservationId,
+      id: request.reservationId,
       accountId: this.accountId,
-      workItemId: input.workItemId,
+      workItemId: request.workItemId,
       bound,
       state: 'reserved',
       transportStarted: false,
@@ -329,13 +349,13 @@ export class P9BudgetAuthority {
     };
     this.#reserved = add(this.#reserved, bound.reserved);
     this.#reservations.set(reservation.id, reservation);
-    this.#idempotency.set(input.idempotencyKey, reservation.id);
+    this.#idempotency.set(request.idempotencyKey, reservation.id);
     this.audit.append({
       occurredAt: boundedAt,
       kind: 'p9.budget.reserved_before_transport',
       entityId: reservation.id,
       outcome: 'allowed',
-      actorId: input.actorId,
+      actorId: request.actorId,
       details: { bound, remaining: this.remaining() },
     });
     return copy(reservation);
@@ -366,7 +386,15 @@ export class P9BudgetAuthority {
       );
     }
     if (existing.state !== 'reserved') {
-      if (existing.terminalFingerprint === fingerprint) return copy(existing);
+      if (existing.terminalFingerprint === fingerprint) {
+        if (existing.state === 'breached') {
+          throw new GovernanceError(
+            'provider_bound_breached',
+            'provider settlement exceeded its accepted bound; entry quarantined',
+          );
+        }
+        return copy(existing);
+      }
       this.#deny(id, input.actorId, 'terminal_settlement_conflict');
       throw new GovernanceError(
         'terminal_settlement_conflict',
@@ -535,40 +563,65 @@ export class P9BudgetAuthority {
       },
       clock,
     );
+    const restoredAudit = AuditJournal.restore(parsed.audit);
+    const validatedReservations: P9BudgetReservation[] = [];
+    const seenReservationIds = new Set<string>();
+    const seenIdempotencyKeys = new Set<string>();
+    const derivedQuarantine = new Set<string>();
     for (const reservation of parsed.reservations) {
+      const entry = authority.#entries.get(reservation.bound.catalogEntryId);
+      let recalculated: P9BudgetVector | undefined;
+      if (entry) {
+        try {
+          recalculated = calculateBound(entry, reservation.bound.ceiling);
+        } catch {
+          recalculated = undefined;
+        }
+      }
       if (
-        authority.#reservations.has(reservation.id) ||
-        authority.#idempotency.has(reservation.bound.idempotencyKey) ||
+        seenReservationIds.has(reservation.id) ||
+        seenIdempotencyKeys.has(reservation.bound.idempotencyKey) ||
         reservation.accountId !== parsed.accountId ||
-        reservation.bound.catalogDigest !== parsed.catalog.catalogDigest
+        !entry ||
+        !recalculated ||
+        reservation.bound.catalogId !== parsed.catalog.catalogId ||
+        reservation.bound.catalogVersion !== parsed.catalog.version ||
+        reservation.bound.catalogDigest !== parsed.catalog.catalogDigest ||
+        reservation.bound.provider !== entry.provider ||
+        reservation.bound.effectKind !== entry.effectKind ||
+        !sameVector(reservation.bound.reserved, recalculated)
       ) {
         throw new GovernanceError(
           'invalid_p9_budget_snapshot',
-          'P9 budget snapshot has duplicate, orphaned, or foreign reservations',
+          'P9 budget snapshot has duplicate, foreign, or non-authoritative reservations',
         );
       }
-      authority.#reservations.set(reservation.id, copy(reservation));
-      authority.#idempotency.set(
-        reservation.bound.idempotencyKey,
-        reservation.id,
+      seenReservationIds.add(reservation.id);
+      seenIdempotencyKeys.add(reservation.bound.idempotencyKey);
+      if (reservation.state === 'breached') {
+        derivedQuarantine.add(reservation.bound.catalogEntryId);
+      }
+      validatedReservations.push(copy(reservation));
+    }
+    const serializedQuarantine = [...parsed.quarantinedCatalogEntryIds].sort();
+    const expectedQuarantine = [...derivedQuarantine].sort();
+    if (
+      new Set(serializedQuarantine).size !== serializedQuarantine.length ||
+      canonicalDigest(serializedQuarantine) !==
+        canonicalDigest(expectedQuarantine)
+    ) {
+      throw new GovernanceError(
+        'invalid_p9_budget_snapshot',
+        'P9 budget snapshot quarantine does not match breached reservations',
       );
     }
-    for (const entryId of parsed.quarantinedCatalogEntryIds) {
-      if (!authority.#entries.has(entryId)) {
-        throw new GovernanceError(
-          'invalid_p9_budget_snapshot',
-          'P9 budget snapshot quarantines an unknown catalog entry',
-        );
-      }
-      authority.#quarantined.add(entryId);
-    }
-    const calculatedReserved = parsed.reservations
+    const calculatedReserved = validatedReservations
       .filter((reservation) => reservation.state === 'reserved')
       .reduce(
         (sum, reservation) => add(sum, reservation.bound.reserved),
         zero(),
       );
-    const calculatedSpent = parsed.reservations
+    const calculatedSpent = validatedReservations
       .filter((reservation) => reservation.state !== 'reserved')
       .reduce((sum, reservation) => add(sum, reservation.charged), zero());
     if (
@@ -586,7 +639,17 @@ export class P9BudgetAuthority {
     }
     authority.#reserved = copy(parsed.reserved);
     authority.#spent = copy(parsed.spent);
-    authority.audit = AuditJournal.restore(parsed.audit);
+    for (const reservation of validatedReservations) {
+      authority.#reservations.set(reservation.id, reservation);
+      authority.#idempotency.set(
+        reservation.bound.idempotencyKey,
+        reservation.id,
+      );
+    }
+    for (const entryId of derivedQuarantine) {
+      authority.#quarantined.add(entryId);
+    }
+    authority.audit = restoredAudit;
     return authority;
   }
 

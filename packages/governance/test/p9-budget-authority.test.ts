@@ -189,6 +189,73 @@ describe('P9BudgetAuthority', () => {
     });
     expect(budget.isCatalogEntryQuarantined('brave-search')).toBe(true);
     expect(() => reserve(budget, 'after-breach')).toThrowError(/quarantined/);
+    try {
+      budget.settle('reservation-breach', {
+        costState: 'known',
+        actual: {
+          currencyUsd: 0.8,
+          requests: 1,
+          inputTokens: 0,
+          outputTokens: 0,
+          bytes: 0,
+          durationMs: 500,
+        },
+        actorId: 'worker',
+      });
+      throw new Error('expected breached settlement replay to fail');
+    } catch (error) {
+      expect(error).toBeInstanceOf(GovernanceError);
+      if (!(error instanceof GovernanceError)) return;
+      expect(error.code).toBe('provider_bound_breached');
+    }
+  });
+
+  it('never rounds a positive conservative catalog charge down to zero', () => {
+    const base = catalog();
+    const identity = {
+      ...base,
+      entries: base.entries.map((entry) => ({
+        ...entry,
+        costPerRequestUsd: 0.000_000_000_000_1,
+      })),
+    };
+    const tinyCatalog = {
+      ...identity,
+      catalogDigest: priceCatalogDigest({
+        schemaVersion: identity.schemaVersion,
+        contractFamily: identity.contractFamily,
+        catalogId: identity.catalogId,
+        version: identity.version,
+        entries: identity.entries,
+      }),
+    };
+    const budget = new P9BudgetAuthority({
+      accountId: 'tiny-budget',
+      programId: 'tiny-program',
+      catalog: tinyCatalog,
+      limit: vector(0.000_000_000_001),
+    });
+
+    expect(reserve(budget, 'tiny').bound.reserved.currencyUsd).toBe(
+      0.000_000_000_001,
+    );
+  });
+
+  it('rejects empty reservation identities before mutating authority state', () => {
+    const budget = authority();
+    const before = budget.snapshot();
+    expect(() =>
+      budget.reserve({
+        reservationId: '',
+        workItemId: 'work-invalid',
+        effectId: 'effect-invalid',
+        idempotencyKey: 'key-invalid',
+        catalogEntryId: 'brave-search',
+        ceiling: ceiling(),
+        actorId: 'planner',
+      }),
+    ).toThrowError();
+    expect(budget.snapshot()).toEqual(before);
   });
 
   it('restores reservations, conservative charges, quarantine, and audit identity', () => {
@@ -202,6 +269,48 @@ describe('P9BudgetAuthority', () => {
 
     const restored = P9BudgetAuthority.restore(budget.snapshot(), () => NOW);
     expect(restored.snapshot()).toEqual(budget.snapshot());
+  });
+
+  it('rejects restored bounds and quarantine that are not derivable from authoritative reservations', () => {
+    const budget = authority(2);
+    reserve(budget, 'tamper');
+    const snapshot = budget.snapshot();
+    const loweredBound = {
+      ...snapshot,
+      reserved: { ...snapshot.reserved, currencyUsd: 0.01 },
+      reservations: snapshot.reservations.map((reservation) => ({
+        ...reservation,
+        bound: {
+          ...reservation.bound,
+          reserved: { ...reservation.bound.reserved, currencyUsd: 0.01 },
+        },
+      })),
+    };
+    expect(() => P9BudgetAuthority.restore(loweredBound)).toThrowError(
+      /non-authoritative reservations/,
+    );
+
+    budget.markTransportStarted('reservation-tamper', 'worker');
+    expect(() =>
+      budget.settle('reservation-tamper', {
+        costState: 'known',
+        actual: {
+          currencyUsd: 0.8,
+          requests: 1,
+          inputTokens: 0,
+          outputTokens: 0,
+          bytes: 0,
+          durationMs: 500,
+        },
+        actorId: 'worker',
+      }),
+    ).toThrowError(/entry quarantined/);
+    expect(() =>
+      P9BudgetAuthority.restore({
+        ...budget.snapshot(),
+        quarantinedCatalogEntryIds: [],
+      }),
+    ).toThrowError(/quarantine does not match breached reservations/);
   });
 
   it('rejects tampered catalogs and effects without a conservative catalog entry', () => {

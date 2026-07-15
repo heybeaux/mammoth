@@ -7,6 +7,7 @@ import {
   type P9BudgetVector,
 } from '../packages/domain/src/index.js';
 import {
+  GovernanceError,
   P9BudgetAuthority,
   priceCatalogDigest,
 } from '../packages/governance/src/index.js';
@@ -29,6 +30,18 @@ async function json(path: string): Promise<Record<string, unknown>> {
 
 function invariant(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`P9_BASELINE_INVALID: ${message}`);
+}
+
+function hasZodIssue(error: unknown, message: string): boolean {
+  if (!(error instanceof Error) || error.name !== 'ZodError') return false;
+  const issues = (error as Error & { issues?: unknown }).issues;
+  return (
+    Array.isArray(issues) &&
+    issues.some((issue) => {
+      if (typeof issue !== 'object' || issue === null) return false;
+      return (issue as Record<string, unknown>).message === message;
+    })
+  );
 }
 
 const manifest = await json('verifier-manifest.json');
@@ -231,8 +244,9 @@ async function verifyT1BudgetAndMetadata(): Promise<void> {
   let splitDenied = false;
   try {
     reserve(retries, 'split');
-  } catch {
-    splitDenied = true;
+  } catch (error) {
+    splitDenied =
+      error instanceof GovernanceError && error.code === 'budget_exhausted';
   }
   invariant(splitDenied, 'T1 retry or split is denied before transport');
 
@@ -263,8 +277,10 @@ async function verifyT1BudgetAndMetadata(): Promise<void> {
       costState: 'unknown',
       actorId: 'p9-verifier',
     });
-  } catch {
-    secondTerminalDenied = true;
+  } catch (error) {
+    secondTerminalDenied =
+      error instanceof GovernanceError &&
+      error.code === 'terminal_settlement_conflict';
   }
   invariant(
     secondTerminalDenied && cancellation.snapshot().reservations.length === 1,
@@ -288,8 +304,10 @@ async function verifyT1BudgetAndMetadata(): Promise<void> {
       },
       actorId: 'p9-verifier',
     });
-  } catch {
-    breachStopped = true;
+  } catch (error) {
+    breachStopped =
+      error instanceof GovernanceError &&
+      error.code === 'provider_bound_breached';
   }
   invariant(
     breachStopped && breached.isCatalogEntryQuarantined('search-v1'),
@@ -341,8 +359,11 @@ async function verifyT1BudgetAndMetadata(): Promise<void> {
       status: 'allowed',
       decisionPath: [],
     });
-  } catch {
-    falseRobotsClaimRejected = true;
+  } catch (error) {
+    falseRobotsClaimRejected = hasZodIssue(
+      error,
+      'allowed or denied robots status requires evaluated bytes/receipt and a decision path',
+    );
   }
   invariant(
     falseRobotsClaimRejected,

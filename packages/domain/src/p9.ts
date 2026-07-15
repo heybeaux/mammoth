@@ -214,6 +214,15 @@ export const SourceRightsStatusSchema = z
   .superRefine((rights, context) => {
     if (
       rights.status !== 'unknown' &&
+      rights.observationMethod === 'not_observed'
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'declared rights status requires an observed source method',
+      });
+    }
+    if (
+      rights.status !== 'unknown' &&
       (!rights.exactLocator || !rights.sourceValue)
     ) {
       context.addIssue({
@@ -278,6 +287,12 @@ export const RetrievalAttemptSchema = z
   })
   .strict()
   .superRefine((attempt, context) => {
+    if ((attempt.dateObservation === null) !== (attempt.dateVerdict === null)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'date observation and verdict must be supplied together',
+      });
+    }
     if (attempt.publishedAt !== null) {
       if (
         !attempt.dateObservation ||
