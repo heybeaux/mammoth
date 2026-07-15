@@ -170,7 +170,7 @@ export function calculateP9EffectCostBound(
   const durationMs = ceiling.durationMs * attempts;
   return P9BudgetVectorSchema.parse({
     currencyUsd: roundedCurrency(
-      entry.flatCostUsd +
+      entry.flatCostUsd * attempts +
         requests * entry.costPerRequestUsd +
         inputTokens * entry.costPerInputTokenUsd +
         outputTokens * entry.costPerOutputTokenUsd +

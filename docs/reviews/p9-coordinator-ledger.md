@@ -446,6 +446,11 @@ handoff, integration commit, blockers, and replacement audit.
   requires one unambiguous price entry per profile, prices every attempt/token/
   byte/request, and rejects category or total overspend. The exact $100 search
   request and three-attempt undercount attacks are regression tests.
+- Final re-review found one narrower retry-pricing gap: flat catalog charges
+  were applied once per effect rather than once per authorized attempt. The
+  shared bound calculator now multiplies flat and variable costs by attempts;
+  a three-attempt flat-only search that exceeds the search allocation is an
+  explicit regression test.
 - Acceptance: digest-checked closed schemas; exact scoped plan, acceptance,
   catalog, pricing, profile, budget, actor, and validity validation; distinct
   proposer/evaluator families; adversarial resealed substitutions and replay

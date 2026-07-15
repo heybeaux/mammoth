@@ -481,6 +481,42 @@ describe('P9 scoped live authority lineage', () => {
       'live_authority_category_budget_exceeded',
     );
 
+    const flatRetryIdentity = {
+      ...priceCatalog(),
+      entries: priceCatalog().entries.map((entry) =>
+        entry.effectKind === 'search'
+          ? {
+              ...entry,
+              flatCostUsd: 1,
+              costPerRequestUsd: 0,
+            }
+          : entry,
+      ),
+      catalogDigest: undefined,
+    };
+    const flatRetryPrices = {
+      ...flatRetryIdentity,
+      catalogDigest: canonicalDigest(flatRetryIdentity),
+    } as ProviderPriceCatalog;
+    const flatRetryProfiles = profileCatalog((entries) =>
+      entries.map((profile) =>
+        profile.role === 'search'
+          ? {
+              ...profile,
+              requestCeiling: { ...profile.requestCeiling, attempts: 3 },
+            }
+          : profile,
+      ),
+    );
+    const flatRetryReceipt = authority(flatRetryPrices, flatRetryProfiles);
+    expectCode(
+      () =>
+        assertP9LiveAuthorityLineage(
+          input(flatRetryReceipt, flatRetryProfiles, flatRetryPrices),
+        ),
+      'live_authority_category_budget_exceeded',
+    );
+
     const retryProfiles = profileCatalog((entries) =>
       entries.map((profile) =>
         profile.role === 'search'
