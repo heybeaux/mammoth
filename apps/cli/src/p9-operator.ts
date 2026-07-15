@@ -2,13 +2,22 @@ import { constants } from 'node:fs';
 import { mkdir, open, readdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import {
+  P9LiveAuthorityReceiptSchema,
+  P9ProviderProfileCatalogSchema,
+  type P9LiveAuthorityReceipt,
+  type P9ProviderProfileCatalog,
+  type PlanAcceptanceReceipt,
   PlanAcceptanceReceiptSchema,
+  type ProviderPriceCatalog,
   ProviderPriceCatalogSchema,
+  type ResearchPlan,
   ResearchPlanProposalSchema,
   ResearchPlanSchema,
 } from '@mammoth/domain';
 import {
   acceptResearchPlan,
+  assertP9LiveAuthorityLineage,
+  GovernanceError,
   P9_DOMAIN_POLICY_PACKS,
   previewResearchPlan,
   reviseResearchPlan,
@@ -33,6 +42,8 @@ export interface P9LiveReadiness {
   readonly proposerProfileFamily: string | null;
   readonly evaluatorProfileFamily: string | null;
   readonly priceCatalogDigest: string | null;
+  readonly providerProfileCatalogDigest: string | null;
+  readonly liveAuthorityReceiptDigest: string | null;
 }
 
 export interface P9CliDependencies {
@@ -57,62 +68,126 @@ const DEFAULT_COVERAGE_THRESHOLDS = PlanCoverageThresholdsSchema.parse({
 
 export async function inspectP9LiveReadiness(
   env: Readonly<Record<string, string | undefined>>,
+  expected: {
+    readonly plan?: ResearchPlan;
+    readonly acceptanceReceipt?: PlanAcceptanceReceipt;
+    readonly executionId?: string;
+    readonly question?: string;
+    readonly sourceClassificationPolicyDigest?: string;
+    readonly now?: string;
+  } = {},
 ): Promise<P9LiveReadiness> {
   const blockers: string[] = [];
-  if (env.MAMMOTH_P9_LIVE_RESEARCH !== 'authorized') {
-    blockers.push('live_authorization_missing');
-  }
-  if (!env.MAMMOTH_P9_SEARCH_API_KEY)
-    blockers.push('search_credential_missing');
-  if (env.MAMMOTH_P9_SEARCH_BILLING_AUTHORIZATION !== 'authorized') {
-    blockers.push('search_billing_authorization_missing');
-  }
-  if (!env.MAMMOTH_P9_PROVIDER_BASE_URL) {
-    blockers.push('model_provider_base_url_missing');
-  }
-  if (!env.MAMMOTH_P9_PROVIDER_API_KEY) {
-    blockers.push('model_provider_credential_missing');
-  }
-  if (env.MAMMOTH_P9_MODEL_BILLING_AUTHORIZATION !== 'authorized') {
-    blockers.push('model_billing_authorization_missing');
-  }
-  const proposerModel = env.MAMMOTH_P9_PROPOSER_MODEL;
-  const evaluatorModel = env.MAMMOTH_P9_EVALUATOR_MODEL;
-  const proposerFamily = env.MAMMOTH_P9_PROPOSER_PROFILE_FAMILY;
-  const evaluatorFamily = env.MAMMOTH_P9_EVALUATOR_PROFILE_FAMILY;
-  if (!proposerModel || !proposerFamily)
-    blockers.push('proposer_profile_missing');
-  if (!evaluatorModel || !evaluatorFamily)
-    blockers.push('evaluator_profile_missing');
-  if (proposerFamily && evaluatorFamily && proposerFamily === evaluatorFamily) {
-    blockers.push('model_profile_families_not_distinct');
-  }
-
   let priceCatalogDigest: string | null = null;
+  let providerProfileCatalogDigest: string | null = null;
+  let liveAuthorityReceiptDigest: string | null = null;
+  let proposerFamily: string | null = null;
+  let evaluatorFamily: string | null = null;
   const catalogPath = env.MAMMOTH_P9_PRICE_CATALOG_PATH;
+  const profileCatalogPath = env.MAMMOTH_P9_PROVIDER_PROFILE_CATALOG_PATH;
+  const authorityPath = env.MAMMOTH_P9_LIVE_AUTHORITY_RECEIPT_PATH;
+  const expectedAuthorityDigest = env.MAMMOTH_P9_EXPECTED_AUTHORITY_DIGEST;
+  const trustedIssuerId = env.MAMMOTH_P9_TRUSTED_AUTHORIZER_ID;
+  if (!expectedAuthorityDigest) blockers.push('authority_trust_anchor_missing');
+  if (!trustedIssuerId) blockers.push('trusted_authorizer_missing');
+  let catalog: ProviderPriceCatalog | null = null;
+  let profileCatalog: P9ProviderProfileCatalog | null = null;
+  let authority: P9LiveAuthorityReceipt | null = null;
   if (!catalogPath) {
     blockers.push('immutable_price_catalog_missing');
   } else {
     try {
-      const catalog = ProviderPriceCatalogSchema.parse(
+      catalog = ProviderPriceCatalogSchema.parse(
         JSON.parse(await readFile(resolve(catalogPath), 'utf8')),
       );
-      const requiredEffects = new Set([
-        'search',
-        'retrieval',
-        'parser',
-        'model',
-      ]);
-      for (const entry of catalog.entries)
-        requiredEffects.delete(entry.effectKind);
-      if (requiredEffects.size > 0) blockers.push('price_catalog_incomplete');
       priceCatalogDigest = catalog.catalogDigest;
     } catch {
       blockers.push('immutable_price_catalog_invalid');
     }
   }
+  if (!profileCatalogPath) {
+    blockers.push('immutable_provider_profile_catalog_missing');
+  } else {
+    try {
+      profileCatalog = P9ProviderProfileCatalogSchema.parse(
+        JSON.parse(await readFile(resolve(profileCatalogPath), 'utf8')),
+      );
+      providerProfileCatalogDigest = profileCatalog.catalogDigest;
+    } catch {
+      blockers.push('immutable_provider_profile_catalog_invalid');
+    }
+  }
+  if (!authorityPath) {
+    blockers.push('scoped_live_authority_receipt_missing');
+  } else {
+    try {
+      authority = P9LiveAuthorityReceiptSchema.parse(
+        JSON.parse(await readFile(resolve(authorityPath), 'utf8')),
+      );
+      liveAuthorityReceiptDigest = authority.receiptDigest;
+    } catch {
+      blockers.push('scoped_live_authority_receipt_invalid');
+    }
+  }
+  if (!expected.plan) blockers.push('accepted_plan_missing');
+  if (!expected.acceptanceReceipt)
+    blockers.push('plan_acceptance_receipt_missing');
+  if (!expected.executionId) blockers.push('execution_identity_missing');
+  if (!expected.question) blockers.push('authorized_question_missing');
+  if (!expected.sourceClassificationPolicyDigest) {
+    blockers.push('source_classification_policy_missing');
+  }
+  if (
+    catalog &&
+    profileCatalog &&
+    authority &&
+    expectedAuthorityDigest &&
+    trustedIssuerId &&
+    expected.plan &&
+    expected.acceptanceReceipt &&
+    expected.executionId &&
+    expected.question &&
+    expected.sourceClassificationPolicyDigest
+  ) {
+    try {
+      const lineage = assertP9LiveAuthorityLineage({
+        receipt: authority,
+        profileCatalog,
+        priceCatalog: catalog,
+        expectedAuthorityDigest,
+        trustedIssuerId,
+        executionId: expected.executionId,
+        question: expected.question,
+        sourceClassificationPolicyDigest:
+          expected.sourceClassificationPolicyDigest,
+        plan: expected.plan,
+        acceptanceReceipt: expected.acceptanceReceipt,
+        now: expected.now ?? new Date().toISOString(),
+      });
+      proposerFamily = lineage.proposerProfile.profileFamilyId;
+      evaluatorFamily = lineage.evaluatorProfile.profileFamilyId;
+      for (const profile of lineage.profiles) {
+        if (
+          profile.credentialEnvVar &&
+          !env[profile.credentialEnvVar]?.trim()
+        ) {
+          blockers.push(`provider_credential_missing:${profile.profileId}`);
+        }
+      }
+    } catch (error) {
+      blockers.push(
+        error instanceof GovernanceError
+          ? error.code
+          : 'live_authority_lineage_invalid',
+      );
+    }
+  }
   // P9 live execution remains structurally unavailable until its effect ports
-  // mechanically reserve every request through P9BudgetAuthority.
+  // resolve the issuer from a protected trust store, durably consume the
+  // single-use authority, and mechanically reserve every request through
+  // P9BudgetAuthority.
+  blockers.push('protected_authority_trust_store_unavailable');
+  blockers.push('authority_consumption_store_unavailable');
   blockers.push('live_executor_unavailable');
   return {
     ready: blockers.length === 0,
@@ -120,6 +195,8 @@ export async function inspectP9LiveReadiness(
     proposerProfileFamily: proposerFamily ?? null,
     evaluatorProfileFamily: evaluatorFamily ?? null,
     priceCatalogDigest,
+    providerProfileCatalogDigest,
+    liveAuthorityReceiptDigest,
   };
 }
 
@@ -178,7 +255,11 @@ export async function executeP9ResearchCli(
       return await reviseCommand(tail, io, now());
     }
     if (command === 'run') {
-      assertOptions(tail.slice(1), ['--output', '--offline-corpus']);
+      assertOptions(tail.slice(1), [
+        '--output',
+        '--offline-corpus',
+        '--execution-id',
+      ]);
       return await runCommand(tail, io, env, now());
     }
     if (command === 'inspect') {
@@ -379,7 +460,19 @@ async function runCommand(
     });
     artifacts = run.artifacts;
   } else {
-    const readiness = await inspectP9LiveReadiness(env);
+    const executionId = option(argv.slice(1), '--execution-id');
+    const sourceClassificationPolicyDigest =
+      env.MAMMOTH_P9_EXPECTED_SOURCE_POLICY_DIGEST;
+    const readiness = await inspectP9LiveReadiness(env, {
+      plan,
+      acceptanceReceipt: receipt,
+      question: plan.question,
+      now: timestamp,
+      ...(executionId ? { executionId } : {}),
+      ...(sourceClassificationPolicyDigest
+        ? { sourceClassificationPolicyDigest }
+        : {}),
+    });
     throw new Error(
       `P9 live run blocked before effects: ${readiness.blockers.join(', ')}`,
     );

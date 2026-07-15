@@ -6,6 +6,7 @@ import {
 } from '@mammoth/domain';
 import { describe, expect, it } from 'vitest';
 import {
+  calculateP9EffectCostBound,
   GovernanceError,
   P9BudgetAuthority,
   priceCatalogDigest,
@@ -121,6 +122,21 @@ describe('P9BudgetAuthority', () => {
     expect(() => reserve(budget, 'split')).toThrowError(
       /remaining P9 authorization/,
     );
+  });
+
+  it('charges flat catalog cost for every authorized retry attempt', () => {
+    const baseEntry = catalog().entries[0];
+    if (!baseEntry) throw new Error('test price entry missing');
+    const entry = {
+      ...baseEntry,
+      flatCostUsd: 1,
+      costPerRequestUsd: 0,
+    };
+    expect(calculateP9EffectCostBound(entry, ceiling(3))).toMatchObject({
+      currencyUsd: 3,
+      requests: 3,
+      durationMs: 3_000,
+    });
   });
 
   it('preserves lost settlement as ambiguous conservative spend', () => {

@@ -71,7 +71,16 @@ The explicitly labelled `--offline-corpus PATH` mode composes the frozen P9
 fixture runtime and exact-bundle verifier without network or paid effects. There
 is deliberately no injectable live callback. A run without the offline corpus
 always stops at `live_executor_unavailable`, even when credentials and authority
-variables are present. `doctor --p9` reports which future P9-specific credentials,
-billing authority, immutable pricing, and distinct model profile families are
-missing, but those values cannot make this scaffolding live-ready. The next slice
-must wire mechanically budgeted effect ports before any live execution exists.
+variables are present. `doctor --p9` loads only digest-checked artifacts named by
+`MAMMOTH_P9_PRICE_CATALOG_PATH`, `MAMMOTH_P9_PROVIDER_PROFILE_CATALOG_PATH`, and
+`MAMMOTH_P9_LIVE_AUTHORITY_RECEIPT_PATH`. The scoped receipt must bind the exact
+accepted plan and question, single execution, price and provider catalogs,
+source-classification policy, distinct proposer/evaluator identities, model
+configuration, destinations, billing accounts, full budget vector, actor, and
+validity interval. The operator must also pin the receipt digest with
+`MAMMOTH_P9_EXPECTED_AUTHORITY_DIGEST` and the trusted issuer with
+`MAMMOTH_P9_TRUSTED_AUTHORIZER_ID`; self-resealed JSON is not authority.
+Credential environment variable names come from the immutable profiles; loose
+model/billing environment assertions are ignored. Even a valid artifact chain
+remains blocked until the next slice provides durable single-use consumption and
+a protected issuer trust store plus mechanically budgeted effect ports.

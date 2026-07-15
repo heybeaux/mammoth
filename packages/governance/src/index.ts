@@ -5,5 +5,6 @@ export * from './local-store.js';
 export * from './model-egress.js';
 export * from './p9-budget-authority.js';
 export * from './p9-plan-coverage.js';
+export * from './p9-live-authority.js';
 export * from './p9-plan-authority.js';
 export * from './revalidation.js';

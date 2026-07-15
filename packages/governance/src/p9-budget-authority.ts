@@ -152,7 +152,7 @@ export function priceCatalogDigest(
   return canonicalDigest(input);
 }
 
-function calculateBound(
+export function calculateP9EffectCostBound(
   entry: ProviderPriceCatalogEntry,
   ceiling: EffectRequestCeiling,
 ): P9BudgetVector {
@@ -170,7 +170,7 @@ function calculateBound(
   const durationMs = ceiling.durationMs * attempts;
   return P9BudgetVectorSchema.parse({
     currencyUsd: roundedCurrency(
-      entry.flatCostUsd +
+      entry.flatCostUsd * attempts +
         requests * entry.costPerRequestUsd +
         inputTokens * entry.costPerInputTokenUsd +
         outputTokens * entry.costPerOutputTokenUsd +
@@ -309,7 +309,7 @@ export class P9BudgetAuthority {
         'provider price catalog entry is quarantined after a bound breach',
       );
     }
-    const reserved = calculateBound(entry, request.ceiling);
+    const reserved = calculateP9EffectCostBound(entry, request.ceiling);
     const prospective = add(add(this.#spent, this.#reserved), reserved);
     if (!within(prospective, this.limit)) {
       this.#deny(request.reservationId, request.actorId, 'budget_exhausted');
@@ -573,7 +573,10 @@ export class P9BudgetAuthority {
       let recalculated: P9BudgetVector | undefined;
       if (entry) {
         try {
-          recalculated = calculateBound(entry, reservation.bound.ceiling);
+          recalculated = calculateP9EffectCostBound(
+            entry,
+            reservation.bound.ceiling,
+          );
         } catch {
           recalculated = undefined;
         }

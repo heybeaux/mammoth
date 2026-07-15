@@ -2576,8 +2576,10 @@ function verifyT6LiveAuthorityGate(): void {
   invariant(
     p8Only.status === 'blocked_live_exhibition' &&
       !p8Only.safeForEffects &&
-      p8Only.liveAuthorization.includes('MAMMOTH_P9_LIVE_RESEARCH') &&
-      p8Only.liveBilling.includes('MAMMOTH_P9_LIVE_BILLING_AUTHORIZATION'),
+      p8Only.liveAuthorization.includes(
+        'environment flags cannot authorize P9 live effects',
+      ) &&
+      p8Only.liveBilling.includes('environment flags cannot authorize billing'),
     'T6 authority gate does not treat P8 live flags as P9 authorization',
   );
 
@@ -2596,7 +2598,7 @@ function verifyT6LiveAuthorityGate(): void {
     configuredButUnauthorized.status === 'blocked_live_exhibition' &&
       !configuredButUnauthorized.safeForEffects &&
       configuredButUnauthorized.liveAuthorization.includes(
-        'immutable scoped human authorization receipt is missing',
+        'a pinned, scoped authority receipt is required',
       ),
     'T6 authority gate refuses environment-only self-authorization',
   );

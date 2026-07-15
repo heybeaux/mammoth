@@ -15,16 +15,17 @@ Never use a branch, worktree, or accepted spawn as proof that work is active.
 
 ## Ownership
 
-| Assignment | State           | Owner/runtime             | Worktree / branch                                                                     | Base      | Record                     | Next                             |
-| ---------- | --------------- | ------------------------- | ------------------------------------------------------------------------------------- | --------- | -------------------------- | -------------------------------- |
-| `P9-PLAN`  | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                                  | `1de5b37` | [P9-PLAN](#p9-plan-record) | complete                         |
-| `P9-T0`    | merged          | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`                   | `2aeb3db` | [P9-T0](#p9-t0-record)     | complete                         |
-| `P9-T1`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9` | [P9-T1](#p9-t1-record)     | complete                         |
-| `P9-T2`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8` | [P9-T2](#p9-t2-record)     | complete                         |
-| `P9-T3`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38` | [P9-T3](#p9-t3-record)     | complete                         |
-| `P9-T4`    | merged          | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f` | [P9-T4](#p9-t4-record)     | complete                         |
-| `P9-T5`    | merged/verified | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t5-generic-retry` / `feat/p9-t5-generic-execution-retry`     | `ff03482` | [P9-T5](#p9-t5-record)     | complete                         |
-| `P9-T6`    | remediation     | Scout / primary session   | `/private/tmp/mammoth-p9-t6-reconcile` / `fix/p9-t6-reconcile-pr75`                   | `7349a30` | [P9-T6](#p9-t6-record)     | disable unsafe live path; harden |
+| Assignment   | State           | Owner/runtime             | Worktree / branch                                                                     | Base      | Record                                                        | Next                             |
+| ------------ | --------------- | ------------------------- | ------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------- | -------------------------------- |
+| `P9-PLAN`    | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-plan` / `plan/p9-mammoth-2`                                  | `1de5b37` | [P9-PLAN](#p9-plan-record)                                    | complete                         |
+| `P9-T0`      | merged          | Scout / cron continuation | `/private/tmp/mammoth-p9-t0-baseline` / `acceptance/p9-t0-baseline`                   | `2aeb3db` | [P9-T0](#p9-t0-record)                                        | complete                         |
+| `P9-T1`      | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t1-budget-metadata` / `feat/p9-t1-budget-metadata`           | `5db0fc9` | [P9-T1](#p9-t1-record)                                        | complete                         |
+| `P9-T2`      | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t2-safe-acquisition` / `feat/p9-t2-safe-acquisition`         | `60e2da8` | [P9-T2](#p9-t2-record)                                        | complete                         |
+| `P9-T3`      | merged          | Scout / primary session   | `/private/tmp/mammoth-p9-t3-entailment-admission` / `feat/p9-t3-entailment-admission` | `bbc6b38` | [P9-T3](#p9-t3-record)                                        | complete                         |
+| `P9-T4`      | merged          | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t4-planning` / `feat/p9-t4-planning`                         | `33d291f` | [P9-T4](#p9-t4-record)                                        | complete                         |
+| `P9-T5`      | merged/verified | Scout / OpenClaw subagent | `/private/tmp/mammoth-p9-t5-generic-retry` / `feat/p9-t5-generic-execution-retry`     | `ff03482` | [P9-T5](#p9-t5-record)                                        | complete                         |
+| `P9-T6`      | remediation     | Scout / primary session   | `/private/tmp/mammoth-p9-t6-reconcile` / `fix/p9-t6-reconcile-pr75`                   | `7349a30` | [P9-T6](#p9-t6-record)                                        | disable unsafe live path; harden |
+| `P9-T6-AUTH` | implementation  | Scout / Codex subagent    | `/private/tmp/mammoth-p9-t6-authority-contract` / `feat/p9-t6-authority-contract`     | `14a8fec` | [P9-T6 authority contracts](#p9-t6-authority-contract-record) | parent integration review        |
 
 ## Required state fields for implementation lanes
 
@@ -413,6 +414,59 @@ handoff, integration commit, blockers, and replacement audit.
   pre-transport budget persistence, observed usage/cost receipts, immutable
   price/profile/authority lineage, fail-closed source classification, and
   adversarial replay before seeking separate authority for any live effect.
+
+### P9-T6 authority contract record
+
+- Objective: define immutable P9 live authority and provider-profile catalog
+  contracts, validate exact plan/catalog/profile/pricing lineage, and make CLI
+  readiness consume artifacts rather than trusting loose environment claims.
+- Runtime identity: Codex-native task `/root/implement_t6_authority_contract`;
+  no separate durable run/model identity is exposed.
+- Worktree/branch/base: `/private/tmp/mammoth-p9-t6-authority-contract`;
+  `feat/p9-t6-authority-contract`; exact reconciliation head
+  `14a8fec8b7cddb74fc4fd34ddd7e52d0347649e7`.
+- Owned paths: P9 live authority domain/governance contracts and tests, P9 CLI
+  readiness/tests/docs, and this ledger. Prohibited: credentials, transport,
+  search/provider calls, live bundle, release/tag/receipt work, and the separate
+  `/private/tmp/mammoth-p9-t6-reconcile` worktree.
+- Independent review of initial commit `e0765c511` returned BLOCK: self-digested
+  artifacts had no out-of-band trust anchor, execution/question binding,
+  single-use scope, full-vector/request ceilings, complete provider/model and
+  billing lineage, exact role/effect mapping, or credential-free origins.
+- Remediation binds a trusted issuer plus pinned authority digest, one exact
+  execution/question/accepted plan and nonce, full budget vector aggregated
+  from immutable per-profile request ceilings, source-classification policy,
+  destinations, billing accounts, and complete model checkpoint/capability/
+  prompt/output/configuration identities. Legacy environment flags, credentials,
+  budgets, and model names are explicitly ignored as authority.
+- A second independent review of `95d144b676` found that raw request ceilings
+  omitted retry multiplication and were not conservatively priced against the
+  accepted search, retrieval/parsing, and model allocations. Remediation now
+  reuses the same exported cost-bound calculation as `P9BudgetAuthority`,
+  requires one unambiguous price entry per profile, prices every attempt/token/
+  byte/request, and rejects category or total overspend. The exact $100 search
+  request and three-attempt undercount attacks are regression tests.
+- Final re-review found one narrower retry-pricing gap: flat catalog charges
+  were applied once per effect rather than once per authorized attempt. The
+  shared bound calculator now multiplies flat and variable costs by attempts;
+  a three-attempt flat-only search that exceeds the search allocation is an
+  explicit regression test.
+- Acceptance: digest-checked closed schemas; exact scoped plan, acceptance,
+  catalog, pricing, profile, budget, actor, and validity validation; distinct
+  proposer/evaluator families; adversarial resealed substitutions and replay
+  rejected; CLI remains unconditionally blocked at both
+  `authority_consumption_store_unavailable` and `live_executor_unavailable`,
+  with no effects.
+- Gates: frozen install before repository-local commands PASS; focused domain
+  (3), governance (3), and CLI (9) tests PASS; format PASS; lint PASS; workspace
+  typecheck PASS; full workspace tests PASS; build PASS; `verify:p8` PASS with
+  unchanged manifest digest
+  `sha256:d154c6e1df6bfdb41f5222643f33862fa4eb15531af75ce6194171150077298f`;
+  `verify:p9` PASS with `T6 live_authority_gate=pass live_effects=not_run`.
+  Exact committed SHA is handed to the parent for integration review; this lane
+  does not push or open a PR.
+- Blockers: none inside this offline contract slice. This is not T6 completion
+  and does not authorize any metered live effect.
 
 ## Release evidence
 
