@@ -42,6 +42,7 @@ import {
   assessPlanCoverage,
   isClaimRelevantToPlan,
   P9BudgetAuthority,
+  P9_DOMAIN_POLICY_PACKS,
   P9_PLAN_ACCEPTANCE_POLICY_ID,
   PlanCoverageThresholdsSchema,
   P9CoverageEvidenceRecordSchema,
@@ -1935,6 +1936,19 @@ export function verifyP9ExactBundle(
     'plan-acceptance-receipt.json',
     PlanAcceptanceReceiptSchema,
   );
+  try {
+    assertP9AcceptedPlanChain({
+      planProposal,
+      plan,
+      acceptanceReceipt,
+      pack: P9_DOMAIN_POLICY_PACKS[plan.domainPackId],
+    });
+  } catch (error) {
+    throw new P9GenericResearchError(
+      'exact_bundle_chain_invalid',
+      `accepted plan chain is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   assert(
     plan.proposalId === planProposal.proposalId &&
       plan.proposalDigest === planProposal.proposalDigest &&
