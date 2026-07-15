@@ -13,9 +13,56 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  verification:
+    name: verify / ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: static
+            postgres: false
+            command: |
+              pnpm format:check
+              pnpm lint
+              pnpm typecheck
+          - name: tests
+            postgres: false
+            command: pnpm test
+          - name: build
+            postgres: false
+            command: pnpm build
+          - name: foundation
+            postgres: false
+            command: |
+              pnpm verify:evidence
+              pnpm verify:audit
+              pnpm verify:phase-1
+              pnpm verify:phase-2
+              pnpm verify:adapters
+              pnpm verify:m2
+              pnpm verify:m3
+              pnpm --filter @mammoth/mvp-acceptance verify
+              pnpm eval:offline
+              pnpm verify:mvp
+          - name: p2-p4
+            postgres: true
+            command: |
+              pnpm verify:p2:profile
+              pnpm verify:p3
+              pnpm verify:p4
+          - name: p5-p7
+            postgres: false
+            command: |
+              pnpm verify:p5
+              pnpm verify:p6
+              pnpm verify:p7
+          - name: p8-p9
+            postgres: false
+            command: |
+              pnpm verify:p8
+              pnpm verify:p9
 
     steps:
       - name: Check out repository
@@ -34,78 +81,26 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Locate PostgreSQL native tools
+        if: matrix.postgres
         run: pg_config --bindir
 
       - name: Create ephemeral profile credential
+        if: matrix.postgres
         run: echo "MAMMOTH_PG_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
 
-      - name: Check formatting
-        run: pnpm format:check
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Test
-        run: pnpm test
-
-      - name: Build
-        run: pnpm build
-
-      - name: Verify evidence policy
-        run: pnpm verify:evidence
-
-      - name: Verify audit integrity
-        run: pnpm verify:audit
-
-      - name: Verify Phase 1
-        run: pnpm verify:phase-1
-
-      - name: Verify Phase 2
-        run: pnpm verify:phase-2
-
-      - name: Verify adapter contracts
-        run: pnpm verify:adapters
-
-      - name: Verify runtime composition
-        run: pnpm verify:m2
-
-      - name: Verify operator CLI
-        run: pnpm verify:m3
-
-      - name: Verify MVP acceptance
-        run: pnpm --filter @mammoth/mvp-acceptance verify
-
-      - name: Run offline evaluations
-        run: pnpm eval:offline
-
-      - name: Verify MVP checkpoint
-        run: pnpm verify:mvp
-
-      - name: Verify P2 production profile lifecycle and backup
+      - name: Run ${{ matrix.name }} validation
         env:
           MAMMOTH_PROFILE_ROOT: ${{ runner.temp }}/mammoth-production-profile
-        run: pnpm verify:p2:profile
+        run: ${{ matrix.command }}
 
-      - name: Verify P3 Temporal acceptance
-        run: pnpm verify:p3
-
-      - name: Verify P4 research-cell contracts
-        run: pnpm verify:p4
-
-      - name: Verify P5 isolated divergence
-        run: pnpm verify:p5
-
-      - name: Verify P6 research topology
-        run: pnpm verify:p6
-
-      - name: Verify P7 live research loop
-        run: pnpm verify:p7
-
-      - name: Verify P8 turnkey research
-        run: pnpm verify:p8
-
-      - name: Verify P9 acceptance baseline
-        run: pnpm verify:p9
+  verify:
+    name: verify
+    if: always()
+    needs: verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every validation group
+        env:
+          VERIFICATION_RESULT: ${{ needs.verification.result }}
+        run: test "$VERIFICATION_RESULT" = success
