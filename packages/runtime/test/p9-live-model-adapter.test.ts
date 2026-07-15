@@ -30,7 +30,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
             claimId: 'claim-1',
             verdict: 'entailed',
             semanticDeltas: [],
-            reasonCodes: [],
+            reasonCodes: ['quote_entails_statement'],
           },
         ],
       },
@@ -98,6 +98,21 @@ describe('OpenAI-compatible P9 live model adapter', () => {
       'https://openrouter.ai/api/v1/chat/completions',
     ]);
     expect(requests.map((request) => request.max_tokens)).toEqual([1200, 800]);
+    expect(requests[1]?.response_format).toMatchObject({
+      json_schema: {
+        schema: {
+          properties: {
+            findings: {
+              items: {
+                properties: {
+                  reasonCodes: { minItems: 1 },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
     for (const request of requests) {
       expect(request.response_format).toMatchObject({
         type: 'json_schema',
