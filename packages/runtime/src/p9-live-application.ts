@@ -80,7 +80,7 @@ import {
 export const P9_LIVE_EXHIBITION_QUESTION =
   'Using the current upstream repository and primary technical sources, which bounded change to JustVugg/colibri should be tested first on a 128 GB Apple-silicon machine, and what experiment would distinguish a real improvement from measurement noise?';
 export const P9_LIVE_SOURCE_CLASSIFICATION_POLICY_DIGEST = canonicalDigest(
-  'p9-live-source-classification/v2',
+  'p9-live-source-classification/v3',
 );
 
 const USER_AGENT = 'mammoth-research/0.9';
@@ -88,6 +88,7 @@ const ROBOTS_POLICY_ID = 'p9-live-robots-not-checked/v1';
 const RIGHTS_POLICY_ID = 'p9-live-rights-unknown/v1';
 const COORDINATE_SPACE = 'utf16-code-units/v1';
 const CURRENT_COMMIT_DATE_POLICY_ID = 'p9-live-current-commit-date/v1';
+const P9_LIVE_PARSER_CLASS = 'mammoth-deterministic-text';
 
 export interface P9LiveCandidate {
   readonly candidateId: string;
@@ -682,7 +683,7 @@ async function runP9LiveApplicationExclusive(
         candidateId: 'github-api:justvugg-colibri:main',
         url: 'https://api.github.com/repos/JustVugg/colibri/commits/main',
         title: 'JustVugg/colibri current main commit',
-        sourceClass: 'repository_code',
+        sourceClass: 'repository_metadata',
         sourceFamilyId: 'github.com',
       });
     }
@@ -773,7 +774,7 @@ async function runP9LiveApplicationExclusive(
       ceiling: ceiling({
         bytes: retrieved.bytes.byteLength,
         durationMs: 30_000,
-        parserClass: 'text/plain',
+        parserClass: P9_LIVE_PARSER_CLASS,
       }),
       transport: measure(() => {
         const parsed = parserRegistry.parse(
@@ -830,12 +831,14 @@ async function runP9LiveApplicationExclusive(
           bytes: retrieved.bytes.byteLength,
         }),
       );
-      snapshots.push({
-        candidateId: candidate.candidateId,
-        body: parserResult.value.text,
-        sourceClass: candidate.sourceClass,
-        sourceFamilyId: candidate.sourceFamilyId,
-      });
+      if (!dateEvidence) {
+        snapshots.push({
+          candidateId: candidate.candidateId,
+          body: parserResult.value.text,
+          sourceClass: candidate.sourceClass,
+          sourceFamilyId: candidate.sourceFamilyId,
+        });
+      }
     } else {
       const error = parserResult.error;
       if (error instanceof ParserPolicyError && error.receipt) {

@@ -1,6 +1,7 @@
 import { canonicalDigest, P9LiveAuthorityReceiptSchema } from '@mammoth/domain';
 import {
   GovernanceError,
+  isClaimRelevantToSubquestion,
   MemoryP9DurableJournalStore,
   P9DurableBudgetAuthority,
   type P9DurableJournalStore,
@@ -58,7 +59,13 @@ function makeCatalog() {
     entries: [
       entry('brave-search', 'brave/web-search', 'search', null, 0.005),
       entry('public-retrieval', 'public-web', 'retrieval', null, 0.0005),
-      entry('bounded-parser', 'local-parser', 'parser', 'text/plain', 0.0001),
+      entry(
+        'bounded-parser',
+        'local-parser',
+        'parser',
+        'mammoth-deterministic-text',
+        0.0001,
+      ),
       entry('model-proposer-live', 'openrouter', 'model', null, 0.001),
       entry('model-evaluator-live', 'openrouter', 'model', null, 0.001),
     ],
@@ -160,7 +167,14 @@ function makeProfileCatalog() {
         'local-parser',
         'parser',
         'bounded-parser',
-        requestCeiling(8, 16_000_000, 240_000, 0, 0, 'text/plain'),
+        requestCeiling(
+          8,
+          16_000_000,
+          240_000,
+          0,
+          0,
+          'mammoth-deterministic-text',
+        ),
       ),
       profile(
         'fixture-proposer-profile',
@@ -659,7 +673,23 @@ describe('P9 live application', () => {
   it('precedes every outbound effect with a durable journaled reservation and settles observed usage', async () => {
     const journal = new MemoryP9DurableJournalStore();
     const catalog = makeCatalog();
-    const run = await runP9LiveApplication(makeInput({ journal, catalog }));
+    const model = makeModel({ calls: 0 });
+    let proposedSnapshotIds: readonly string[] = [];
+    const run = await runP9LiveApplication(
+      makeInput({
+        journal,
+        catalog,
+        model: {
+          ...model,
+          proposeClaims: (input) => {
+            proposedSnapshotIds = input.snapshots.map(
+              (snapshot) => snapshot.candidateId,
+            );
+            return Promise.resolve({ value: seeds, usage: modelUsage });
+          },
+        },
+      }),
+    );
 
     expect(run.exactBundleVerified).toBe(true);
     expect(run.authorizationReceipt.actorId).toBe('beaux');
@@ -725,6 +755,9 @@ describe('P9 live application', () => {
       'sha:0123456789abcdef0123456789abcdef01234567',
     );
     expect(currentCommitAttempt?.dateVerdict?.verdict).toBe('accepted');
+    expect(proposedSnapshotIds).not.toContain(
+      'github-api:justvugg-colibri:main',
+    );
 
     const liveArtifacts = resealP9LiveArtifacts({
       ...run.artifacts,
@@ -831,6 +864,28 @@ describe('P9 live application', () => {
         },
       }),
     );
+
+    const criticalBinding = run.bindings.find(
+      (binding) => binding.proposal.critical,
+    );
+    const plan = buildAcceptedP9LivePlan({
+      budgetUsd: 5,
+      now: now().toISOString(),
+      proposerProfile: model.proposerProfile,
+    }).plan;
+    const upstream = plan.subquestions.find(
+      (subquestion) => subquestion.subquestionId === 'sq-upstream',
+    );
+    if (!criticalBinding || !upstream) {
+      throw new Error('missing critical upstream fixture binding');
+    }
+    expect(
+      isClaimRelevantToSubquestion(
+        criticalBinding,
+        upstream.subquestionId,
+        upstream.question,
+      ),
+    ).toBe(true);
 
     expect(
       run.assessment.stopCriterionStatuses.find(
