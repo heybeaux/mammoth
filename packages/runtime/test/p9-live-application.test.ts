@@ -425,9 +425,9 @@ function makeModel(counter: { calls: number }): P9LiveModelAdapter {
         apple_silicon_constraints:
           'The machine constraint keeps the experiment focused on unified-memory Apple silicon rather than unrelated accelerator architectures.',
         first_bounded_change:
-          'Add one proposed opt-in prefetch mode that loads the next admitted expert instead of waiting for the following decode step; the current state reuses cached experts between decode steps, so test the change while preserving outputs.',
+          'Add one opt-in prefetch mode that loads the next admitted expert instead of waiting for the following decode step; the existing implementation reuses cached experts between decode steps, so test the change while preserving outputs.',
         experiment_design:
-          'After 5 warm-up runs, run 30 paired repetitions against the unchanged baseline with fixed model, prompt, temperature, and machine state. Reject and fail the change unless output parity holds; accept only a minimum 5% improvement with 95% bootstrap confidence.',
+          'After 5 warm-up runs, collect 30 paired trials against the unchanged baseline with fixed model, prompt, temperature, and machine state. Reject and fail the change unless identical output holds; accept only a 5% effect-size floor with 95% bootstrap confidence.',
         risks_and_contradictions:
           'Reject the change if output parity breaks or if its apparent speedup disappears across repeated controlled runs.',
         references_provenance:
