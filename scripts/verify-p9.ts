@@ -2934,8 +2934,11 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
     ...withExecution,
     receiptDigest: canonicalDigest(withExecution),
   };
-  const quote = 'The router reuses cached experts between decode steps.';
-  const body = `Colibri caches mmap-backed experts on Apple silicon. ${quote}`;
+  const quotes = [
+    'Upstream Colibri cache constrains one bounded change.',
+    'Colibri documentation logs current cache constraints.',
+  ] as const;
+  const body = quotes.join(' ');
   const candidateId = 'verify-colibri-source';
   const usage = {
     requests: 1,
@@ -2969,21 +2972,27 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
         usage: searchUsage,
       }),
   };
-  const seeds: readonly P9LiveClaimSeed[] = [
-    {
-      claimId: 'verify-claim-router-reuse',
+  const sectionIds = [
+    'executive_summary',
+    'upstream_colibri_facts',
+    'apple_silicon_constraints',
+    'first_bounded_change',
+    'experiment_design',
+    'risks_and_contradictions',
+  ] as const;
+  const seeds: readonly P9LiveClaimSeed[] = sectionIds.flatMap((sectionId) =>
+    quotes.map((quote, index) => ({
+      claimId: `verify-claim-${sectionId}-${String(index + 1)}`,
       candidateId,
       quote,
       statement: quote,
       subquestionIds: ['sq-upstream'],
-      sectionId: 'first_bounded_change',
-      claimGroupId: 'verify-group',
-      critical: false,
+      sectionId,
+      claimGroupId: `verify-group-${sectionId}-${String(index + 1)}`,
+      critical: sectionId === 'first_bounded_change',
       contradictionIds: [],
-    },
-  ];
-  const seed = seeds[0];
-  invariant(seed !== undefined, 'T6 verifier seed exists');
+    })),
+  );
   const model: P9LiveModelAdapter = {
     proposerProfile,
     evaluatorProfile,

@@ -10,14 +10,14 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     const requestUrls: string[] = [];
     const responses: unknown[] = [
       {
-        claims: Array.from({ length: 8 }, (_, index) => {
+        claims: Array.from({ length: 12 }, (_, index) => {
           const claimNumber = index + 1;
           return {
             claimId: `claim-${String(claimNumber)}`,
             evidenceSpanId: 'candidate-1:span:0',
             subquestionIds: ['sq-upstream'],
             sectionId:
-              claimNumber === 8
+              claimNumber === 12
                 ? 'first_bounded_change'
                 : 'upstream_colibri_facts',
             claimGroupId: 'group-1',
@@ -27,7 +27,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
         }),
       },
       {
-        findings: Array.from({ length: 8 }, (_, index) => ({
+        findings: Array.from({ length: 12 }, (_, index) => ({
           claimId: `claim-${String(index + 1)}`,
           verdict: 'entailed',
           semanticDeltas: [],
@@ -123,7 +123,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
       narrative.value.find(
         (section) => section.sectionId === 'first_bounded_change',
       )?.claimIds,
-    ).toEqual(['claim-8']);
+    ).toEqual(['claim-12']);
     expect(
       narrative.value
         .filter(
@@ -171,18 +171,20 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     expect(JSON.stringify(requests[2])).not.toContain(
       'Every executive_summary, first_bounded_change, and experiment_design',
     );
-    expect(JSON.stringify(requests[1]?.response_format)).not.toContain(
-      '"maxItems":0',
+    expect(JSON.stringify(requests[0]?.response_format)).not.toContain(
+      'minItems',
     );
     expect(JSON.stringify(requests[1]?.response_format)).not.toContain(
-      '"minItems":6',
+      'minItems',
+    );
+    expect(JSON.stringify(requests[1]?.response_format)).not.toContain(
+      'maxItems',
     );
     expect(requests[0]?.response_format).toMatchObject({
       json_schema: {
         schema: {
           properties: {
             claims: {
-              minItems: 8,
               items: {
                 properties: {
                   evidenceSpanId: { enum: ['candidate-1:span:0'] },
@@ -216,7 +218,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
                       ],
                     },
                   },
-                  reasonCodes: { minItems: 1 },
+                  reasonCodes: { type: 'array' },
                 },
               },
             },
@@ -294,7 +296,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     ).rejects.toThrow(/at least 6/u);
   });
 
-  it('fails closed when the provider ignores the eight-claim response contract', async () => {
+  it('fails closed when the provider ignores the twelve-claim response contract', async () => {
     const adapter = new OpenAICompatibleP9LiveModelAdapter({
       baseUrl: 'https://openrouter.ai/api/v1',
       apiKeyEnvironmentVariable: 'TEST_MODEL_KEY',
@@ -348,7 +350,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
 
     await expect(
       adapter.proposeClaims({ plan, snapshots: [] }),
-    ).rejects.toThrow(/at least 8/u);
+    ).rejects.toThrow(/at least 12/u);
   });
 
   it('rejects semantic deltas for character-identical extractive claims', async () => {

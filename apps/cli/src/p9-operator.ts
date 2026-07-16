@@ -1,5 +1,12 @@
 import { constants } from 'node:fs';
-import { mkdir, open, readdir, readFile, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  rename,
+  writeFile,
+} from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import {
   canonicalDigest,
@@ -623,6 +630,13 @@ async function liveCommand(
   const dependencyNow = dependencies.now;
   const liveNow = dependencyNow ? () => new Date(dependencyNow()) : undefined;
   const maxCandidates = numericOption(argv, '--max-candidates');
+  const outputDirectory = resolve(
+    option(argv, '--output') ?? `research/p9-live-${slug(timestamp)}`,
+  );
+  await mkdir(dirname(outputDirectory), { recursive: true });
+  await mkdir(outputDirectory);
+  const rejectionResidueName = 'live-claim-rejection-residue.json';
+  const rejectionResiduePath = join(outputDirectory, rejectionResidueName);
   const journal = new FileP9DurableJournalStore(
     resolve(requiredEnv(env, 'MAMMOTH_P9_BUDGET_JOURNAL_PATH')),
   );
@@ -663,6 +677,9 @@ async function liveCommand(
     }),
     ...(liveNow ? { now: liveNow } : {}),
     ...(maxCandidates !== undefined ? { maxCandidates } : {}),
+    rejectionResidueWriter: {
+      persist: (residue) => writeDurableJson(rejectionResiduePath, residue),
+    },
   });
   const artifacts = resealP9LiveArtifacts({
     ...run.artifacts,
@@ -681,10 +698,10 @@ async function liveCommand(
     'live-recovered-reservations.jsonl': toJsonLines(run.recoveredReservations),
     'live-budget-journal.jsonl': `${journal.readLines().join('\n')}\n`,
   });
-  const outputDirectory = resolve(
-    option(argv, '--output') ?? `research/p9-live-${slug(timestamp)}`,
-  );
-  await writeFreshP9Bundle(outputDirectory, artifacts);
+  await writeFreshP9Bundle(outputDirectory, artifacts, {
+    preparedDirectory: true,
+    preexistingArtifactNames: new Set([rejectionResidueName]),
+  });
   const verification = verifyP9LiveBundle(
     await loadP9BundleDirectory(outputDirectory),
     {
@@ -721,15 +738,30 @@ async function liveCommand(
 export async function writeFreshP9Bundle(
   outputDirectory: string,
   artifacts: Readonly<Record<string, string>>,
+  options: {
+    readonly preparedDirectory?: boolean;
+    readonly preexistingArtifactNames?: ReadonlySet<string>;
+  } = {},
 ): Promise<void> {
   const output = resolve(outputDirectory);
-  await mkdir(dirname(output), { recursive: true });
-  await mkdir(output);
+  if (options.preparedDirectory !== true) {
+    await mkdir(dirname(output), { recursive: true });
+    await mkdir(output);
+  }
   const createdDirectories = new Set<string>(['']);
   for (const [name, content] of Object.entries(artifacts).sort(([a], [b]) =>
     a.localeCompare(b),
   )) {
     assertSafeArtifactName(name);
+    if (options.preexistingArtifactNames?.has(name)) {
+      const existing = await readFile(join(output, name), 'utf8');
+      if (existing !== content) {
+        throw new Error(
+          `P9 prepared artifact changed before bundle sealing: ${name}`,
+        );
+      }
+      continue;
+    }
     const segments = name.split('/');
     let relativeDirectory = '';
     for (const segment of segments.slice(0, -1)) {
@@ -754,6 +786,26 @@ export async function writeFreshP9Bundle(
       await handle.close();
     }
   }
+}
+
+async function writeDurableJson(path: string, value: unknown): Promise<void> {
+  const content = `${JSON.stringify(value, null, 2)}\n`;
+  const temporaryPath = `${path}.${String(process.pid)}.tmp`;
+  const handle = await open(
+    temporaryPath,
+    constants.O_CREAT |
+      constants.O_EXCL |
+      constants.O_WRONLY |
+      constants.O_NOFOLLOW,
+    0o600,
+  );
+  try {
+    await handle.writeFile(content, 'utf8');
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  await rename(temporaryPath, path);
 }
 
 function assertSafeArtifactName(name: string): void {

@@ -239,6 +239,31 @@ export interface P9LiveApplicationInput {
   readonly thresholds?: PlanCoverageThresholds;
   readonly maxCandidates?: number;
   readonly includeMandatorySourceTargets?: boolean;
+  readonly rejectionResidueWriter?: P9LiveRejectionResidueWriter;
+}
+
+export interface P9LiveClaimRejectionResidue {
+  readonly claimId: string;
+  readonly evidenceSpanId: string;
+  readonly candidateId: string;
+  readonly sectionId: string;
+  readonly subquestionIds: readonly string[];
+  readonly planRelevant: boolean;
+  readonly evaluatorVerdict: P9LiveEvaluatorFinding['verdict'] | null;
+  readonly evaluatorReasonCodes: readonly string[];
+  readonly admissionDecision: P9ClaimAdmission['decision'] | null;
+  readonly admissionReasonCodes: readonly string[];
+}
+
+export interface P9LiveRejectionResidue {
+  readonly schemaVersion: '1.0.0';
+  readonly executionId: string;
+  readonly stage: 'proposed' | 'evaluated';
+  readonly claims: readonly P9LiveClaimRejectionResidue[];
+}
+
+export interface P9LiveRejectionResidueWriter {
+  readonly persist: (residue: P9LiveRejectionResidue) => Promise<void>;
 }
 
 export interface P9LiveApplicationRun extends P9GenericResearchRun {
@@ -1106,6 +1131,95 @@ async function runP9LiveApplicationExclusive(
     }
   }
 
+  const governedSpans = deriveP9GovernedClaimSpans(snapshots);
+  const governedSpanBySeed = new Map(
+    seeds.map((seed) => {
+      const matchingSpans = governedSpans.filter(
+        (span) =>
+          span.candidateId === seed.candidateId && span.quote === seed.quote,
+      );
+      if (matchingSpans.length !== 1 || !matchingSpans[0]) {
+        throw new GovernanceError(
+          'proposer_evidence_span_binding_invalid',
+          `P9 live proposed claim must bind exactly one immutable governed evidence span: ${seed.claimId}`,
+        );
+      }
+      return [seed.claimId, matchingSpans[0]] as const;
+    }),
+  );
+  const proposalPlanRelevance = new Map(
+    seeds.map((seed) => {
+      const span = governedSpanBySeed.get(seed.claimId);
+      const relevant =
+        span !== undefined &&
+        planBundle.plan.subquestions.some(
+          (subquestion) =>
+            seed.subquestionIds.includes(subquestion.subquestionId) &&
+            isStatementRelevantToSubquestion({
+              statement: seed.statement,
+              sourceClass: span.sourceClass,
+              question: subquestion.question,
+            }),
+        );
+      return [seed.claimId, relevant] as const;
+    }),
+  );
+  const makeRejectionResidue = (
+    stage: P9LiveRejectionResidue['stage'],
+    evaluatorByClaimId: ReadonlyMap<string, P9LiveEvaluatorFinding> = new Map(),
+    admissionByClaimId: ReadonlyMap<string, P9ClaimAdmission> = new Map(),
+  ): P9LiveRejectionResidue => ({
+    schemaVersion: '1.0.0',
+    executionId: input.executionId,
+    stage,
+    claims: seeds.map((seed) => {
+      const evaluator = evaluatorByClaimId.get(seed.claimId);
+      const admission = admissionByClaimId.get(seed.claimId);
+      return {
+        claimId: seed.claimId,
+        evidenceSpanId:
+          governedSpanBySeed.get(seed.claimId)?.evidenceSpanId ?? '<unbound>',
+        candidateId: seed.candidateId,
+        sectionId: seed.sectionId,
+        subquestionIds: [...seed.subquestionIds],
+        planRelevant: proposalPlanRelevance.get(seed.claimId) === true,
+        evaluatorVerdict: evaluator?.verdict ?? null,
+        evaluatorReasonCodes: [...(evaluator?.reasonCodes ?? [])],
+        admissionDecision: admission?.decision ?? null,
+        admissionReasonCodes: [...(admission?.reasonCodes ?? [])],
+      };
+    }),
+  });
+  const persistRejectionResidue = async (
+    residue: P9LiveRejectionResidue,
+  ): Promise<void> => {
+    await input.rejectionResidueWriter?.persist(residue);
+  };
+
+  await persistRejectionResidue(makeRejectionResidue('proposed'));
+
+  for (const section of seeds.length === 0
+    ? []
+    : planBundle.plan.reportOutline.sections) {
+    const sectionSeeds = seeds.filter(
+      (seed) =>
+        seed.sectionId === section.sectionId &&
+        proposalPlanRelevance.get(seed.claimId) === true,
+    );
+    const distinctSpanIds = new Set(
+      sectionSeeds.map(
+        (seed) => governedSpanBySeed.get(seed.claimId)?.evidenceSpanId,
+      ),
+    );
+    distinctSpanIds.delete(undefined);
+    if (sectionSeeds.length < 2 || distinctSpanIds.size < 2) {
+      throw new GovernanceError(
+        'mandatory_section_seed_redundancy_missing',
+        `P9 live proposal validation requires at least two plan-relevant claims from distinct governed evidence spans for mandatory report section: ${section.sectionId}`,
+      );
+    }
+  }
+
   const evaluatorResult = await executor.execute<
     readonly P9LiveEvaluatorFinding[]
   >({
@@ -1131,6 +1245,13 @@ async function runP9LiveApplicationExclusive(
       : new Error(String(evaluatorResult.error));
   }
   const evaluatorResults = evaluatorResult.value;
+
+  const rawEvaluatorByClaimId = new Map(
+    evaluatorResults.map((result) => [result.claimId, result]),
+  );
+  await persistRejectionResidue(
+    makeRejectionResidue('evaluated', rawEvaluatorByClaimId),
+  );
 
   const evaluatedClaimIds = new Set(
     evaluatorResults.map((result) => result.claimId),
@@ -1259,6 +1380,16 @@ async function runP9LiveApplicationExclusive(
     });
   }
 
+  const admissionByClaimId = new Map(
+    admissions.map((admission) => [admission.proposalId, admission]),
+  );
+  const finalRejectionResidue = makeRejectionResidue(
+    'evaluated',
+    evaluatorByClaimId,
+    admissionByClaimId,
+  );
+  await persistRejectionResidue(finalRejectionResidue);
+
   const relevantAdmittedBindings = bindings.filter(
     (binding) =>
       binding.admission.decision === 'admitted' &&
@@ -1357,7 +1488,7 @@ async function runP9LiveApplicationExclusive(
     ]),
   );
 
-  const run = compileP9ObservedResearchBundle({
+  const compiledRun = compileP9ObservedResearchBundle({
     executionId: input.executionId,
     now: timestamp(),
     ...planBundle,
@@ -1377,9 +1508,14 @@ async function runP9LiveApplicationExclusive(
     ),
     narrativeSections,
   });
-  verifyP9ExactBundle(run.artifacts);
+  const artifacts = resealP9LiveArtifacts({
+    ...compiledRun.artifacts,
+    'live-claim-rejection-residue.json': `${JSON.stringify(finalRejectionResidue, null, 2)}\n`,
+  });
+  verifyP9ExactBundle(artifacts);
   return {
-    ...run,
+    ...compiledRun,
+    artifacts,
     exactBundleVerified: true,
     authorizationReceipt: authority.authorizationReceipt,
     providerProfileCatalog,
