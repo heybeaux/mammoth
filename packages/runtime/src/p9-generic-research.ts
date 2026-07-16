@@ -345,36 +345,66 @@ function assertReadableNarrative(
       .get(sectionId)
       ?.sentences.filter((sentence) => sentence.kind === 'factual')
       .flatMap((sentence) => sentence.claimIds) ?? [];
+  const failedChecks: string[] = [];
+  if (executive.length < 80)
+    failedChecks.push('executive_summary lead shorter than 80 characters');
+  if (change.length < 80)
+    failedChecks.push('first_bounded_change lead shorter than 80 characters');
+  if (experiment.length < 80)
+    failedChecks.push('experiment_design lead shorter than 80 characters');
   if (
-    executive.length < 80 ||
-    change.length < 80 ||
-    experiment.length < 80 ||
-    (boundedChangeEvidenceAvailable &&
-      criticalSectionClaimIds('first_bounded_change').length === 0) ||
-    !/(test|change|implement|optimi[sz])/iu.test(change) ||
-    !/(current state|currently|today|existing|baseline)/iu.test(change) ||
-    !/(add|introduce|replace|remove|modify|implement)/iu.test(change) ||
+    boundedChangeEvidenceAvailable &&
+    criticalSectionClaimIds('first_bounded_change').length === 0
+  )
+    failedChecks.push('first_bounded_change cites no admitted claims');
+  if (!/(test|change|implement|optimi[sz])/iu.test(change))
+    failedChecks.push(
+      'change lead lacks a test/change/implement/optimise verb',
+    );
+  if (!/(current state|currently|today|existing|baseline)/iu.test(change))
+    failedChecks.push('change lead does not reference the current state');
+  if (!/(add|introduce|replace|remove|modify|implement)/iu.test(change))
+    failedChecks.push('change lead lacks a concrete delta verb');
+  if (
     !/(flag|harness|benchmark|test|function|kernel|configuration|mode|check)/iu.test(
       change,
-    ) ||
-    /(?:verification|optimization) path/iu.test(change) ||
-    !/(warm[- ]?up)/iu.test(experiment) ||
-    !/(repeat|repetition|paired (?:run|trial|sample))/iu.test(experiment) ||
-    !/(fixed|unchanged|control|baseline)/iu.test(experiment) ||
-    !/(confidence|statistical|bootstrap|t-test|wilcoxon)/iu.test(experiment) ||
-    !/(minimum|threshold|at least|greater than|exceed|floor)/iu.test(
-      experiment,
-    ) ||
+    )
+  )
+    failedChecks.push('change lead does not name a concrete artifact');
+  if (/(?:verification|optimization) path/iu.test(change))
+    failedChecks.push('change lead uses a vague "path" phrase');
+  if (!/(warm[- ]?up)/iu.test(experiment))
+    failedChecks.push('experiment lead does not specify warm-up');
+  if (!/(repeat|repetition|paired (?:run|trial|sample))/iu.test(experiment))
+    failedChecks.push(
+      'experiment lead does not specify repetitions or pairing',
+    );
+  if (!/(fixed|unchanged|control|baseline)/iu.test(experiment))
+    failedChecks.push('experiment lead does not fix a control or baseline');
+  if (!/(confidence|statistical|bootstrap|t-test|wilcoxon)/iu.test(experiment))
+    failedChecks.push('experiment lead does not name a statistical method');
+  if (
+    !/(minimum|threshold|at least|greater than|exceed|floor)/iu.test(experiment)
+  )
+    failedChecks.push(
+      'experiment lead does not state a minimum effect threshold',
+    );
+  if (
     !/(output parity|identical output|same output|output match)/iu.test(
       experiment,
-    ) ||
-    !/(pass|accept)/iu.test(experiment) ||
-    !/(fail|reject)/iu.test(experiment) ||
-    !/\d/u.test(experiment)
-  ) {
+    )
+  )
+    failedChecks.push('experiment lead does not require output parity');
+  if (!/(pass|accept)/iu.test(experiment))
+    failedChecks.push('experiment lead does not state a pass rule');
+  if (!/(fail|reject)/iu.test(experiment))
+    failedChecks.push('experiment lead does not state a fail rule');
+  if (!/\d/u.test(experiment))
+    failedChecks.push('experiment lead contains no numbers');
+  if (failedChecks.length > 0) {
     throw new P9GenericResearchError(
       'report_synthesis_incomplete',
-      'report must answer the question, name a bounded change, and describe a noise-resistant experiment',
+      `report must answer the question, name a bounded change, and describe a noise-resistant experiment; failed checks: ${failedChecks.join('; ')}`,
     );
   }
 }
