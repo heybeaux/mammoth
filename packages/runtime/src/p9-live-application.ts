@@ -1009,6 +1009,31 @@ async function runP9LiveApplicationExclusive(
   if (expectedClaimIds.size !== seeds.length) {
     throw new Error('P9 live proposer returned duplicate claimIds');
   }
+  const mandatorySourceClasses = new Set(
+    planBundle.plan.sourceClassTargets
+      .filter((target) => target.mandatory)
+      .map((target) => target.sourceClass),
+  );
+  const presentMandatorySourceClasses = new Set(
+    snapshots
+      .filter((snapshot) => mandatorySourceClasses.has(snapshot.sourceClass))
+      .map((snapshot) => snapshot.sourceClass),
+  );
+  const coveredSourceClasses = new Set(
+    seeds.flatMap((seed) =>
+      snapshots
+        .filter((snapshot) => snapshot.candidateId === seed.candidateId)
+        .map((snapshot) => snapshot.sourceClass),
+    ),
+  );
+  const missingSourceClass = [...presentMandatorySourceClasses].find(
+    (sourceClass) => !coveredSourceClasses.has(sourceClass),
+  );
+  if (missingSourceClass) {
+    throw new Error(
+      `P9 live proposer omitted mandatory source class: ${missingSourceClass}`,
+    );
+  }
   for (const seed of seeds) {
     const snapshot = snapshots.find(
       (entry) => entry.candidateId === seed.candidateId,

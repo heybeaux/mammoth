@@ -376,6 +376,8 @@ const modelUsage = {
 };
 
 function makeModel(counter: { calls: number }): P9LiveModelAdapter {
+  const seedTemplate = seeds[0];
+  if (!seedTemplate) throw new Error('expected a claim seed fixture');
   return {
     proposerProfile: {
       profileVersionId: 'fixture-proposer-profile',
@@ -389,17 +391,17 @@ function makeModel(counter: { calls: number }): P9LiveModelAdapter {
     },
     proposeClaims: ({ snapshots }) => {
       counter.calls += 1;
-      const matchingSnapshot = snapshots.find((snapshot) =>
-        snapshot.body.includes(QUOTE),
-      );
       return Promise.resolve({
-        value:
-          matchingSnapshot === undefined
-            ? []
-            : seeds.map((seed) => ({
-                ...seed,
-                candidateId: matchingSnapshot.candidateId,
-              })),
+        value: snapshots
+          .filter((snapshot) => snapshot.body.includes(QUOTE))
+          .map((snapshot, index) => ({
+            ...seedTemplate,
+            claimId:
+              index === 0
+                ? seedTemplate.claimId
+                : `${seedTemplate.claimId}-${String(index + 1)}`,
+            candidateId: snapshot.candidateId,
+          })),
         usage: modelUsage,
       });
     },
