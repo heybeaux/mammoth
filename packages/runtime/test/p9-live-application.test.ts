@@ -360,7 +360,7 @@ const seeds: readonly P9LiveClaimSeed[] = [
     quote: QUOTE,
     statement: QUOTE,
     subquestionIds: ['sq-upstream'],
-    sectionId: 'upstream_colibri_facts',
+    sectionId: 'first_bounded_change',
     claimGroupId: 'group-upstream',
     critical: false,
     contradictionIds: [],
@@ -425,9 +425,9 @@ function makeModel(counter: { calls: number }): P9LiveModelAdapter {
         apple_silicon_constraints:
           'The machine constraint keeps the experiment focused on unified-memory Apple silicon rather than unrelated accelerator architectures.',
         first_bounded_change:
-          'Implement and test one narrowly scoped Metal decode-loop optimization first, leaving public behavior and model outputs unchanged.',
+          'The current state reuses cached experts between decode steps; test one proposed change that prefetches the next admitted expert instead of waiting for the following decode step, while preserving outputs.',
         experiment_design:
-          'Run an unchanged baseline and the candidate build in repeated paired benchmarks with fixed model, prompt, temperature, and machine state; compare latency and throughput against measured variance.',
+          'After 5 warm-up runs, run 30 paired repetitions against the unchanged baseline with fixed model, prompt, temperature, and machine state. Accept only a minimum 5% improvement with 95% bootstrap confidence and output parity; otherwise reject and fail the change.',
         risks_and_contradictions:
           'Reject the change if output parity breaks or if its apparent speedup disappears across repeated controlled runs.',
         references_provenance:
@@ -1512,6 +1512,64 @@ describe('P9 live application', () => {
         }),
       ),
     ).rejects.toMatchObject({ code: 'report_narrative_unreadable' });
+  });
+
+  it('rejects an uncited bounded recommendation when supporting evidence is available', async () => {
+    const counter = { calls: 0 };
+    const model = makeModel(counter);
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          model: {
+            ...model,
+            synthesizeReport: async (input) => {
+              const result = await model.synthesizeReport(input);
+              return {
+                ...result,
+                value: result.value.map((section) =>
+                  section.sectionId === 'first_bounded_change'
+                    ? { ...section, claimIds: [] }
+                    : section.sectionId === 'executive_summary'
+                      ? {
+                          ...section,
+                          claimIds: input.claims.map((claim) => claim.claimId),
+                        }
+                      : section,
+                ),
+              };
+            },
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'exact_bundle_chain_invalid' });
+  });
+
+  it('rejects a non-executable experiment narrative', async () => {
+    const counter = { calls: 0 };
+    const model = makeModel(counter);
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          model: {
+            ...model,
+            synthesizeReport: async (input) => {
+              const result = await model.synthesizeReport(input);
+              return {
+                ...result,
+                value: result.value.map((section) =>
+                  section.sectionId === 'experiment_design'
+                    ? {
+                        ...section,
+                        lead: 'Benchmark the unchanged baseline against the candidate repeatedly under controlled conditions, then inspect latency and throughput for an apparent improvement beyond ordinary noise.',
+                      }
+                    : section,
+                ),
+              };
+            },
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'report_synthesis_incomplete' });
   });
 
   it('fails closed when the durable journal cannot accept the pre-transport record', async () => {

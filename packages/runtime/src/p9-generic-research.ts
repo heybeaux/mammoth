@@ -293,6 +293,7 @@ export interface P9ObservedResearchInput {
 function assertReadableNarrative(
   sections: readonly P9ReportSection[],
   required: boolean,
+  boundedChangeEvidenceAvailable: boolean,
 ): void {
   if (!required) return;
   const byId = new Map(sections.map((section) => [section.sectionId, section]));
@@ -339,12 +340,27 @@ function assertReadableNarrative(
   const executive = leadText('executive_summary');
   const change = leadText('first_bounded_change');
   const experiment = leadText('experiment_design');
+  const criticalSectionClaimIds = (sectionId: string): readonly string[] =>
+    byId
+      .get(sectionId)
+      ?.sentences.filter((sentence) => sentence.kind === 'factual')
+      .flatMap((sentence) => sentence.claimIds) ?? [];
   if (
     executive.length < 80 ||
     change.length < 80 ||
     experiment.length < 80 ||
+    (boundedChangeEvidenceAvailable &&
+      criticalSectionClaimIds('first_bounded_change').length === 0) ||
     !/(test|change|implement|optimi[sz])/iu.test(change) ||
-    !/(repeat|baseline|benchmark|variance|noise|confidence)/iu.test(experiment)
+    !/(current state|currently|today).*(proposed|change|instead|rather than|from)/iu.test(
+      change,
+    ) ||
+    !/(warm[- ]?up)/iu.test(experiment) ||
+    !/(repeat|repetition|paired run)/iu.test(experiment) ||
+    !/(confidence|statistical|bootstrap|t-test|wilcoxon)/iu.test(experiment) ||
+    !/(minimum|threshold|at least|greater than|exceed)/iu.test(experiment) ||
+    !/(pass|accept).*(fail|reject)/iu.test(experiment) ||
+    !/\d/u.test(experiment)
   ) {
     throw new P9GenericResearchError(
       'report_synthesis_incomplete',
@@ -1670,7 +1686,6 @@ export function compileP9ObservedResearchBundle(
       sentences,
     });
   }
-  assertReadableNarrative(sections, true);
   assertEveryP9FactualSentenceAdmitted(
     sections.flatMap((section) =>
       section.sentences.map((sentence) => ({
@@ -1696,6 +1711,7 @@ export function compileP9ObservedResearchBundle(
     assessedAt: now,
     assessmentId: `coverage:${executionId}`,
   });
+  assertReadableNarrative(sections, true, assessment.verdict === 'covered');
 
   const citations = relevantAdmitted.map((binding) => {
     const attempt = attemptById.get(binding.evidence.attemptId);
@@ -2296,6 +2312,7 @@ export function verifyP9ExactBundle(
     assertReadableNarrative(
       manifest.sections,
       plan.planId.startsWith('p9-live-'),
+      receipt.coverageVerdict === 'covered',
     );
   } catch (error) {
     throw new P9GenericResearchError(
