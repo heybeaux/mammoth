@@ -116,6 +116,9 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     expect(JSON.stringify(requests[1]?.response_format)).not.toContain(
       '"maxItems":0',
     );
+    expect(JSON.stringify(requests[1]?.response_format)).not.toContain(
+      '"minItems":6',
+    );
     expect(requests[0]?.response_format).toMatchObject({
       json_schema: {
         schema: {
