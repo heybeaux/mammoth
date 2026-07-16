@@ -861,7 +861,7 @@ describe('P9 live application', () => {
 
     expect(retrieved).toEqual([
       'https://raw.githubusercontent.com/JustVugg/colibri/12d3bd51405fc95e40686ce686b5e4ebeb12aa7b/c/backend_metal.mm',
-      'https://github.com/JustVugg/colibri/blob/12d3bd51405fc95e40686ce686b5e4ebeb12aa7b/README.md',
+      'https://raw.githubusercontent.com/JustVugg/colibri/12d3bd51405fc95e40686ce686b5e4ebeb12aa7b/README.md',
       'https://huggingface.co/zai-org/GLM-5',
       'https://www.apple.com/newsroom/2024/10/apple-introduces-m4-pro-and-m4-max/',
       'https://arxiv.org/html/2509.24086v1',
@@ -1909,6 +1909,44 @@ describe('P9 live application', () => {
                     'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt.',
                   ),
                 })),
+        }),
+      ),
+    ).rejects.toSatisfy(
+      (error) =>
+        error instanceof GovernanceError &&
+        error.code === 'mandatory_seed_spans_missing' &&
+        error.message.includes('repository_docs'),
+    );
+    expect(modelCounter.calls).toBe(0);
+    expect(
+      records(journal).filter((record) =>
+        String(record.entry.reservationId ?? '').startsWith('model:'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('aborts for free when repository documentation seeds are only GitHub boilerplate', async () => {
+    const journal = new MemoryP9DurableJournalStore();
+    const modelCounter = { calls: 0 };
+    const githubChrome = [
+      'Skip to content. Navigation Menu. Toggle navigation. Sign in.',
+      'Code review and vulnerability reports are available from GitHub Security.',
+      'Pull requests and Actions can show cache documentation facts.',
+    ].join(' ');
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          journal,
+          modelCounter,
+          includeMandatorySourceTargets: true,
+          maxCandidates: 6,
+          retrieve: (request) =>
+            request.url.includes('/README.md')
+              ? fakeRetrieve(request).then((retrieved) => ({
+                  ...retrieved,
+                  bytes: new TextEncoder().encode(githubChrome),
+                }))
+              : fakeRetrieve(request),
         }),
       ),
     ).rejects.toSatisfy(
