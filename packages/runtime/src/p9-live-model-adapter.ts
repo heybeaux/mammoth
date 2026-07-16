@@ -262,7 +262,7 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
       this.proposerProfile.modelId,
       [
         'You are the final research editor. Produce one concise, readable lead paragraph for every required section.',
-        'Answer the research question directly. The first_bounded_change lead must contrast the admitted current state with exactly one proposed implementation delta, use the word test, change, implement, or optimize, and explain why it comes first. Never recommend behavior that the admitted current-state evidence says is already implemented.',
+        'Answer the research question directly. The first_bounded_change lead must contrast the admitted current state with exactly one proposed implementation delta, use add, introduce, replace, remove, or modify, name a concrete flag, harness, benchmark, test, function, kernel, configuration, mode, or check, and explain why it comes first. Do not use vague phrases such as verification path or optimization path. Never recommend behavior that the admitted current-state evidence says is already implemented.',
         'The experiment_design lead must be executable: specify warm-up runs, a numeric repetition count, an unchanged baseline, paired runs, fixed controls, metrics, a named confidence or statistical method, a numeric minimum effect threshold, output-parity requirements, and explicit pass/accept plus fail/reject rules.',
         'Use only the admitted claims supplied. Do not copy raw JSON, markup, source metadata, or long quotations.',
         'Do not introduce unsupported numbers or factual claims. Keep each lead between 100 and 600 characters.',
