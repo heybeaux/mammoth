@@ -309,6 +309,48 @@ describe('P9 bounded parser registry', () => {
     }
   });
 
+  it('parses HTML-leading Markdown declared as plain text without treating it as HTML', () => {
+    const markdown = [
+      '<p align="center">',
+      '  <img src="assets/colibri.svg" alt="Colibri">',
+      '</p>',
+      '',
+      '**Tiny engine, immense model.**',
+      'Colibri caches mmap-backed experts on Apple silicon.',
+    ].join('\n');
+
+    const parsed = registry.parse(encoder.encode(markdown), 'text/plain', {
+      now: () => NOW,
+      sourceUrl: 'https://raw.example.com/project/README.md',
+    });
+
+    expect(parsed.text).toBe(markdown);
+    expect(parsed.mediaSupportDecision).toMatchObject({
+      declaredMediaType: 'text/plain',
+      sniffedMediaType: 'text/html',
+      fileExtension: '.md',
+      status: 'supported',
+      reasonCode: 'registered_parser_selected',
+    });
+    expect(parsed.parserReceipt).toMatchObject({
+      status: 'parsed',
+      mediaType: 'text/plain',
+    });
+  });
+
+  it('rejects the same plain-text and HTML mismatch for a non-Markdown URL', () => {
+    expect(() =>
+      registry.parse(
+        encoder.encode('<p>generic mislabeled HTML</p>'),
+        'text/plain',
+        {
+          now: () => NOW,
+          sourceUrl: 'https://example.com/document.txt',
+        },
+      ),
+    ).toThrow('PARSER_MEDIA_TYPE_CONFLICT');
+  });
+
   it('preserves a typed parser failure receipt for malformed JSON', () => {
     try {
       registry.parse(encoder.encode('{not-json'), 'application/json', {
