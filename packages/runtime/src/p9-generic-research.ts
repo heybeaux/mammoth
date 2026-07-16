@@ -316,21 +316,14 @@ function assertReadableNarrative(
       );
     }
   }
-  const executive =
+  const leadText = (sectionId: string): string =>
     byId
-      .get('executive_summary')
-      ?.sentences.map((sentence) => sentence.text)
-      .join(' ') ?? '';
-  const change =
-    byId
-      .get('first_bounded_change')
-      ?.sentences.map((sentence) => sentence.text)
-      .join(' ') ?? '';
-  const experiment =
-    byId
-      .get('experiment_design')
-      ?.sentences.map((sentence) => sentence.text)
-      .join(' ') ?? '';
+      .get(sectionId)
+      ?.sentences.find((sentence) => sentence.kind === 'interpretive')?.text ??
+    '';
+  const executive = leadText('executive_summary');
+  const change = leadText('first_bounded_change');
+  const experiment = leadText('experiment_design');
   if (
     executive.length < 80 ||
     change.length < 80 ||
@@ -1642,10 +1635,12 @@ export function compileP9ObservedResearchBundle(
         claimIds: [],
       },
     ];
-    const orderedClaimIds = new Set(narrative.claimIds);
-    for (const binding of relevantAdmitted.filter((entry) =>
-      orderedClaimIds.has(entry.proposal.proposalId),
-    )) {
+    const relevantByClaimId = new Map(
+      relevantAdmitted.map((entry) => [entry.proposal.proposalId, entry]),
+    );
+    for (const claimId of narrative.claimIds) {
+      const binding = relevantByClaimId.get(claimId);
+      if (!binding) continue;
       if (binding.evidence.reportSectionId !== outline.sectionId) continue;
       sentences.push({
         sentenceId: `s:${outline.sectionId}:${binding.proposal.proposalId}`,

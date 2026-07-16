@@ -3091,6 +3091,7 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
     `parser:${candidateId}`,
     'model:proposer',
     'model:evaluator',
+    'model:synthesizer',
   ]) {
     const reserve = sequenceOf('reserve', id);
     const start = sequenceOf('transport_started', id);
