@@ -1,4 +1,5 @@
 import {
+  mkdir,
   mkdtemp,
   readFile,
   readdir,
@@ -415,5 +416,34 @@ describe('P9 application CLI', () => {
       writeFreshP9Bundle(output, { 'report.md': 'malicious overwrite' }),
     ).rejects.toThrow();
     expect(await readFile(target, 'utf8')).toBe('untouched');
+  });
+
+  it('seals a prepared live run directory without overwriting durable residue', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mammoth-p9-prepared-'));
+    const output = join(root, 'bundle');
+    const residue = '{"stage":"evaluated"}\n';
+    await mkdir(output);
+    await writeFile(join(output, 'live-claim-rejection-residue.json'), residue);
+
+    await writeFreshP9Bundle(
+      output,
+      {
+        'live-claim-rejection-residue.json': residue,
+        'report.md': '# Verified report\n',
+      },
+      {
+        preparedDirectory: true,
+        preexistingArtifactNames: new Set([
+          'live-claim-rejection-residue.json',
+        ]),
+      },
+    );
+
+    expect(
+      await readFile(join(output, 'live-claim-rejection-residue.json'), 'utf8'),
+    ).toBe(residue);
+    expect(await readFile(join(output, 'report.md'), 'utf8')).toBe(
+      '# Verified report\n',
+    );
   });
 });

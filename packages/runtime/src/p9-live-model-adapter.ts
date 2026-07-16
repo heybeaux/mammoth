@@ -52,7 +52,7 @@ const EvaluatorFindingSchema = z.object({
 });
 
 const ClaimSeedResponseSchema = z.object({
-  claims: z.array(ClaimSelectionSchema).min(8),
+  claims: z.array(ClaimSelectionSchema).min(12),
 });
 
 const EvaluatorResponseSchema = z.object({
@@ -170,11 +170,11 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'and map it to the upstream subquestion instead of selecting pipeline_tag.',
         'Prefer coverage across distinct source',
         'classes and all mandatory subquestions over multiple claims from one',
-        'source. Return at least eight claim selections. Before adding a second',
+        'source. Return at least twelve claim selections. Before adding a second',
         'claim from',
         'any source class, return one valid claim from every distinct sourceClass',
         'present in the snapshots. Then add redundant claims from distinct sources',
-        'until there are at least eight, while directly covering every mandatory',
+        'until there are at least twelve, while directly covering every mandatory',
         'subquestion. Never use a page title, navigation label, breadcrumb, or',
         'source name as a claim. Choose substantive body sentences. A claim from',
         'security_advisory evidence must quote text that explicitly discusses at',
@@ -184,8 +184,10 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'factual premise essential to the bounded-change decision.',
         'Set each claim sectionId to exactly one sectionId from the plan',
         'reportOutline, choosing the report section the quote most directly',
-        'supports. Assign at least one claim whose quote supports the',
-        'bounded-change decision to the first_bounded_change section.',
+        'supports. Every reportOutline section is mandatory. Assign at least two',
+        'plan-relevant claims selected from two distinct evidenceSpanIds to every',
+        'reportOutline section, including first_bounded_change. Do not reuse the',
+        'same evidenceSpanId as both redundant seeds for a section.',
         'Return the governed JSON object whose claims array contains objects',
         'with keys: claimId, evidenceSpanId, subquestionIds, sectionId,',
         'claimGroupId, critical, contradictionIds.',
@@ -434,40 +436,34 @@ function claimSeedResponseFormat(
   evidenceSpanIds: readonly string[],
   sectionIds: readonly string[],
 ): object {
-  return structuredResponseFormat(
-    'p9_live_claim_seeds',
-    'claims',
-    {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        claimId: { type: 'string', minLength: 1 },
-        evidenceSpanId: { type: 'string', enum: [...evidenceSpanIds] },
-        subquestionIds: {
-          type: 'array',
-          minItems: 1,
-          items: { type: 'string', minLength: 1 },
-        },
-        sectionId: { type: 'string', enum: [...sectionIds] },
-        claimGroupId: { type: 'string', minLength: 1 },
-        critical: { type: 'boolean' },
-        contradictionIds: {
-          type: 'array',
-          items: { type: 'string', minLength: 1 },
-        },
+  return structuredResponseFormat('p9_live_claim_seeds', 'claims', {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      claimId: { type: 'string', minLength: 1 },
+      evidenceSpanId: { type: 'string', enum: [...evidenceSpanIds] },
+      subquestionIds: {
+        type: 'array',
+        items: { type: 'string', minLength: 1 },
       },
-      required: [
-        'claimId',
-        'evidenceSpanId',
-        'subquestionIds',
-        'sectionId',
-        'claimGroupId',
-        'critical',
-        'contradictionIds',
-      ],
+      sectionId: { type: 'string', enum: [...sectionIds] },
+      claimGroupId: { type: 'string', minLength: 1 },
+      critical: { type: 'boolean' },
+      contradictionIds: {
+        type: 'array',
+        items: { type: 'string', minLength: 1 },
+      },
     },
-    8,
-  );
+    required: [
+      'claimId',
+      'evidenceSpanId',
+      'subquestionIds',
+      'sectionId',
+      'claimGroupId',
+      'critical',
+      'contradictionIds',
+    ],
+  });
 }
 
 function evaluatorResponseFormat(): object {
@@ -486,7 +482,6 @@ function evaluatorResponseFormat(): object {
       },
       reasonCodes: {
         type: 'array',
-        minItems: 1,
         items: { type: 'string', minLength: 1 },
       },
     },
@@ -517,7 +512,6 @@ function structuredResponseFormat(
   name: string,
   collectionKey: string,
   itemSchema: object,
-  minimumItems?: number,
 ): object {
   return {
     type: 'json_schema',
@@ -531,7 +525,6 @@ function structuredResponseFormat(
           [collectionKey]: {
             type: 'array',
             items: itemSchema,
-            ...(minimumItems === undefined ? {} : { minItems: minimumItems }),
           },
         },
         required: [collectionKey],

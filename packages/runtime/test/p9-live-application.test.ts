@@ -29,9 +29,11 @@ import {
 const now = () => new Date('2026-07-15T18:00:00.000Z');
 
 const SOURCE_BODY =
-  'Colibri caches mmap-backed experts on Apple silicon. Upstream Colibri documentation states the router reuses cached experts between decode steps.';
+  'Colibri caches mmap-backed experts on Apple silicon. Upstream Colibri documentation states the router reuses cached experts between decode steps. Current upstream Colibri documentation records cache behavior that constrains a bounded first change.';
 const QUOTE =
   'Upstream Colibri documentation states the router reuses cached experts between decode steps.';
+const QUOTE_TWO =
+  'Current upstream Colibri documentation records cache behavior that constrains a bounded first change.';
 const CANDIDATE_ID = 'cand-colibri-readme';
 
 function makeCatalog() {
@@ -353,19 +355,32 @@ const fakeRetrieve: typeof retrieveSource = (request) => {
   });
 };
 
-const seeds: readonly P9LiveClaimSeed[] = [
-  {
-    claimId: 'claim-router-reuse',
-    candidateId: CANDIDATE_ID,
-    quote: QUOTE,
-    statement: QUOTE,
-    subquestionIds: ['sq-upstream'],
-    sectionId: 'first_bounded_change',
-    claimGroupId: 'group-upstream',
-    critical: false,
-    contradictionIds: [],
-  },
-];
+const governedSectionIds = [
+  'executive_summary',
+  'upstream_colibri_facts',
+  'apple_silicon_constraints',
+  'first_bounded_change',
+  'experiment_design',
+  'risks_and_contradictions',
+] as const;
+
+const seeds: readonly P9LiveClaimSeed[] = governedSectionIds.flatMap(
+  (sectionId) =>
+    [QUOTE, QUOTE_TWO].map((quote, quoteIndex) => ({
+      claimId:
+        sectionId === 'first_bounded_change' && quoteIndex === 0
+          ? 'claim-router-reuse'
+          : `claim-${sectionId}-${String(quoteIndex + 1)}`,
+      candidateId: CANDIDATE_ID,
+      quote,
+      statement: quote,
+      subquestionIds: ['sq-upstream'],
+      sectionId,
+      claimGroupId: `group-${sectionId}-${String(quoteIndex + 1)}`,
+      critical: sectionId === 'first_bounded_change',
+      contradictionIds: [],
+    })),
+);
 
 const modelUsage = {
   requests: 1,
@@ -376,8 +391,6 @@ const modelUsage = {
 };
 
 function makeModel(counter: { calls: number }): P9LiveModelAdapter {
-  const seedTemplate = seeds[0];
-  if (!seedTemplate) throw new Error('expected a claim seed fixture');
   return {
     proposerProfile: {
       profileVersionId: 'fixture-proposer-profile',
@@ -393,15 +406,21 @@ function makeModel(counter: { calls: number }): P9LiveModelAdapter {
       counter.calls += 1;
       return Promise.resolve({
         value: snapshots
-          .filter((snapshot) => snapshot.body.includes(QUOTE))
-          .map((snapshot, index) => ({
-            ...seedTemplate,
-            claimId:
-              index === 0
-                ? seedTemplate.claimId
-                : `${seedTemplate.claimId}-${String(index + 1)}`,
-            candidateId: snapshot.candidateId,
-          })),
+          .filter(
+            (snapshot) =>
+              snapshot.body.includes(QUOTE) &&
+              snapshot.body.includes(QUOTE_TWO),
+          )
+          .flatMap((snapshot, snapshotIndex) =>
+            seeds.map((seed) => ({
+              ...seed,
+              claimId:
+                snapshotIndex === 0
+                  ? seed.claimId
+                  : `${seed.claimId}-${String(snapshotIndex + 1)}`,
+              candidateId: snapshot.candidateId,
+            })),
+          ),
         usage: modelUsage,
       });
     },
@@ -1489,8 +1508,10 @@ describe('P9 live application', () => {
       .map(
         (line) => JSON.parse(line) as { evidence?: { candidateId?: string } },
       );
-    expect(claims).toHaveLength(1);
-    expect(claims[0]?.evidence?.candidateId).toBe(CANDIDATE_ID);
+    expect(claims).toHaveLength(seeds.length);
+    expect(
+      claims.every((claim) => claim.evidence?.candidateId === CANDIDATE_ID),
+    ).toBe(true);
     expect(counter.calls).toBe(3);
   });
 
@@ -1557,7 +1578,7 @@ describe('P9 live application', () => {
     });
   });
 
-  it('does not purchase report synthesis when no relevant admitted claim survives for the bounded change', async () => {
+  it('does not purchase evaluation when the bounded change lacks redundant plan-relevant seeds', async () => {
     const counter = { calls: 0 };
     const model = makeModel(counter);
     await expect(
@@ -1569,14 +1590,11 @@ describe('P9 live application', () => {
               const proposed = await model.proposeClaims(input);
               return {
                 ...proposed,
-                value: [
-                  ...proposed.value,
-                  ...proposed.value.map((claim) => ({
-                    ...claim,
-                    claimId: `${claim.claimId}-other-section`,
-                    sectionId: 'upstream_colibri_facts',
-                  })),
-                ],
+                value: proposed.value.filter(
+                  (claim) =>
+                    claim.sectionId !== 'first_bounded_change' ||
+                    claim.claimId === 'claim-router-reuse',
+                ),
               };
             },
             evaluateClaims: ({ claims }) => {
@@ -1596,11 +1614,71 @@ describe('P9 live application', () => {
         }),
       ),
     ).rejects.toMatchObject({
-      code: 'report_synthesis_incomplete',
-      message:
-        'first_bounded_change has no plan-relevant admitted claim before report synthesis',
+      code: 'mandatory_section_seed_redundancy_missing',
     });
-    expect(counter.calls).toBe(2);
+    expect(counter.calls).toBe(1);
+  });
+
+  it('persists proposer and evaluator rejection residue before compilation', async () => {
+    const counter = { calls: 0 };
+    const model = makeModel(counter);
+    const persisted: unknown[] = [];
+    const residueInput = {
+      rejectionResidueWriter: {
+        persist: (residue: unknown) => {
+          persisted.push(residue);
+          return Promise.resolve();
+        },
+      },
+    } as Partial<P9LiveApplicationInput>;
+
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          ...residueInput,
+          model: {
+            ...model,
+            evaluateClaims: ({ claims }) => {
+              counter.calls += 1;
+              return Promise.resolve({
+                value: claims.map((claim) => ({
+                  claimId: claim.claimId,
+                  verdict:
+                    claim.claimId === 'claim-router-reuse'
+                      ? ('insufficient' as const)
+                      : ('entailed' as const),
+                  reasonCodes:
+                    claim.claimId === 'claim-router-reuse'
+                      ? ['text_belongs_to_different_source']
+                      : ['exact_quote_entails_statement'],
+                })),
+                usage: modelUsage,
+              });
+            },
+            synthesizeReport: () =>
+              Promise.reject(new Error('stop before compilation')),
+          },
+        }),
+      ),
+    ).rejects.toThrow();
+
+    expect(persisted).toHaveLength(3);
+    const finalResidue = persisted.at(-1) as {
+      executionId: string;
+      claims: unknown[];
+    };
+    expect(finalResidue.executionId).toBe('p9-live-test');
+    expect(finalResidue.claims).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          claimId: 'claim-router-reuse',
+          sectionId: 'first_bounded_change',
+          planRelevant: true,
+          evaluatorVerdict: 'insufficient',
+          evaluatorReasonCodes: ['text_belongs_to_different_source'],
+        }),
+      ]),
+    );
   });
 
   it('rejects a non-executable experiment narrative', async () => {
