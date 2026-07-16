@@ -61,7 +61,7 @@ const NarrativeResponseSchema = z.object({
       z
         .object({
           sectionId: z.string().min(1),
-          lead: z.string().min(24).max(600),
+          lead: z.string().min(100).max(600),
           claimIds: z.array(z.string().min(1)),
         })
         .strict(),
@@ -262,10 +262,10 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
       this.proposerProfile.modelId,
       [
         'You are the final research editor. Produce one concise, readable lead paragraph for every required section.',
-        'Answer the research question directly. The first_bounded_change lead must name exactly one small implementation change and explain why it comes first.',
-        'The experiment_design lead must specify a baseline, repeated paired runs, fixed controls, metrics, and a rule for distinguishing improvement from noise.',
+        'Answer the research question directly. The first_bounded_change lead must name exactly one small implementation change, use the word test, change, implement, or optimize, and explain why it comes first.',
+        'The experiment_design lead must specify a baseline, repeated paired runs, fixed controls, metrics, and a rule for distinguishing improvement from variance or noise. Use at least one of: repeated, baseline, benchmark, variance, noise, confidence.',
         'Use only the admitted claims supplied. Do not copy raw JSON, markup, source metadata, or long quotations.',
-        'Do not introduce unsupported numbers or factual claims. Keep each lead between 24 and 600 characters.',
+        'Do not introduce unsupported numbers or factual claims. Keep each lead between 100 and 600 characters.',
         'claimIds controls which exact admitted evidence sentences appear after the lead; use only IDs assigned to that section.',
         'Return only the governed JSON object with a sections array containing sectionId, lead, and claimIds.',
       ].join(' '),
@@ -512,7 +512,7 @@ function narrativeResponseFormat(
     additionalProperties: false,
     properties: {
       sectionId: { type: 'string', enum: [...sectionIds] },
-      lead: { type: 'string', minLength: 24, maxLength: 600 },
+      lead: { type: 'string', minLength: 100, maxLength: 600 },
       claimIds: {
         type: 'array',
         items: { type: 'string', enum: [...claimIds] },

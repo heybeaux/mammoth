@@ -8,7 +8,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
   it('binds each call to its reserved output ceiling and a strict JSON schema', async () => {
     const requests: Record<string, unknown>[] = [];
     const requestUrls: string[] = [];
-    const responses = [
+    const responses: unknown[] = [
       {
         claims: Array.from({ length: 8 }, (_, index) => {
           const claimNumber = index + 1;
@@ -30,6 +30,9 @@ describe('OpenAI-compatible P9 live model adapter', () => {
           semanticDeltas: [],
           reasonCodes: ['exact_quote_entails_statement'],
         })),
+      },
+      {
+        sections: [],
       },
     ];
     const fetchImpl: typeof fetch = (url, init) => {
@@ -89,12 +92,31 @@ describe('OpenAI-compatible P9 live model adapter', () => {
       claims: proposed.value,
     });
 
-    expect(requests).toHaveLength(2);
+    responses[0] = {
+      sections: [
+        ...plan.reportOutline.sections,
+        { sectionId: 'references_provenance' },
+      ].map((section) => ({
+        sectionId: section.sectionId,
+        lead: 'This governed narrative lead is deliberately long enough to satisfy the same substantive quality contract enforced during final bundle verification.',
+        claimIds: [],
+      })),
+    };
+    await adapter.synthesizeReport({
+      plan,
+      claims: proposed.value,
+      admittedClaimIds: [],
+    });
+
+    expect(requests).toHaveLength(3);
     expect(requestUrls).toEqual([
       'https://openrouter.ai/api/v1/chat/completions',
       'https://openrouter.ai/api/v1/chat/completions',
+      'https://openrouter.ai/api/v1/chat/completions',
     ]);
-    expect(requests.map((request) => request.max_tokens)).toEqual([1200, 800]);
+    expect(requests.map((request) => request.max_tokens)).toEqual([
+      1200, 800, 1200,
+    ]);
     for (const request of requests) {
       expect(request.response_format).toMatchObject({
         type: 'json_schema',
@@ -113,6 +135,9 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     );
     expect(JSON.stringify(requests[1])).toContain(
       'with no omissions, extras, or duplicate claimIds',
+    );
+    expect(JSON.stringify(requests[2])).toContain(
+      'Keep each lead between 100 and 600 characters',
     );
     expect(JSON.stringify(requests[1]?.response_format)).not.toContain(
       '"maxItems":0',
@@ -160,6 +185,21 @@ describe('OpenAI-compatible P9 live model adapter', () => {
                     },
                   },
                   reasonCodes: { minItems: 1 },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(requests[2]?.response_format).toMatchObject({
+      json_schema: {
+        schema: {
+          properties: {
+            sections: {
+              items: {
+                properties: {
+                  lead: { minLength: 100, maxLength: 600 },
                 },
               },
             },
