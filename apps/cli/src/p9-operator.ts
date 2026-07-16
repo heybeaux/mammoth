@@ -652,7 +652,10 @@ async function liveCommand(
       apiKeyEnvironmentVariable: requiredCredentialEnv(proposerProfile),
       proposerProfile: toModelProfile(proposerProfile),
       evaluatorProfile: toModelProfile(evaluatorProfile),
-      proposerMaxOutputTokens: proposerProfile.requestCeiling.outputTokens,
+      proposerMaxOutputTokens: Math.floor(
+        proposerProfile.requestCeiling.outputTokens /
+          proposerProfile.requestCeiling.requests,
+      ),
       evaluatorMaxOutputTokens: evaluatorProfile.requestCeiling.outputTokens,
       environment: env,
       fetchImpl,

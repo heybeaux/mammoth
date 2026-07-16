@@ -968,8 +968,8 @@ async function runP9LiveApplicationExclusive(
     id: 'model:proposer',
     catalogEntryId: 'model-proposer-live',
     ceiling: ceiling({
-      inputTokens: 120_000,
-      outputTokens: 24_000,
+      inputTokens: 80_000,
+      outputTokens: 12_000,
       bytes: 2_000_000,
       durationMs: 120_000,
     }),
@@ -1065,8 +1065,8 @@ async function runP9LiveApplicationExclusive(
     id: 'model:evaluator',
     catalogEntryId: 'model-evaluator-live',
     ceiling: ceiling({
-      inputTokens: 120_000,
-      outputTokens: 24_000,
+      inputTokens: 60_000,
+      outputTokens: 8_000,
       bytes: 2_000_000,
       durationMs: 120_000,
     }),
@@ -1221,8 +1221,8 @@ async function runP9LiveApplicationExclusive(
     id: 'model:synthesizer',
     catalogEntryId: 'model-proposer-live',
     ceiling: ceiling({
-      inputTokens: 60_000,
-      outputTokens: 8_000,
+      inputTokens: 40_000,
+      outputTokens: 12_000,
       bytes: 500_000,
       durationMs: 120_000,
     }),
