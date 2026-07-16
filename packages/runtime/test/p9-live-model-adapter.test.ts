@@ -107,6 +107,9 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     expect(JSON.stringify(requests[0])).toContain(
       'statement must be exactly identical to the quote',
     );
+    expect(JSON.stringify(requests[0])).toContain(
+      'Never use a page title, navigation label, breadcrumb, or source name',
+    );
     expect(JSON.stringify(requests[1])).toContain(
       'semanticDeltas must always be an empty array',
     );
