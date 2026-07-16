@@ -363,7 +363,8 @@ function assertReadableNarrative(
     !/(repeat|repetition|paired run)/iu.test(experiment) ||
     !/(confidence|statistical|bootstrap|t-test|wilcoxon)/iu.test(experiment) ||
     !/(minimum|threshold|at least|greater than|exceed)/iu.test(experiment) ||
-    !/(pass|accept).*(fail|reject)/iu.test(experiment) ||
+    !/(pass|accept)/iu.test(experiment) ||
+    !/(fail|reject)/iu.test(experiment) ||
     !/\d/u.test(experiment)
   ) {
     throw new P9GenericResearchError(
