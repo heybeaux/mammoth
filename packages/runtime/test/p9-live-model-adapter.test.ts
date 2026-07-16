@@ -10,7 +10,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     const requestUrls: string[] = [];
     const responses = [
       {
-        claims: Array.from({ length: 6 }, (_, index) => {
+        claims: Array.from({ length: 8 }, (_, index) => {
           const claimNumber = index + 1;
           return {
             claimId: `claim-${String(claimNumber)}`,
@@ -26,7 +26,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
         }),
       },
       {
-        findings: Array.from({ length: 6 }, (_, index) => ({
+        findings: Array.from({ length: 8 }, (_, index) => ({
           claimId: `claim-${String(index + 1)}`,
           verdict: 'entailed',
           semanticDeltas: [],
@@ -122,7 +122,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     expect(requests[0]?.response_format).toMatchObject({
       json_schema: {
         schema: {
-          properties: { claims: { minItems: 6 } },
+          properties: { claims: { minItems: 8 } },
         },
       },
     });
@@ -212,7 +212,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     ).rejects.toThrow(/at least 6/u);
   });
 
-  it('fails closed when the provider ignores the six-claim response contract', async () => {
+  it('fails closed when the provider ignores the eight-claim response contract', async () => {
     const adapter = new OpenAICompatibleP9LiveModelAdapter({
       baseUrl: 'https://openrouter.ai/api/v1',
       apiKeyEnvironmentVariable: 'TEST_MODEL_KEY',
@@ -268,7 +268,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
 
     await expect(
       adapter.proposeClaims({ plan, snapshots: [] }),
-    ).rejects.toThrow(/at least 6/u);
+    ).rejects.toThrow(/at least 8/u);
   });
 
   it('rejects semantic deltas for character-identical extractive claims', async () => {

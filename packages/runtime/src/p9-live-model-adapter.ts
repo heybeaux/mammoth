@@ -49,7 +49,7 @@ const EvaluatorFindingSchema = z.object({
 });
 
 const ClaimSeedResponseSchema = z.object({
-  claims: z.array(ClaimSeedSchema).min(6),
+  claims: z.array(ClaimSeedSchema).min(8),
 });
 
 const EvaluatorResponseSchema = z.object({
@@ -143,9 +143,11 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'directly answer, and the quote itself must include at least two material',
         'words from each mapped subquestion. Prefer coverage across distinct source',
         'classes and all mandatory subquestions over multiple claims from one',
-        'source. Return at least six claims: at least one valid claim from every',
-        'mandatory source class present in the snapshots, and enough claims to',
-        'directly cover every mandatory subquestion. Mark a claim critical only',
+        'source. Return at least eight claims. Before adding a second claim from',
+        'any source class, return one valid claim from every distinct sourceClass',
+        'present in the snapshots. Then add redundant claims from distinct sources',
+        'until there are at least eight, while directly covering every mandatory',
+        'subquestion. Mark a claim critical only',
         'when its quote directly supports a',
         'factual premise essential to the bounded-change decision.',
         'Return the governed JSON object whose claims array contains objects',
@@ -316,7 +318,7 @@ function claimSeedResponseFormat(): object {
         'contradictionIds',
       ],
     },
-    6,
+    8,
   );
 }
 
