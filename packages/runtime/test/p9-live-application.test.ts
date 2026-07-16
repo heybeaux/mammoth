@@ -425,7 +425,7 @@ function makeModel(counter: { calls: number }): P9LiveModelAdapter {
         apple_silicon_constraints:
           'The machine constraint keeps the experiment focused on unified-memory Apple silicon rather than unrelated accelerator architectures.',
         first_bounded_change:
-          'The current state reuses cached experts between decode steps; test one proposed change that prefetches the next admitted expert instead of waiting for the following decode step, while preserving outputs.',
+          'The current state reuses cached experts between decode steps; add one opt-in prefetch mode that loads the next admitted expert instead of waiting for the following decode step, then test it while preserving outputs.',
         experiment_design:
           'After 5 warm-up runs, run 30 paired repetitions against the unchanged baseline with fixed model, prompt, temperature, and machine state. Accept only a minimum 5% improvement with 95% bootstrap confidence and output parity; otherwise reject and fail the change.',
         risks_and_contradictions:
@@ -1561,6 +1561,34 @@ describe('P9 live application', () => {
                     ? {
                         ...section,
                         lead: 'Benchmark the unchanged baseline against the candidate repeatedly under controlled conditions, then inspect latency and throughput for an apparent improvement beyond ordinary noise.',
+                      }
+                    : section,
+                ),
+              };
+            },
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'report_synthesis_incomplete' });
+  });
+
+  it('rejects a vague bounded recommendation without a concrete delta', async () => {
+    const counter = { calls: 0 };
+    const model = makeModel(counter);
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          model: {
+            ...model,
+            synthesizeReport: async (input) => {
+              const result = await model.synthesizeReport(input);
+              return {
+                ...result,
+                value: result.value.map((section) =>
+                  section.sectionId === 'first_bounded_change'
+                    ? {
+                        ...section,
+                        lead: 'The current state is sensitive to kernel shape and rounding; implement one opt-in fixed-shape verification path first, then test it before interpreting any apparent performance improvement.',
                       }
                     : section,
                 ),
