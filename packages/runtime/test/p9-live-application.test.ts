@@ -28,12 +28,30 @@ import {
 
 const now = () => new Date('2026-07-15T18:00:00.000Z');
 
-const SOURCE_BODY =
-  'Colibri caches mmap-backed experts on Apple silicon. Upstream Colibri documentation states the router reuses cached experts between decode steps. Current upstream Colibri documentation records cache behavior that constrains a bounded first change.';
 const QUOTE =
   'Upstream Colibri documentation states the router reuses cached experts between decode steps.';
 const QUOTE_TWO =
   'Current upstream Colibri documentation records cache behavior that constrains a bounded first change.';
+const APPLE_QUOTES = [
+  'Apple silicon memory bandwidth constrains performance on a 128 GB machine.',
+  'Unified memory performance matters for Apple silicon on a 128 GB machine.',
+] as const;
+const EXPERIMENT_QUOTES = [
+  'A repeated-run measurement experiment distinguishes improvement from random noise.',
+  'Paired repeated measurements separate performance differences from chance and noise.',
+] as const;
+const RISK_QUOTES = [
+  'Memory safety guidance applies to security risks in a bounded Colibri code change.',
+  'Security guidance identifies memory safety risks for a bounded Colibri change.',
+] as const;
+const SOURCE_BODY = [
+  'Colibri caches mmap-backed experts on Apple silicon.',
+  QUOTE,
+  QUOTE_TWO,
+  ...APPLE_QUOTES,
+  ...EXPERIMENT_QUOTES,
+  ...RISK_QUOTES,
+].join(' ');
 const CANDIDATE_ID = 'cand-colibri-readme';
 
 function makeCatalog() {
@@ -365,8 +383,16 @@ const governedSectionIds = [
 ] as const;
 
 const seeds: readonly P9LiveClaimSeed[] = governedSectionIds.flatMap(
-  (sectionId) =>
-    [QUOTE, QUOTE_TWO].map((quote, quoteIndex) => ({
+  (sectionId) => {
+    const [subquestionId, quotes] =
+      sectionId === 'apple_silicon_constraints'
+        ? (['sq-apple-silicon', APPLE_QUOTES] as const)
+        : sectionId === 'experiment_design'
+          ? (['sq-experiment', EXPERIMENT_QUOTES] as const)
+          : sectionId === 'risks_and_contradictions'
+            ? (['sq-risk', RISK_QUOTES] as const)
+            : (['sq-upstream', [QUOTE, QUOTE_TWO]] as const);
+    return quotes.map((quote, quoteIndex) => ({
       claimId:
         sectionId === 'first_bounded_change' && quoteIndex === 0
           ? 'claim-router-reuse'
@@ -374,12 +400,13 @@ const seeds: readonly P9LiveClaimSeed[] = governedSectionIds.flatMap(
       candidateId: CANDIDATE_ID,
       quote,
       statement: quote,
-      subquestionIds: ['sq-upstream'],
+      subquestionIds: [subquestionId],
       sectionId,
       claimGroupId: `group-${sectionId}-${String(quoteIndex + 1)}`,
       critical: sectionId === 'first_bounded_change',
       contradictionIds: [],
-    })),
+    }));
+  },
 );
 
 const modelUsage = {
@@ -406,10 +433,8 @@ function makeModel(counter: { calls: number }): P9LiveModelAdapter {
       counter.calls += 1;
       return Promise.resolve({
         value: snapshots
-          .filter(
-            (snapshot) =>
-              snapshot.body.includes(QUOTE) &&
-              snapshot.body.includes(QUOTE_TWO),
+          .filter((snapshot) =>
+            seeds.every((seed) => snapshot.body.includes(seed.quote)),
           )
           .flatMap((snapshot, snapshotIndex) =>
             seeds.map((seed) => ({
@@ -769,6 +794,13 @@ describe('P9 live application', () => {
         return Promise.resolve({
           candidates: [
             {
+              candidateId: CANDIDATE_ID,
+              url: 'https://github.com/JustVugg/colibri',
+              title: 'JustVugg/colibri',
+              sourceClass: 'repository_docs',
+              sourceFamilyId: 'github.com',
+            },
+            {
               candidateId: `candidate-${id}`,
               url: `https://github.com/JustVugg/colibri/blob/main/source-${id}.md`,
               title: `source ${id}`,
@@ -798,8 +830,8 @@ describe('P9 live application', () => {
     expect(searched).toHaveLength(5);
     expect(retrieved).toEqual([
       'https://api.github.com/repos/JustVugg/colibri/commits/12d3bd51405fc95e40686ce686b5e4ebeb12aa7b',
+      'https://github.com/JustVugg/colibri',
       'https://github.com/JustVugg/colibri/blob/main/source-2.md',
-      'https://github.com/JustVugg/colibri/blob/main/source-3.md',
     ]);
   });
 
@@ -1077,6 +1109,21 @@ describe('P9 live application', () => {
               value: seeds.map((seed) => ({ ...seed, critical: true })),
               usage: modelUsage,
             }),
+          evaluateClaims: ({ claims }) =>
+            Promise.resolve({
+              value: claims.map((claim) => ({
+                claimId: claim.claimId,
+                verdict:
+                  claim.sectionId === 'experiment_design'
+                    ? ('insufficient' as const)
+                    : ('entailed' as const),
+                reason:
+                  claim.sectionId === 'experiment_design'
+                    ? 'fixture rejects experiment evidence'
+                    : undefined,
+              })),
+              usage: modelUsage,
+            }),
         },
       }),
     );
@@ -1256,6 +1303,13 @@ describe('P9 live application', () => {
         Promise.resolve({
           candidates: [
             {
+              candidateId: CANDIDATE_ID,
+              url: 'https://github.com/JustVugg/colibri',
+              title: 'Authorized source',
+              sourceClass: 'repository_docs',
+              sourceFamilyId: 'github.com',
+            },
+            {
               candidateId: 'blocked-evil-source',
               url: 'https://evil.example/research',
               title: 'Blocked source',
@@ -1373,12 +1427,15 @@ describe('P9 live application', () => {
 
   it('settles an effect without trustworthy observed usage at the full reserved ceiling', async () => {
     const journal = new MemoryP9DurableJournalStore();
+    const candidateSearch = makeSearch({ calls: 0 });
     const search: P9LiveSearchAdapter = {
       destinationOrigin: 'https://api.search.brave.com',
-      search: () => Promise.resolve({ candidates: [], usage: null }),
+      search: async (query) => ({
+        ...(await candidateSearch.search(query)),
+        usage: null,
+      }),
     };
     const modelCounter = { calls: 0 };
-    // no candidates -> no snapshots -> the run still compiles with gaps visible
     const run = await runP9LiveApplication(
       makeInput({ journal, search, modelCounter }),
     );
@@ -1619,6 +1676,48 @@ describe('P9 live application', () => {
     expect(counter.calls).toBe(1);
   });
 
+  it('does not count globally relevant evidence toward the wrong governed section', async () => {
+    const counter = { calls: 0 };
+    const model = makeModel(counter);
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          model: {
+            ...model,
+            proposeClaims: async (input) => {
+              const proposed = await model.proposeClaims(input);
+              const upstream = proposed.value.filter(
+                (claim) => claim.sectionId === 'upstream_colibri_facts',
+              );
+              return {
+                ...proposed,
+                value: proposed.value.map((claim, index) => {
+                  if (claim.sectionId !== 'apple_silicon_constraints') {
+                    return claim;
+                  }
+                  const replacement = upstream[index % upstream.length];
+                  if (!replacement) {
+                    throw new Error('missing upstream replacement fixture');
+                  }
+                  return {
+                    ...claim,
+                    candidateId: replacement.candidateId,
+                    quote: replacement.quote,
+                    statement: replacement.statement,
+                    subquestionIds: ['sq-upstream'],
+                  };
+                }),
+              };
+            },
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'mandatory_section_seed_redundancy_missing',
+    });
+    expect(counter.calls).toBe(1);
+  });
+
   it('persists proposer and evaluator rejection residue before compilation', async () => {
     const counter = { calls: 0 };
     const model = makeModel(counter);
@@ -1663,6 +1762,9 @@ describe('P9 live application', () => {
     ).rejects.toThrow();
 
     expect(persisted).toHaveLength(3);
+    expect(
+      persisted.map((residue) => (residue as { stage: string }).stage),
+    ).toEqual(['proposed', 'evaluated', 'evaluated']);
     const finalResidue = persisted.at(-1) as {
       executionId: string;
       claims: unknown[];
@@ -1674,8 +1776,11 @@ describe('P9 live application', () => {
           claimId: 'claim-router-reuse',
           sectionId: 'first_bounded_change',
           planRelevant: true,
+          sectionRelevant: true,
           evaluatorVerdict: 'insufficient',
           evaluatorReasonCodes: ['text_belongs_to_different_source'],
+          admissionDecision: 'rejected',
+          admissionReasonCodes: ['entailment_insufficient'],
         }),
       ]),
     );

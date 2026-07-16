@@ -1,4 +1,5 @@
 import { constants } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import {
   mkdir,
   open,
@@ -769,7 +770,7 @@ export async function writeFreshP9Bundle(
         ? `${relativeDirectory}/${segment}`
         : segment;
       if (createdDirectories.has(relativeDirectory)) continue;
-      await mkdir(join(output, relativeDirectory));
+      await mkdir(join(output, relativeDirectory), { recursive: true });
       createdDirectories.add(relativeDirectory);
     }
     const handle = await open(
@@ -790,7 +791,7 @@ export async function writeFreshP9Bundle(
 
 async function writeDurableJson(path: string, value: unknown): Promise<void> {
   const content = `${JSON.stringify(value, null, 2)}\n`;
-  const temporaryPath = `${path}.${String(process.pid)}.tmp`;
+  const temporaryPath = `${path}.${randomUUID()}.tmp`;
   const handle = await open(
     temporaryPath,
     constants.O_CREAT |
