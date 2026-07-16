@@ -330,7 +330,6 @@ function evaluatorResponseFormat(): object {
       },
       semanticDeltas: {
         type: 'array',
-        maxItems: 0,
         items: { type: 'string', enum: [...P9SemanticDeltaSchema.options] },
       },
       reasonCodes: {
