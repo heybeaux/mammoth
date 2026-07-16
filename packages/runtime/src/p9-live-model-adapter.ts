@@ -321,32 +321,27 @@ function claimSeedResponseFormat(): object {
 }
 
 function evaluatorResponseFormat(): object {
-  return structuredResponseFormat(
-    'p9_live_entailment_findings',
-    'findings',
-    {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        claimId: { type: 'string', minLength: 1 },
-        verdict: {
-          type: 'string',
-          enum: ['entailed', 'contradicted', 'insufficient'],
-        },
-        semanticDeltas: {
-          type: 'array',
-          items: { type: 'string', enum: [...P9SemanticDeltaSchema.options] },
-        },
-        reasonCodes: {
-          type: 'array',
-          minItems: 1,
-          items: { type: 'string', minLength: 1 },
-        },
+  return structuredResponseFormat('p9_live_entailment_findings', 'findings', {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      claimId: { type: 'string', minLength: 1 },
+      verdict: {
+        type: 'string',
+        enum: ['entailed', 'contradicted', 'insufficient'],
       },
-      required: ['claimId', 'verdict', 'semanticDeltas', 'reasonCodes'],
+      semanticDeltas: {
+        type: 'array',
+        items: { type: 'string', enum: [...P9SemanticDeltaSchema.options] },
+      },
+      reasonCodes: {
+        type: 'array',
+        minItems: 1,
+        items: { type: 'string', minLength: 1 },
+      },
     },
-    6,
-  );
+    required: ['claimId', 'verdict', 'semanticDeltas', 'reasonCodes'],
+  });
 }
 
 function structuredResponseFormat(

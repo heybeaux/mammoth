@@ -986,6 +986,24 @@ async function runP9LiveApplicationExclusive(
     statement: seed.quote,
   }));
 
+  const expectedClaimIds = new Set(seeds.map((seed) => seed.claimId));
+  if (expectedClaimIds.size !== seeds.length) {
+    throw new Error('P9 live proposer returned duplicate claimIds');
+  }
+  for (const seed of seeds) {
+    const snapshot = snapshots.find(
+      (entry) => entry.candidateId === seed.candidateId,
+    );
+    const attempt = attempts.find(
+      (entry) => entry.candidateId === seed.candidateId,
+    );
+    if (!snapshot || !attempt || !snapshot.body.includes(seed.quote)) {
+      throw new Error(
+        `P9 live proposer claim does not bind to an observed snapshot: ${seed.claimId}`,
+      );
+    }
+  }
+
   const evaluatorResult = await executor.execute<
     readonly P9LiveEvaluatorFinding[]
   >({
@@ -1012,10 +1030,6 @@ async function runP9LiveApplicationExclusive(
   }
   const evaluatorResults = evaluatorResult.value;
 
-  const expectedClaimIds = new Set(seeds.map((seed) => seed.claimId));
-  if (expectedClaimIds.size !== seeds.length) {
-    throw new Error('P9 live proposer returned duplicate claimIds');
-  }
   const evaluatedClaimIds = new Set(
     evaluatorResults.map((result) => result.claimId),
   );
