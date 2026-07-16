@@ -304,6 +304,28 @@ describe('P9 plan-relative coverage authority', () => {
     ).toBe(false);
   });
 
+  it('accepts one-term bounded upstream model metadata without weakening prose claims', () => {
+    const original = buildBinding('"id":"zai-org/GLM-5"');
+    const metadataBinding = {
+      ...original,
+      evidence: { ...original.evidence, sourceClass: 'upstream_model_docs' },
+    };
+    expect(
+      isClaimRelevantToSubquestion(
+        metadataBinding,
+        'sq-safety',
+        'Which GLM-5 model facts constrain the change?',
+      ),
+    ).toBe(true);
+    expect(
+      isClaimRelevantToSubquestion(
+        buildBinding('GLM-5 is fast.'),
+        'sq-safety',
+        'Which GLM-5 model facts constrain the change?',
+      ),
+    ).toBe(false);
+  });
+
   it('accepts only digest-bound evidence labels linked to the exact attempt', () => {
     expect(assess().verdict).toBe('covered');
 

@@ -147,10 +147,20 @@ export function isClaimRelevantToSubquestion(
   subquestionId: string,
   question: string,
 ): boolean {
+  const sharedTerms = sharedMaterialTermCount(
+    binding.proposal.statement,
+    question,
+  );
+  const boundedModelMetadata =
+    binding.evidence.sourceClass === 'upstream_model_docs' &&
+    binding.proposal.statement.length <= 160 &&
+    /^"(?:id|pipeline_tag|library_name|task)":"[^"\r\n]+"$/u.test(
+      binding.proposal.statement,
+    );
   return (
     binding.evidence.subquestionIds.includes(subquestionId) &&
-    sharedMaterialTermCount(binding.proposal.statement, question) >=
-      P9_MIN_SHARED_SUBQUESTION_TERMS
+    (sharedTerms >= P9_MIN_SHARED_SUBQUESTION_TERMS ||
+      (boundedModelMetadata && sharedTerms >= 1))
   );
 }
 
