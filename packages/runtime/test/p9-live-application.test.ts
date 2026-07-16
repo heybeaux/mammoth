@@ -874,6 +874,48 @@ describe('P9 live application', () => {
     ).toMatchObject({ counts: { selectedCandidates: 6 } });
   });
 
+  it('admits evaluator-visible repository documentation from HTML-leading Markdown served as plain text', async () => {
+    const modelCounter = { calls: 0 };
+    const htmlLeadingMarkdown = [
+      '<p align="center">',
+      '  <img src="assets/colibri.svg" alt="Colibri">',
+      '</p>',
+      '',
+      '**Tiny engine, immense model.**',
+      SOURCE_BODY,
+    ].join('\n');
+
+    const run = await runP9LiveApplication(
+      makeInput({
+        includeMandatorySourceTargets: true,
+        maxCandidates: 6,
+        modelCounter,
+        retrieve: (request) =>
+          request.url.endsWith('/README.md')
+            ? fakeRetrieve(request).then((retrieved) => ({
+                ...retrieved,
+                bytes: new TextEncoder().encode(htmlLeadingMarkdown),
+              }))
+            : fakeRetrieve(request),
+      }),
+    );
+
+    expect(run.attempts).toContainEqual(
+      expect.objectContaining({
+        candidateId: 'pinned:colibri-repository-docs',
+        status: 'admitted',
+      }),
+    );
+    expect(run.parserReceipts).toContainEqual(
+      expect.objectContaining({
+        receiptId: 'parser:pinned:colibri-repository-docs',
+        status: 'parsed',
+        mediaType: 'text/plain',
+      }),
+    );
+    expect(modelCounter.calls).toBeGreaterThan(0);
+  });
+
   it('does not count an unrelated product advisory as a Colibri risk claim', () => {
     const plan = buildAcceptedP9LivePlan({
       budgetUsd: 5,

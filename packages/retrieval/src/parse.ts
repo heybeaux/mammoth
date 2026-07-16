@@ -200,9 +200,16 @@ export class BoundedParserRegistry {
       : null;
     const extension = extensionMatch?.[1]?.toLowerCase() ?? null;
     const parser = this.#parsers.get(declaredMediaType);
+    const declaredHtmlWithPlainBody =
+      declaredMediaType === 'text/html' && sniffed === 'text/plain';
+    const markdownWithEmbeddedHtml =
+      declaredMediaType === 'text/plain' &&
+      sniffed === 'text/html' &&
+      (extension === '.md' || extension === '.markdown');
     const conflict =
       sniffed !== declaredMediaType &&
-      !(declaredMediaType === 'text/html' && sniffed === 'text/plain');
+      !declaredHtmlWithPlainBody &&
+      !markdownWithEmbeddedHtml;
     const supported = parser !== undefined && !conflict;
     const reasonCode = parser
       ? conflict
