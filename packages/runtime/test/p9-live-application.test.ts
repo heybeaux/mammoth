@@ -387,19 +387,29 @@ function makeModel(counter: { calls: number }): P9LiveModelAdapter {
       profileFamilyId: 'fixture-evaluator-family',
       modelId: 'fixture/evaluator',
     },
-    proposeClaims: () => {
+    proposeClaims: ({ snapshots }) => {
       counter.calls += 1;
-      return Promise.resolve({ value: seeds, usage: modelUsage });
+      const matchingSnapshot = snapshots.find((snapshot) =>
+        snapshot.body.includes(QUOTE),
+      );
+      return Promise.resolve({
+        value:
+          matchingSnapshot === undefined
+            ? []
+            : seeds.map((seed) => ({
+                ...seed,
+                candidateId: matchingSnapshot.candidateId,
+              })),
+        usage: modelUsage,
+      });
     },
-    evaluateClaims: () => {
+    evaluateClaims: ({ claims }) => {
       counter.calls += 1;
       return Promise.resolve({
-        value: [
-          {
-            claimId: 'claim-router-reuse',
-            verdict: 'entailed' as const,
-          },
-        ],
+        value: claims.map((claim) => ({
+          claimId: claim.claimId,
+          verdict: 'entailed' as const,
+        })),
         usage: modelUsage,
       });
     },
@@ -1373,6 +1383,32 @@ describe('P9 live application', () => {
         }),
       ),
     ).rejects.toThrow(/findings must match proposed claimIds exactly/u);
+  });
+
+  it('fails closed before evaluation when a claim quote is absent from its snapshot', async () => {
+    const counter = { calls: 0 };
+    const model = makeModel(counter);
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          model: {
+            ...model,
+            proposeClaims: () => {
+              counter.calls += 1;
+              return Promise.resolve({
+                value: seeds.map((seed) => ({
+                  ...seed,
+                  quote: 'Quote absent from the observed snapshot.',
+                  statement: 'Quote absent from the observed snapshot.',
+                })),
+                usage: modelUsage,
+              });
+            },
+          },
+        }),
+      ),
+    ).rejects.toThrow(/does not bind to an observed snapshot/u);
+    expect(counter.calls).toBe(1);
   });
 
   it('fails closed when the durable journal cannot accept the pre-transport record', async () => {
