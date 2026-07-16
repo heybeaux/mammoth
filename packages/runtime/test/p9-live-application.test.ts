@@ -1411,6 +1411,39 @@ describe('P9 live application', () => {
     expect(counter.calls).toBe(1);
   });
 
+  it('deterministically binds an exact quote when the proposer returns the wrong candidateId', async () => {
+    const counter = { calls: 0 };
+    const model = makeModel(counter);
+    const run = await runP9LiveApplication(
+      makeInput({
+        model: {
+          ...model,
+          proposeClaims: () => {
+            counter.calls += 1;
+            return Promise.resolve({
+              value: seeds.map((seed) => ({
+                ...seed,
+                candidateId: 'model-invented-candidate',
+              })),
+              usage: modelUsage,
+            });
+          },
+        },
+      }),
+    );
+
+    const claims = (run.artifacts['claim-evidence.jsonl'] ?? '')
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map(
+        (line) => JSON.parse(line) as { evidence?: { candidateId?: string } },
+      );
+    expect(claims).toHaveLength(1);
+    expect(claims[0]?.evidence?.candidateId).toBe(CANDIDATE_ID);
+    expect(counter.calls).toBe(2);
+  });
+
   it('fails closed when the durable journal cannot accept the pre-transport record', async () => {
     const journal = new MemoryP9DurableJournalStore();
     const searchCounter = { calls: 0 };
