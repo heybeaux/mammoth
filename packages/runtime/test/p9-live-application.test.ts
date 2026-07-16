@@ -779,6 +779,33 @@ describe('P9 live application', () => {
     ).toBe(false);
   });
 
+  it('counts the captured Metal backend quote toward the upstream question', () => {
+    const plan = buildAcceptedP9LivePlan({
+      budgetUsd: 5,
+      now: now().toISOString(),
+      proposerProfile: makeModel({ calls: 0 }).proposerProfile,
+    }).plan;
+    const upstream = plan.subquestions.find(
+      (subquestion) => subquestion.subquestionId === 'sq-upstream',
+    );
+    if (!upstream) throw new Error('missing upstream subquestion');
+    const captured = {
+      proposal: {
+        statement:
+          '// Apple-GPU (Metal) backend for colibrì. Runtime-compiled shader (no Xcode needed),\n// zero-copy over unified memory.',
+      },
+      evidence: { subquestionIds: ['sq-upstream'] },
+    } as Parameters<typeof isClaimRelevantToSubquestion>[0];
+
+    expect(
+      isClaimRelevantToSubquestion(
+        captured,
+        upstream.subquestionId,
+        upstream.question,
+      ),
+    ).toBe(true);
+  });
+
   it('precedes every outbound effect with a durable journaled reservation and settles observed usage', async () => {
     const journal = new MemoryP9DurableJournalStore();
     const catalog = makeCatalog();

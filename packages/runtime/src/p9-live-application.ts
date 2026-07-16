@@ -1266,7 +1266,7 @@ export function buildAcceptedP9LivePlan(input: {
       {
         subquestionId: 'sq-upstream',
         question:
-          'Which current upstream colibri code, GLM-5 model, cache, memory, or documentation facts constrain a bounded first change?',
+          'Which current upstream Apple-GPU Metal backend, zero-copy unified memory, GLM-5 model, cache, or documentation facts constrain a bounded first change?',
         mandatory: true,
       },
       {
