@@ -29,11 +29,9 @@ export interface OpenAICompatibleP9LiveModelAdapterInput {
   readonly now?: () => Date;
 }
 
-const ClaimSeedSchema = z.object({
+const ClaimSelectionSchema = z.object({
   claimId: z.string().min(1),
-  candidateId: z.string().min(1),
-  quote: z.string().min(1),
-  statement: z.string().min(1),
+  evidenceSpanId: z.string().min(1),
   subquestionIds: z.array(z.string().min(1)).min(1),
   sectionId: z.string().min(1),
   claimGroupId: z.string().min(1),
@@ -49,7 +47,7 @@ const EvaluatorFindingSchema = z.object({
 });
 
 const ClaimSeedResponseSchema = z.object({
-  claims: z.array(ClaimSeedSchema).min(8),
+  claims: z.array(ClaimSelectionSchema).min(8),
 });
 
 const EvaluatorResponseSchema = z.object({
@@ -129,13 +127,15 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
     readonly plan: ResearchPlan;
     readonly snapshots: readonly P9ObservedSourceSnapshot[];
   }): Promise<P9LiveModelOutcome<readonly P9LiveClaimSeed[]>> {
+    const spans = claimSpans(request.snapshots);
+    const spansById = new Map(spans.map((span) => [span.evidenceSpanId, span]));
     const outcome = await this.#complete(
       this.proposerProfile.modelId,
       [
         'You are a research claim proposer. Given a research plan and source',
-        'snapshots, propose atomic factual claims. Each claim must include an exact',
-        'verbatim quote copied character-for-character from one snapshot body.',
-        'The statement must be exactly identical to the quote. Never mix',
+        'evidence spans, propose atomic factual claims by selecting governed span',
+        'IDs. Never invent, rewrite, or combine evidence text; Mammoth constructs',
+        'the exact quote and statement from the selected span. Never mix',
         'a sourced fact with a recommendation, implication, experiment design,',
         'or other inference. Every number, unit, scope word, comparison, causal',
         'term, certainty term, timeframe, and recommendation term in a statement',
@@ -143,7 +143,8 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'directly answer, and the quote itself must include at least two material',
         'words from each mapped subquestion. Prefer coverage across distinct source',
         'classes and all mandatory subquestions over multiple claims from one',
-        'source. Return at least eight claims. Before adding a second claim from',
+        'source. Return at least eight claim selections. Before adding a second',
+        'claim from',
         'any source class, return one valid claim from every distinct sourceClass',
         'present in the snapshots. Then add redundant claims from distinct sources',
         'until there are at least eight, while directly covering every mandatory',
@@ -155,16 +156,36 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'when its quote directly supports a',
         'factual premise essential to the bounded-change decision.',
         'Return the governed JSON object whose claims array contains objects',
-        'with keys: claimId,',
-        'candidateId, quote, statement, subquestionIds, sectionId,',
+        'with keys: claimId, evidenceSpanId, subquestionIds, sectionId,',
         'claimGroupId, critical, contradictionIds.',
       ].join(' '),
-      promptContext(request.plan, request.snapshots),
+      proposerPromptContext(request.plan, spans),
       this.input.proposerMaxOutputTokens,
-      claimSeedResponseFormat(),
+      claimSeedResponseFormat(spans.map((span) => span.evidenceSpanId)),
     );
+    const selections = ClaimSeedResponseSchema.parse(
+      JSON.parse(outcome.content),
+    ).claims;
     return {
-      value: ClaimSeedResponseSchema.parse(JSON.parse(outcome.content)).claims,
+      value: selections.map((selection) => {
+        const span = spansById.get(selection.evidenceSpanId);
+        if (!span) {
+          throw new Error(
+            `P9 live proposer selected an unknown evidence span: ${selection.evidenceSpanId}`,
+          );
+        }
+        return {
+          claimId: selection.claimId,
+          candidateId: span.candidateId,
+          quote: span.quote,
+          statement: span.quote,
+          subquestionIds: selection.subquestionIds,
+          sectionId: selection.sectionId,
+          claimGroupId: selection.claimGroupId,
+          critical: selection.critical,
+          contradictionIds: selection.contradictionIds,
+        };
+      }),
       usage: outcome.usage,
     };
   }
@@ -192,7 +213,7 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'finding for every proposed claimId, with no omissions, extras, or',
         'duplicate claimIds.',
       ].join(' '),
-      `${promptContext(request.plan, request.snapshots)}\n\nProposed claims:\n${JSON.stringify(request.claims)}`,
+      `${evaluatorPromptContext(request.plan, request.snapshots)}\n\nProposed claims:\n${JSON.stringify(request.claims)}`,
       this.input.evaluatorMaxOutputTokens,
       evaluatorResponseFormat(),
     );
@@ -266,7 +287,47 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
   }
 }
 
-function promptContext(
+interface GovernedClaimSpan {
+  readonly evidenceSpanId: string;
+  readonly candidateId: string;
+  readonly sourceClass: string;
+  readonly sourceFamilyId: string;
+  readonly quote: string;
+}
+
+function claimSpans(
+  snapshots: readonly P9ObservedSourceSnapshot[],
+): readonly GovernedClaimSpan[] {
+  return snapshots.flatMap((snapshot) =>
+    snapshot.body
+      .slice(0, MAX_SNAPSHOT_EXCERPT)
+      .split(/(?<=[.!?])\s+|\n+/u)
+      .map((quote) => quote.trim())
+      .filter((quote) => quote.length >= 12)
+      .map((quote, index) => ({
+        evidenceSpanId: `${snapshot.candidateId}:span:${String(index)}`,
+        candidateId: snapshot.candidateId,
+        sourceClass: snapshot.sourceClass,
+        sourceFamilyId: snapshot.sourceFamilyId,
+        quote,
+      })),
+  );
+}
+
+function proposerPromptContext(
+  plan: ResearchPlan,
+  spans: readonly GovernedClaimSpan[],
+): string {
+  const planSummary = {
+    question: plan.question,
+    subquestions: plan.subquestions,
+    reportOutline: plan.reportOutline,
+    contradictionRequirements: plan.contradictionRequirements,
+  };
+  return `Research plan:\n${JSON.stringify(planSummary)}\n\nGoverned evidence spans:\n${JSON.stringify(spans)}`;
+}
+
+function evaluatorPromptContext(
   plan: ResearchPlan,
   snapshots: readonly P9ObservedSourceSnapshot[],
 ): string {
@@ -285,7 +346,7 @@ function promptContext(
   return `Research plan:\n${JSON.stringify(planSummary)}\n\nSource snapshots:\n${JSON.stringify(boundedSnapshots)}`;
 }
 
-function claimSeedResponseFormat(): object {
+function claimSeedResponseFormat(evidenceSpanIds: readonly string[]): object {
   return structuredResponseFormat(
     'p9_live_claim_seeds',
     'claims',
@@ -294,9 +355,7 @@ function claimSeedResponseFormat(): object {
       additionalProperties: false,
       properties: {
         claimId: { type: 'string', minLength: 1 },
-        candidateId: { type: 'string', minLength: 1 },
-        quote: { type: 'string', minLength: 1 },
-        statement: { type: 'string', minLength: 1 },
+        evidenceSpanId: { type: 'string', enum: [...evidenceSpanIds] },
         subquestionIds: {
           type: 'array',
           minItems: 1,
@@ -312,9 +371,7 @@ function claimSeedResponseFormat(): object {
       },
       required: [
         'claimId',
-        'candidateId',
-        'quote',
-        'statement',
+        'evidenceSpanId',
         'subquestionIds',
         'sectionId',
         'claimGroupId',

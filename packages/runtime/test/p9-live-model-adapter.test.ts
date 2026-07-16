@@ -14,9 +14,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
           const claimNumber = index + 1;
           return {
             claimId: `claim-${String(claimNumber)}`,
-            candidateId: 'candidate-1',
-            quote: 'Exact source quote.',
-            statement: 'The source contains an exact quote.',
+            evidenceSpanId: 'candidate-1:span:0',
             subquestionIds: ['sq-upstream'],
             sectionId: 'upstream_colibri_facts',
             claimGroupId: 'group-1',
@@ -105,7 +103,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
       expect(JSON.stringify(request)).not.toContain('secret-not-for-output');
     }
     expect(JSON.stringify(requests[0])).toContain(
-      'statement must be exactly identical to the quote',
+      'Never invent, rewrite, or combine evidence text',
     );
     expect(JSON.stringify(requests[0])).toContain(
       'Never use a page title, navigation label, breadcrumb, or source name',
@@ -125,7 +123,16 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     expect(requests[0]?.response_format).toMatchObject({
       json_schema: {
         schema: {
-          properties: { claims: { minItems: 8 } },
+          properties: {
+            claims: {
+              minItems: 8,
+              items: {
+                properties: {
+                  evidenceSpanId: { enum: ['candidate-1:span:0'] },
+                },
+              },
+            },
+          },
         },
       },
     });
@@ -243,9 +250,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
                       claims: [
                         {
                           claimId: 'claim-1',
-                          candidateId: 'candidate-1',
-                          quote: 'Exact source quote.',
-                          statement: 'Exact source quote.',
+                          evidenceSpanId: 'candidate-1:span:0',
                           subquestionIds: ['sq-upstream'],
                           sectionId: 'upstream_colibri_facts',
                           claimGroupId: 'group-1',
