@@ -124,6 +124,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
               items: {
                 properties: {
                   semanticDeltas: {
+                    maxItems: 0,
                     items: {
                       enum: [
                         'negation',
@@ -208,7 +209,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     ).rejects.toThrow(/at least 6/u);
   });
 
-  it('rejects evaluator output outside the governed semantic-delta enum', async () => {
+  it('rejects semantic deltas for character-identical extractive claims', async () => {
     const adapter = new OpenAICompatibleP9LiveModelAdapter({
       baseUrl: 'https://openrouter.ai/api/v1',
       apiKeyEnvironmentVariable: 'TEST_MODEL_KEY',
@@ -237,7 +238,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
                         {
                           claimId: 'claim-1',
                           verdict: 'insufficient',
-                          semanticDeltas: ['free-form explanation'],
+                          semanticDeltas: ['quantity'],
                           reasonCodes: ['quote_does_not_entail_statement'],
                         },
                       ],
@@ -263,6 +264,6 @@ describe('OpenAI-compatible P9 live model adapter', () => {
         claims: [],
         snapshots: [],
       }),
-    ).rejects.toThrow(/Invalid enum value/u);
+    ).rejects.toThrow(/at most 0/u);
   });
 });

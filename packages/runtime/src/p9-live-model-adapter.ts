@@ -44,7 +44,7 @@ const ClaimSeedSchema = z.object({
 const EvaluatorFindingSchema = z.object({
   claimId: z.string().min(1),
   verdict: z.enum(['entailed', 'contradicted', 'insufficient']),
-  semanticDeltas: z.array(P9SemanticDeltaSchema).default([]),
+  semanticDeltas: z.array(P9SemanticDeltaSchema).max(0).default([]),
   reasonCodes: z.array(z.string().min(1)).min(1),
 });
 
@@ -176,9 +176,13 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'Quote identity alone does not prove support. Respond with ONLY a JSON',
         'object whose findings array contains objects with keys: claimId,',
         'verdict (one of entailed,',
-        'contradicted, insufficient), semanticDeltas (only governed enum',
-        `values: ${P9SemanticDeltaSchema.options.join(', ')}), and one or more`,
-        'non-empty reasonCodes.',
+        'contradicted, insufficient), semanticDeltas, and one or more',
+        'non-empty reasonCodes. Because every proposed statement is required to',
+        'be character-for-character identical to its quote, semanticDeltas must',
+        'always be an empty array. If the snapshot does not support the quote or',
+        'claim, express that through contradicted or insufficient; never label',
+        'quantities, comparisons, causality, or other concepts already present',
+        'identically in both strings as semantic deltas.',
       ].join(' '),
       `${promptContext(request.plan, request.snapshots)}\n\nProposed claims:\n${JSON.stringify(request.claims)}`,
       this.input.evaluatorMaxOutputTokens,
@@ -326,6 +330,7 @@ function evaluatorResponseFormat(): object {
       },
       semanticDeltas: {
         type: 'array',
+        maxItems: 0,
         items: { type: 'string', enum: [...P9SemanticDeltaSchema.options] },
       },
       reasonCodes: {
