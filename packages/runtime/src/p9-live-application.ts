@@ -117,7 +117,7 @@ const P9_LIVE_MANDATORY_SOURCE_CANDIDATES: readonly P9LiveCandidate[] = [
   },
   {
     candidateId: 'pinned:colibri-repository-docs',
-    url: `https://raw.githubusercontent.com/JustVugg/colibri/${P9_LIVE_COLIBRI_COMMIT_SHA}/README.md`,
+    url: `https://github.com/JustVugg/colibri/blob/${P9_LIVE_COLIBRI_COMMIT_SHA}/README.md`,
     title: 'JustVugg/colibri repository documentation',
     sourceClass: 'repository_docs',
     sourceFamilyId: 'github.com',

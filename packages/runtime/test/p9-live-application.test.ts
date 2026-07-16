@@ -739,7 +739,7 @@ describe('P9 live application', () => {
 
     expect(retrieved).toEqual([
       'https://raw.githubusercontent.com/JustVugg/colibri/550ddcba83afd27a892dba92c587bfcc1d30f020/c/backend_metal.mm',
-      'https://raw.githubusercontent.com/JustVugg/colibri/550ddcba83afd27a892dba92c587bfcc1d30f020/README.md',
+      'https://github.com/JustVugg/colibri/blob/550ddcba83afd27a892dba92c587bfcc1d30f020/README.md',
       'https://huggingface.co/zai-org/GLM-5',
       'https://www.apple.com/newsroom/2024/10/apple-introduces-m4-pro-and-m4-max/',
       'https://arxiv.org/html/2509.24086v1',
