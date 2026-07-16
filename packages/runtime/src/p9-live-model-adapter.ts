@@ -210,16 +210,6 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         );
       }
     }
-    if (
-      validSectionIds.has('first_bounded_change') &&
-      !selections.some(
-        (selection) => selection.sectionId === 'first_bounded_change',
-      )
-    ) {
-      throw new Error(
-        'P9 live proposer must assign at least one claim to the first_bounded_change section',
-      );
-    }
     return {
       value: selections.map((selection) => {
         const span = spansById.get(selection.evidenceSpanId);

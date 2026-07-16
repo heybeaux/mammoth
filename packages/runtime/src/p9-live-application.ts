@@ -249,6 +249,7 @@ export interface P9LiveClaimRejectionResidue {
   readonly sectionId: string;
   readonly subquestionIds: readonly string[];
   readonly planRelevant: boolean;
+  readonly sectionRelevant: boolean;
   readonly evaluatorVerdict: P9LiveEvaluatorFinding['verdict'] | null;
   readonly evaluatorReasonCodes: readonly string[];
   readonly admissionDecision: P9ClaimAdmission['decision'] | null;
@@ -258,8 +259,13 @@ export interface P9LiveClaimRejectionResidue {
 export interface P9LiveRejectionResidue {
   readonly schemaVersion: '1.0.0';
   readonly executionId: string;
-  readonly stage: 'proposed' | 'evaluated';
+  readonly stage: 'proposed' | 'evaluated' | 'evaluator_response_invalid';
   readonly claims: readonly P9LiveClaimRejectionResidue[];
+  readonly evaluatorResponseDiagnostics?: {
+    readonly missingClaimIds: readonly string[];
+    readonly unknownClaimIds: readonly string[];
+    readonly duplicateClaimIds: readonly string[];
+  };
 }
 
 export interface P9LiveRejectionResidueWriter {
@@ -1164,10 +1170,44 @@ async function runP9LiveApplicationExclusive(
       return [seed.claimId, relevant] as const;
     }),
   );
+  const governedSubquestionIdsBySection: Readonly<
+    Record<string, readonly string[]>
+  > = {
+    executive_summary: planBundle.plan.subquestions.map(
+      (subquestion) => subquestion.subquestionId,
+    ),
+    upstream_colibri_facts: ['sq-upstream'],
+    apple_silicon_constraints: ['sq-apple-silicon'],
+    first_bounded_change: ['sq-upstream'],
+    experiment_design: ['sq-experiment'],
+    risks_and_contradictions: ['sq-risk'],
+  };
+  const proposalSectionRelevance = new Map(
+    seeds.map((seed) => {
+      const span = governedSpanBySeed.get(seed.claimId);
+      const governedSubquestionIds = new Set(
+        governedSubquestionIdsBySection[seed.sectionId] ?? [],
+      );
+      const relevant =
+        span !== undefined &&
+        planBundle.plan.subquestions.some(
+          (subquestion) =>
+            governedSubquestionIds.has(subquestion.subquestionId) &&
+            seed.subquestionIds.includes(subquestion.subquestionId) &&
+            isStatementRelevantToSubquestion({
+              statement: seed.statement,
+              sourceClass: span.sourceClass,
+              question: subquestion.question,
+            }),
+        );
+      return [seed.claimId, relevant] as const;
+    }),
+  );
   const makeRejectionResidue = (
     stage: P9LiveRejectionResidue['stage'],
     evaluatorByClaimId: ReadonlyMap<string, P9LiveEvaluatorFinding> = new Map(),
     admissionByClaimId: ReadonlyMap<string, P9ClaimAdmission> = new Map(),
+    evaluatorResponseDiagnostics?: P9LiveRejectionResidue['evaluatorResponseDiagnostics'],
   ): P9LiveRejectionResidue => ({
     schemaVersion: '1.0.0',
     executionId: input.executionId,
@@ -1183,12 +1223,14 @@ async function runP9LiveApplicationExclusive(
         sectionId: seed.sectionId,
         subquestionIds: [...seed.subquestionIds],
         planRelevant: proposalPlanRelevance.get(seed.claimId) === true,
+        sectionRelevant: proposalSectionRelevance.get(seed.claimId) === true,
         evaluatorVerdict: evaluator?.verdict ?? null,
         evaluatorReasonCodes: [...(evaluator?.reasonCodes ?? [])],
         admissionDecision: admission?.decision ?? null,
         admissionReasonCodes: [...(admission?.reasonCodes ?? [])],
       };
     }),
+    ...(evaluatorResponseDiagnostics ? { evaluatorResponseDiagnostics } : {}),
   });
   const persistRejectionResidue = async (
     residue: P9LiveRejectionResidue,
@@ -1198,13 +1240,11 @@ async function runP9LiveApplicationExclusive(
 
   await persistRejectionResidue(makeRejectionResidue('proposed'));
 
-  for (const section of seeds.length === 0
-    ? []
-    : planBundle.plan.reportOutline.sections) {
+  for (const section of planBundle.plan.reportOutline.sections) {
     const sectionSeeds = seeds.filter(
       (seed) =>
         seed.sectionId === section.sectionId &&
-        proposalPlanRelevance.get(seed.claimId) === true,
+        proposalSectionRelevance.get(seed.claimId) === true,
     );
     const distinctSpanIds = new Set(
       sectionSeeds.map(
@@ -1246,15 +1286,21 @@ async function runP9LiveApplicationExclusive(
   }
   const evaluatorResults = evaluatorResult.value;
 
-  const rawEvaluatorByClaimId = new Map(
-    evaluatorResults.map((result) => [result.claimId, result]),
-  );
-  await persistRejectionResidue(
-    makeRejectionResidue('evaluated', rawEvaluatorByClaimId),
-  );
-
   const evaluatedClaimIds = new Set(
     evaluatorResults.map((result) => result.claimId),
+  );
+  const duplicateEvaluatorClaimIds = [
+    ...new Set(
+      evaluatorResults
+        .map((result) => result.claimId)
+        .filter((claimId, index, all) => all.indexOf(claimId) !== index),
+    ),
+  ];
+  const missingEvaluatorClaimIds = [...expectedClaimIds].filter(
+    (claimId) => !evaluatedClaimIds.has(claimId),
+  );
+  const unknownEvaluatorClaimIds = [...evaluatedClaimIds].filter(
+    (claimId) => !expectedClaimIds.has(claimId),
   );
   if (
     evaluatorResults.length !== seeds.length ||
@@ -1262,6 +1308,18 @@ async function runP9LiveApplicationExclusive(
     [...expectedClaimIds].some((claimId) => !evaluatedClaimIds.has(claimId)) ||
     [...evaluatedClaimIds].some((claimId) => !expectedClaimIds.has(claimId))
   ) {
+    await persistRejectionResidue(
+      makeRejectionResidue(
+        'evaluator_response_invalid',
+        new Map(evaluatorResults.map((result) => [result.claimId, result])),
+        new Map(),
+        {
+          missingClaimIds: missingEvaluatorClaimIds,
+          unknownClaimIds: unknownEvaluatorClaimIds,
+          duplicateClaimIds: duplicateEvaluatorClaimIds,
+        },
+      ),
+    );
     throw new Error(
       'P9 live evaluator findings must match proposed claimIds exactly',
     );
@@ -1269,6 +1327,9 @@ async function runP9LiveApplicationExclusive(
 
   const evaluatorByClaimId = new Map(
     evaluatorResults.map((result) => [result.claimId, result]),
+  );
+  await persistRejectionResidue(
+    makeRejectionResidue('evaluated', evaluatorByClaimId),
   );
   const proposals: P9ClaimProposal[] = [];
   const verdicts: P9EntailmentVerdict[] = [];

@@ -2664,7 +2664,7 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
         costPerRequestUsd: 0.001,
         costPerInputTokenUsd: 0,
         costPerOutputTokenUsd: 0,
-        costPerByteUsd: 0.0000000001,
+        costPerByteUsd: 0,
       },
       {
         id: 'public-retrieval',
@@ -2675,7 +2675,7 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
         costPerRequestUsd: 0.001,
         costPerInputTokenUsd: 0,
         costPerOutputTokenUsd: 0,
-        costPerByteUsd: 0.0000000001,
+        costPerByteUsd: 0,
       },
       {
         id: 'bounded-parser',
@@ -2934,11 +2934,28 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
     ...withExecution,
     receiptDigest: canonicalDigest(withExecution),
   };
-  const quotes = [
+  const upstreamQuotes = [
     'Upstream Colibri cache constrains one bounded change.',
     'Colibri documentation logs current cache constraints.',
   ] as const;
-  const body = quotes.join(' ');
+  const appleQuotes = [
+    'Apple silicon memory bandwidth affects performance on a 128 GB machine.',
+    'Unified memory performance constrains Apple silicon on a 128 GB machine.',
+  ] as const;
+  const experimentQuotes = [
+    'A repeated-run measurement experiment distinguishes improvement from random noise.',
+    'Paired repeated measurements separate performance differences from chance and noise.',
+  ] as const;
+  const riskQuotes = [
+    'Memory safety guidance applies to security risks in a bounded Colibri code change.',
+    'Security guidance identifies memory safety risks for a bounded Colibri change.',
+  ] as const;
+  const body = [
+    ...upstreamQuotes,
+    ...appleQuotes,
+    ...experimentQuotes,
+    ...riskQuotes,
+  ].join(' ');
   const candidateId = 'verify-colibri-source';
   const usage = {
     requests: 1,
@@ -2980,19 +2997,27 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
     'experiment_design',
     'risks_and_contradictions',
   ] as const;
-  const seeds: readonly P9LiveClaimSeed[] = sectionIds.flatMap((sectionId) =>
-    quotes.map((quote, index) => ({
+  const seeds: readonly P9LiveClaimSeed[] = sectionIds.flatMap((sectionId) => {
+    const [subquestionId, quotes] =
+      sectionId === 'apple_silicon_constraints'
+        ? (['sq-apple-silicon', appleQuotes] as const)
+        : sectionId === 'experiment_design'
+          ? (['sq-experiment', experimentQuotes] as const)
+          : sectionId === 'risks_and_contradictions'
+            ? (['sq-risk', riskQuotes] as const)
+            : (['sq-upstream', upstreamQuotes] as const);
+    return quotes.map((quote, index) => ({
       claimId: `verify-claim-${sectionId}-${String(index + 1)}`,
       candidateId,
       quote,
       statement: quote,
-      subquestionIds: ['sq-upstream'],
+      subquestionIds: [subquestionId],
       sectionId,
       claimGroupId: `verify-group-${sectionId}-${String(index + 1)}`,
       critical: sectionId === 'first_bounded_change',
       contradictionIds: [],
-    })),
-  );
+    }));
+  });
   const model: P9LiveModelAdapter = {
     proposerProfile,
     evaluatorProfile,
