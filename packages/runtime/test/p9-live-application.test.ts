@@ -1360,6 +1360,21 @@ describe('P9 live application', () => {
     ).rejects.toThrow(/extractive claim normalization failed/u);
   });
 
+  it('fails closed when evaluator findings omit a proposed claim', async () => {
+    const model = makeModel({ calls: 0 });
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          model: {
+            ...model,
+            evaluateClaims: () =>
+              Promise.resolve({ value: [], usage: modelUsage }),
+          },
+        }),
+      ),
+    ).rejects.toThrow(/findings must match proposed claimIds exactly/u);
+  });
+
   it('fails closed when the durable journal cannot accept the pre-transport record', async () => {
     const journal = new MemoryP9DurableJournalStore();
     const searchCounter = { calls: 0 };

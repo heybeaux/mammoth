@@ -53,7 +53,7 @@ const ClaimSeedResponseSchema = z.object({
 });
 
 const EvaluatorResponseSchema = z.object({
-  findings: z.array(EvaluatorFindingSchema),
+  findings: z.array(EvaluatorFindingSchema).min(6),
 });
 
 const ChatCompletionResponseSchema = z
@@ -182,7 +182,9 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'always be an empty array. If the snapshot does not support the quote or',
         'claim, express that through contradicted or insufficient; never label',
         'quantities, comparisons, causality, or other concepts already present',
-        'identically in both strings as semantic deltas.',
+        'identically in both strings as semantic deltas. Return exactly one',
+        'finding for every proposed claimId, with no omissions, extras, or',
+        'duplicate claimIds.',
       ].join(' '),
       `${promptContext(request.plan, request.snapshots)}\n\nProposed claims:\n${JSON.stringify(request.claims)}`,
       this.input.evaluatorMaxOutputTokens,
@@ -319,27 +321,32 @@ function claimSeedResponseFormat(): object {
 }
 
 function evaluatorResponseFormat(): object {
-  return structuredResponseFormat('p9_live_entailment_findings', 'findings', {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      claimId: { type: 'string', minLength: 1 },
-      verdict: {
-        type: 'string',
-        enum: ['entailed', 'contradicted', 'insufficient'],
+  return structuredResponseFormat(
+    'p9_live_entailment_findings',
+    'findings',
+    {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        claimId: { type: 'string', minLength: 1 },
+        verdict: {
+          type: 'string',
+          enum: ['entailed', 'contradicted', 'insufficient'],
+        },
+        semanticDeltas: {
+          type: 'array',
+          items: { type: 'string', enum: [...P9SemanticDeltaSchema.options] },
+        },
+        reasonCodes: {
+          type: 'array',
+          minItems: 1,
+          items: { type: 'string', minLength: 1 },
+        },
       },
-      semanticDeltas: {
-        type: 'array',
-        items: { type: 'string', enum: [...P9SemanticDeltaSchema.options] },
-      },
-      reasonCodes: {
-        type: 'array',
-        minItems: 1,
-        items: { type: 'string', minLength: 1 },
-      },
+      required: ['claimId', 'verdict', 'semanticDeltas', 'reasonCodes'],
     },
-    required: ['claimId', 'verdict', 'semanticDeltas', 'reasonCodes'],
-  });
+    6,
+  );
 }
 
 function structuredResponseFormat(
