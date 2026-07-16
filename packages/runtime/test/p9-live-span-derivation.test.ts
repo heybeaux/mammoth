@@ -41,4 +41,37 @@ describe('P9 governed claim span derivation', () => {
       expect(excerpt).toContain(span.quote);
     }
   });
+
+  it('rejects GitHub page chrome as repository documentation claim seeds', () => {
+    const body = [
+      'Skip to content. Navigation Menu. Toggle navigation. Sign in.',
+      'Code review and vulnerability reports are available from GitHub Security.',
+      'Pull requests and Actions can show cache documentation facts.',
+    ].join(' ');
+    const spans = deriveP9GovernedClaimSpans([
+      {
+        candidateId: 'cand-github-html',
+        body,
+        sourceClass: 'repository_docs',
+        sourceFamilyId: 'github.com',
+      },
+    ]);
+
+    expect(spans).toEqual([]);
+  });
+
+  it('keeps substantive repository documentation spans after boilerplate screening', () => {
+    const quote =
+      'Colibri documentation states that the Metal backend uses zero-copy unified memory for model tensors.';
+    const spans = deriveP9GovernedClaimSpans([
+      {
+        candidateId: 'cand-colibri-readme',
+        body: 'Skip to content. Navigation Menu. ' + quote,
+        sourceClass: 'repository_docs',
+        sourceFamilyId: 'github.com',
+      },
+    ]);
+
+    expect(spans.map((span) => span.quote)).toEqual([quote]);
+  });
 });
