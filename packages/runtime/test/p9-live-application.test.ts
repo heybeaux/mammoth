@@ -767,7 +767,7 @@ describe('P9 live application', () => {
 
     expect(searched).toHaveLength(5);
     expect(retrieved).toEqual([
-      'https://api.github.com/repos/JustVugg/colibri/commits/main',
+      'https://api.github.com/repos/JustVugg/colibri/commits/12d3bd51405fc95e40686ce686b5e4ebeb12aa7b',
       'https://github.com/JustVugg/colibri/blob/main/source-2.md',
       'https://github.com/JustVugg/colibri/blob/main/source-3.md',
     ]);

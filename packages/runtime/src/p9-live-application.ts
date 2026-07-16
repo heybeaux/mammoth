@@ -769,7 +769,7 @@ async function runP9LiveApplicationExclusive(
     ) {
       authorizedCandidates.unshift({
         candidateId: 'github-api:justvugg-colibri:main',
-        url: 'https://api.github.com/repos/JustVugg/colibri/commits/main',
+        url: `https://api.github.com/repos/JustVugg/colibri/commits/${P9_LIVE_COLIBRI_COMMIT_SHA}`,
         title: 'JustVugg/colibri current main commit',
         sourceClass: 'repository_metadata',
         sourceFamilyId: 'github.com',
@@ -1995,7 +1995,7 @@ function observeCurrentRepositoryCommitDate(input: {
 }) {
   if (
     canonicalP9CandidateSelectionUrl(input.candidate.url) !==
-    'https://api.github.com/repos/JustVugg/colibri/commits/main'
+    `https://api.github.com/repos/JustVugg/colibri/commits/${P9_LIVE_COLIBRI_COMMIT_SHA}`
   ) {
     return null;
   }
