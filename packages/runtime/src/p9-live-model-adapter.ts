@@ -10,6 +10,7 @@ import type {
   P9LiveModelAdapter,
   P9LiveModelOutcome,
   P9LiveModelProfile,
+  P9LiveNarrativeSection,
 } from './p9-live-application.js';
 import type { P9ObservedSourceSnapshot } from './p9-generic-research.js';
 
@@ -52,6 +53,20 @@ const ClaimSeedResponseSchema = z.object({
 
 const EvaluatorResponseSchema = z.object({
   findings: z.array(EvaluatorFindingSchema).min(6),
+});
+
+const NarrativeResponseSchema = z.object({
+  sections: z
+    .array(
+      z
+        .object({
+          sectionId: z.string().min(1),
+          lead: z.string().min(24).max(600),
+          claimIds: z.array(z.string().min(1)),
+        })
+        .strict(),
+    )
+    .min(7),
 });
 
 const ChatCompletionResponseSchema = z
@@ -222,6 +237,66 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         .findings,
       usage: outcome.usage,
     };
+  }
+
+  async synthesizeReport(request: {
+    readonly plan: ResearchPlan;
+    readonly claims: readonly P9LiveClaimSeed[];
+    readonly admittedClaimIds: readonly string[];
+  }): Promise<P9LiveModelOutcome<readonly P9LiveNarrativeSection[]>> {
+    const admitted = request.claims.filter((claim) =>
+      request.admittedClaimIds.includes(claim.claimId),
+    );
+    const requiredSectionIds = [
+      ...request.plan.reportOutline.sections.map(
+        (section) => section.sectionId,
+      ),
+      'references_provenance',
+    ];
+    const outcome = await this.#complete(
+      this.proposerProfile.modelId,
+      [
+        'You are the final research editor. Produce one concise, readable lead paragraph for every required section.',
+        'Answer the research question directly. The first_bounded_change lead must name exactly one small implementation change and explain why it comes first.',
+        'The experiment_design lead must specify a baseline, repeated paired runs, fixed controls, metrics, and a rule for distinguishing improvement from noise.',
+        'Use only the admitted claims supplied. Do not copy raw JSON, markup, source metadata, or long quotations.',
+        'Do not introduce unsupported numbers or factual claims. Keep each lead between 24 and 600 characters.',
+        'claimIds controls which exact admitted evidence sentences appear after the lead; use only IDs assigned to that section.',
+        'Return only the governed JSON object with a sections array containing sectionId, lead, and claimIds.',
+      ].join(' '),
+      JSON.stringify({
+        question: request.plan.question,
+        requiredSectionIds,
+        admittedClaims: admitted,
+      }),
+      this.input.proposerMaxOutputTokens,
+      narrativeResponseFormat(
+        requiredSectionIds,
+        admitted.map((claim) => claim.claimId),
+      ),
+    );
+    const sections = NarrativeResponseSchema.parse(
+      JSON.parse(outcome.content),
+    ).sections;
+    if (
+      new Set(sections.map((section) => section.sectionId)).size !==
+        requiredSectionIds.length ||
+      requiredSectionIds.some(
+        (id) => !sections.some((section) => section.sectionId === id),
+      )
+    ) {
+      throw new Error(
+        'P9 live synthesizer must return every required report section exactly once',
+      );
+    }
+    const claimById = new Map(admitted.map((claim) => [claim.claimId, claim]));
+    for (const section of sections) {
+      for (const claimId of section.claimIds) {
+        if (claimById.get(claimId)?.sectionId !== section.sectionId)
+          throw new Error(`P9 live synthesizer misassigned claim ${claimId}`);
+      }
+    }
+    return { value: sections, usage: outcome.usage };
   }
 
   async #complete(
@@ -404,6 +479,25 @@ function evaluatorResponseFormat(): object {
       },
     },
     required: ['claimId', 'verdict', 'semanticDeltas', 'reasonCodes'],
+  });
+}
+
+function narrativeResponseFormat(
+  sectionIds: readonly string[],
+  claimIds: readonly string[],
+): object {
+  return structuredResponseFormat('p9_live_report_narrative', 'sections', {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      sectionId: { type: 'string', enum: [...sectionIds] },
+      lead: { type: 'string', minLength: 24, maxLength: 600 },
+      claimIds: {
+        type: 'array',
+        items: { type: 'string', enum: [...claimIds] },
+      },
+    },
+    required: ['sectionId', 'lead', 'claimIds'],
   });
 }
 

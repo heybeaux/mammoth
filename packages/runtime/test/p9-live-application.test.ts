@@ -415,6 +415,43 @@ function makeModel(counter: { calls: number }): P9LiveModelAdapter {
         usage: modelUsage,
       });
     },
+    synthesizeReport: ({ plan, claims }) => {
+      counter.calls += 1;
+      const leads: Record<string, string> = {
+        executive_summary:
+          'Test one bounded Metal decode-loop change first, then accept it only if repeated paired benchmarks beat the unchanged baseline beyond observed run-to-run noise.',
+        upstream_colibri_facts:
+          'The admitted upstream evidence establishes the current implementation boundary that the proposed experiment must preserve.',
+        apple_silicon_constraints:
+          'The machine constraint keeps the experiment focused on unified-memory Apple silicon rather than unrelated accelerator architectures.',
+        first_bounded_change:
+          'Implement and test one narrowly scoped Metal decode-loop optimization first, leaving public behavior and model outputs unchanged.',
+        experiment_design:
+          'Run an unchanged baseline and the candidate build in repeated paired benchmarks with fixed model, prompt, temperature, and machine state; compare latency and throughput against measured variance.',
+        risks_and_contradictions:
+          'Reject the change if output parity breaks or if its apparent speedup disappears across repeated controlled runs.',
+        references_provenance:
+          'The exact admitted claims, source snapshots, model receipts, and budget lineage remain available in the bundle appendix.',
+      };
+      return Promise.resolve({
+        value: [
+          ...plan.reportOutline.sections,
+          {
+            sectionId: 'references_provenance',
+            title: 'references and provenance',
+          },
+        ].map((section) => ({
+          sectionId: section.sectionId,
+          lead:
+            leads[section.sectionId] ??
+            'This section summarizes the admitted evidence in a concise and readable form.',
+          claimIds: claims
+            .filter((claim) => claim.sectionId === section.sectionId)
+            .map((claim) => claim.claimId),
+        })),
+        usage: modelUsage,
+      });
+    },
   };
 }
 
@@ -1443,7 +1480,38 @@ describe('P9 live application', () => {
       );
     expect(claims).toHaveLength(1);
     expect(claims[0]?.evidence?.candidateId).toBe(CANDIDATE_ID);
-    expect(counter.calls).toBe(2);
+    expect(counter.calls).toBe(3);
+  });
+
+  it('rejects placeholder narrative even when evidence and citations pass', async () => {
+    const counter = { calls: 0 };
+    const model = makeModel(counter);
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          model: {
+            ...model,
+            synthesizeReport: ({ plan, claims }) =>
+              Promise.resolve({
+                value: [
+                  ...plan.reportOutline.sections,
+                  {
+                    sectionId: 'references_provenance',
+                    title: 'references and provenance',
+                  },
+                ].map((section) => ({
+                  sectionId: section.sectionId,
+                  lead: `Interpretive synthesis for ${section.title}, grounded only in admitted claims below.`,
+                  claimIds: claims
+                    .filter((claim) => claim.sectionId === section.sectionId)
+                    .map((claim) => claim.claimId),
+                })),
+                usage: modelUsage,
+              }),
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'report_narrative_unreadable' });
   });
 
   it('fails closed when the durable journal cannot accept the pre-transport record', async () => {

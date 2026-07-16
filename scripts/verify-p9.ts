@@ -2996,6 +2996,42 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
         })),
         usage,
       }),
+    synthesizeReport: ({ plan, claims }) => {
+      const leads: Record<string, string> = {
+        executive_summary:
+          'Test one bounded Metal decode-loop change first, and accept it only when repeated paired benchmarks beat the unchanged baseline beyond measured run-to-run noise.',
+        upstream_colibri_facts:
+          'The admitted upstream evidence defines the implementation boundary that the proposed change must preserve.',
+        apple_silicon_constraints:
+          'The target remains a 128 GB Apple-silicon machine, keeping hardware and memory conditions fixed.',
+        first_bounded_change:
+          'Implement and test one narrowly scoped Metal decode-loop optimization first without changing public behavior or expected outputs.',
+        experiment_design:
+          'Compare baseline and candidate builds in repeated paired benchmarks with fixed model, prompt, temperature, and machine state; require a gain larger than observed variance.',
+        risks_and_contradictions:
+          'Reject the candidate if output parity breaks or its speedup disappears across repeated controlled runs.',
+        references_provenance:
+          'The exact admitted claims, immutable snapshots, model receipts, and budget lineage remain in the verified bundle.',
+      };
+      return Promise.resolve({
+        value: [
+          ...plan.reportOutline.sections,
+          {
+            sectionId: 'references_provenance',
+            title: 'references and provenance',
+          },
+        ].map((section) => ({
+          sectionId: section.sectionId,
+          lead:
+            leads[section.sectionId] ??
+            'This section summarizes the admitted evidence in a concise and readable form.',
+          claimIds: claims
+            .filter((claim) => claim.sectionId === section.sectionId)
+            .map((claim) => claim.claimId),
+        })),
+        usage,
+      });
+    },
   };
   const run = await runP9LiveApplication({
     executionId: 'verify-p9-live',

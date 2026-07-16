@@ -186,6 +186,12 @@ export interface P9LiveEvaluatorFinding {
   readonly reasonCodes?: readonly string[] | undefined;
 }
 
+export interface P9LiveNarrativeSection {
+  readonly sectionId: string;
+  readonly lead: string;
+  readonly claimIds: readonly string[];
+}
+
 export interface P9LiveModelAdapter {
   readonly proposeClaims: (input: {
     readonly plan: ResearchPlan;
@@ -196,6 +202,11 @@ export interface P9LiveModelAdapter {
     readonly claims: readonly P9LiveClaimSeed[];
     readonly snapshots: readonly P9ObservedSourceSnapshot[];
   }) => Promise<P9LiveModelOutcome<readonly P9LiveEvaluatorFinding[]>>;
+  readonly synthesizeReport: (input: {
+    readonly plan: ResearchPlan;
+    readonly claims: readonly P9LiveClaimSeed[];
+    readonly admittedClaimIds: readonly string[];
+  }) => Promise<P9LiveModelOutcome<readonly P9LiveNarrativeSection[]>>;
   readonly proposerProfile: P9LiveModelProfile;
   readonly evaluatorProfile: P9LiveModelProfile;
 }
@@ -1088,6 +1099,51 @@ async function runP9LiveApplicationExclusive(
     );
   }
 
+  const admittedClaimIds = evaluatorResults
+    .filter((finding) => finding.verdict === 'entailed')
+    .map((finding) => finding.claimId);
+  const narrativeResult = await executor.execute<
+    readonly P9LiveNarrativeSection[]
+  >({
+    id: 'model:synthesizer',
+    catalogEntryId: 'model-proposer-live',
+    ceiling: ceiling({
+      inputTokens: 60_000,
+      outputTokens: 8_000,
+      bytes: 500_000,
+      durationMs: 120_000,
+    }),
+    transport: modelTransport(now, () =>
+      input.model.synthesizeReport({
+        plan: planBundle.plan,
+        claims: seeds,
+        admittedClaimIds,
+      }),
+    ),
+  });
+  if (narrativeResult.status === 'failed') {
+    throw narrativeResult.error instanceof Error
+      ? narrativeResult.error
+      : new Error(String(narrativeResult.error));
+  }
+  const narrativeSections = Object.fromEntries(
+    narrativeResult.value.map((section) => [
+      section.sectionId,
+      { lead: section.lead, claimIds: section.claimIds },
+    ]),
+  );
+  const narratedClaimIds = narrativeResult.value.flatMap(
+    (section) => section.claimIds,
+  );
+  if (
+    new Set(narratedClaimIds).size !== narratedClaimIds.length ||
+    admittedClaimIds.some((claimId) => !narratedClaimIds.includes(claimId))
+  ) {
+    throw new Error(
+      'P9 live synthesizer must place every admitted claim exactly once',
+    );
+  }
+
   const evaluatorByClaimId = new Map(
     evaluatorResults.map((result) => [result.claimId, result]),
   );
@@ -1219,6 +1275,7 @@ async function runP9LiveApplicationExclusive(
       bindings,
       authority.snapshot(),
     ),
+    narrativeSections,
   });
   verifyP9ExactBundle(run.artifacts);
   return {

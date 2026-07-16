@@ -282,6 +282,67 @@ export interface P9ObservedResearchInput {
   readonly bindings: readonly P9ClaimEvidenceBinding[];
   readonly snapshots: readonly P9ObservedSourceSnapshot[];
   readonly stopCriterionFindings: readonly P9StopCriterionFinding[];
+  readonly narrativeSections?: Readonly<
+    Record<
+      string,
+      { readonly lead: string; readonly claimIds: readonly string[] }
+    >
+  >;
+}
+
+function assertReadableNarrative(
+  sections: readonly P9ReportSection[],
+  required: boolean,
+): void {
+  if (!required) return;
+  const byId = new Map(sections.map((section) => [section.sectionId, section]));
+  for (const section of sections) {
+    const lead = section.sentences.find(
+      (sentence) => sentence.kind === 'interpretive',
+    );
+    if (!lead)
+      throw new P9GenericResearchError(
+        'report_narrative_missing',
+        `${section.sectionId} lacks narrative synthesis`,
+      );
+    if (
+      lead.text.length < 24 ||
+      lead.text.length > 600 ||
+      /Interpretive synthesis for|\{\{|\}\}|\[\[|\]\]|<\|/u.test(lead.text)
+    ) {
+      throw new P9GenericResearchError(
+        'report_narrative_unreadable',
+        `${section.sectionId} contains placeholder, raw, or unbounded narrative`,
+      );
+    }
+  }
+  const executive =
+    byId
+      .get('executive_summary')
+      ?.sentences.map((sentence) => sentence.text)
+      .join(' ') ?? '';
+  const change =
+    byId
+      .get('first_bounded_change')
+      ?.sentences.map((sentence) => sentence.text)
+      .join(' ') ?? '';
+  const experiment =
+    byId
+      .get('experiment_design')
+      ?.sentences.map((sentence) => sentence.text)
+      .join(' ') ?? '';
+  if (
+    executive.length < 80 ||
+    change.length < 80 ||
+    experiment.length < 80 ||
+    !/(test|change|implement|optimi[sz])/iu.test(change) ||
+    !/(repeat|baseline|benchmark|variance|noise|confidence)/iu.test(experiment)
+  ) {
+    throw new P9GenericResearchError(
+      'report_synthesis_incomplete',
+      'report must answer the question, name a bounded change, and describe a noise-resistant experiment',
+    );
+  }
 }
 
 export interface P9AcceptedPlanChain {
@@ -1566,15 +1627,25 @@ export function compileP9ObservedResearchBundle(
   ];
   const sections: P9ReportSection[] = [];
   for (const outline of outlineSections) {
+    const narrative = input.narrativeSections?.[outline.sectionId];
+    if (!narrative) {
+      throw new P9GenericResearchError(
+        'report_narrative_missing',
+        `observed live bundle lacks narrative synthesis for ${outline.sectionId}`,
+      );
+    }
     const sentences: P9ReportSentence[] = [
       {
         sentenceId: `s:${outline.sectionId}:lead`,
         kind: 'interpretive',
-        text: `Interpretive synthesis for ${outline.title}, grounded only in admitted claims below.`,
+        text: narrative.lead,
         claimIds: [],
       },
     ];
-    for (const binding of relevantAdmitted) {
+    const orderedClaimIds = new Set(narrative.claimIds);
+    for (const binding of relevantAdmitted.filter((entry) =>
+      orderedClaimIds.has(entry.proposal.proposalId),
+    )) {
       if (binding.evidence.reportSectionId !== outline.sectionId) continue;
       sentences.push({
         sentenceId: `s:${outline.sectionId}:${binding.proposal.proposalId}`,
@@ -1589,6 +1660,7 @@ export function compileP9ObservedResearchBundle(
       sentences,
     });
   }
+  assertReadableNarrative(sections, true);
   assertEveryP9FactualSentenceAdmitted(
     sections.flatMap((section) =>
       section.sentences.map((sentence) => ({
@@ -2210,16 +2282,16 @@ export function verifyP9ExactBundle(
       ]);
     }
   }
-  for (const section of manifest.sections) {
-    const expectedLead = `Interpretive synthesis for ${section.title}, grounded only in admitted claims below.`;
-    for (const sentence of section.sentences.filter(
-      (entry) => entry.kind === 'interpretive',
-    )) {
-      assert(
-        sentence.text === expectedLead && sentence.claimIds.length === 0,
-        `interpretive sentence ${sentence.sentenceId} is not the deterministic section lead`,
-      );
-    }
+  try {
+    assertReadableNarrative(
+      manifest.sections,
+      plan.planId.startsWith('p9-live-'),
+    );
+  } catch (error) {
+    throw new P9GenericResearchError(
+      'exact_bundle_chain_invalid',
+      error instanceof Error ? error.message : String(error),
+    );
   }
 
   for (const citation of manifest.citations) {
