@@ -315,6 +315,21 @@ function assertReadableNarrative(
         `${section.sectionId} contains placeholder, raw, or unbounded narrative`,
       );
     }
+    for (const factual of section.sentences.filter(
+      (sentence) => sentence.kind === 'factual',
+    )) {
+      if (
+        factual.text.length > 600 ||
+        /chat_template_jinja|<\|(?:system|user|assistant|tool)|\\n\{%-|"availableInferenceProviders"/u.test(
+          factual.text,
+        )
+      ) {
+        throw new P9GenericResearchError(
+          'report_evidence_unreadable',
+          `${factual.sentenceId} contains an oversized or raw-serialization evidence span`,
+        );
+      }
+    }
   }
   const leadText = (sectionId: string): string =>
     byId
