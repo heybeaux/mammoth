@@ -352,17 +352,22 @@ function assertReadableNarrative(
     (boundedChangeEvidenceAvailable &&
       criticalSectionClaimIds('first_bounded_change').length === 0) ||
     !/(test|change|implement|optimi[sz])/iu.test(change) ||
-    !/(current state|currently|today)/iu.test(change) ||
-    !/(proposed|instead|rather than|from)/iu.test(change) ||
+    !/(current state|currently|today|existing|baseline)/iu.test(change) ||
     !/(add|introduce|replace|remove|modify|implement)/iu.test(change) ||
     !/(flag|harness|benchmark|test|function|kernel|configuration|mode|check)/iu.test(
       change,
     ) ||
     /(?:verification|optimization) path/iu.test(change) ||
     !/(warm[- ]?up)/iu.test(experiment) ||
-    !/(repeat|repetition|paired run)/iu.test(experiment) ||
+    !/(repeat|repetition|paired (?:run|trial|sample))/iu.test(experiment) ||
+    !/(fixed|unchanged|control|baseline)/iu.test(experiment) ||
     !/(confidence|statistical|bootstrap|t-test|wilcoxon)/iu.test(experiment) ||
-    !/(minimum|threshold|at least|greater than|exceed)/iu.test(experiment) ||
+    !/(minimum|threshold|at least|greater than|exceed|floor)/iu.test(
+      experiment,
+    ) ||
+    !/(output parity|identical output|same output|output match)/iu.test(
+      experiment,
+    ) ||
     !/(pass|accept)/iu.test(experiment) ||
     !/(fail|reject)/iu.test(experiment) ||
     !/\d/u.test(experiment)
