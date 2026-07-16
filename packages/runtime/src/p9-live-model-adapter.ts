@@ -262,11 +262,11 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
       this.proposerProfile.modelId,
       [
         'You are the final research editor. Produce one concise, readable lead paragraph for every required section.',
-        'Answer the research question directly. The first_bounded_change lead must name exactly one small implementation change, use the word test, change, implement, or optimize, and explain why it comes first.',
-        'The experiment_design lead must specify a baseline, repeated paired runs, fixed controls, metrics, and a rule for distinguishing improvement from variance or noise. Use at least one of: repeated, baseline, benchmark, variance, noise, confidence.',
+        'Answer the research question directly. The first_bounded_change lead must contrast the admitted current state with exactly one proposed implementation delta, use the word test, change, implement, or optimize, and explain why it comes first. Never recommend behavior that the admitted current-state evidence says is already implemented.',
+        'The experiment_design lead must be executable: specify warm-up runs, a numeric repetition count, an unchanged baseline, paired runs, fixed controls, metrics, a named confidence or statistical method, a numeric minimum effect threshold, output-parity requirements, and explicit pass/accept plus fail/reject rules.',
         'Use only the admitted claims supplied. Do not copy raw JSON, markup, source metadata, or long quotations.',
         'Do not introduce unsupported numbers or factual claims. Keep each lead between 100 and 600 characters.',
-        'claimIds controls which exact admitted evidence sentences appear after the lead; use only IDs assigned to that section.',
+        'Every executive_summary, first_bounded_change, and experiment_design lead must cite at least one admitted claim through claimIds. claimIds controls which exact admitted evidence sentences appear after the lead; use only IDs assigned to that section.',
         'Return only the governed JSON object with a sections array containing sectionId, lead, and claimIds.',
       ].join(' '),
       JSON.stringify({

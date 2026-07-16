@@ -2976,7 +2976,7 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
       quote,
       statement: quote,
       subquestionIds: ['sq-upstream'],
-      sectionId: 'upstream_colibri_facts',
+      sectionId: 'first_bounded_change',
       claimGroupId: 'verify-group',
       critical: false,
       contradictionIds: [],
@@ -3005,9 +3005,9 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
         apple_silicon_constraints:
           'The target remains a 128 GB Apple-silicon machine, keeping hardware and memory conditions fixed.',
         first_bounded_change:
-          'Implement and test one narrowly scoped Metal decode-loop optimization first without changing public behavior or expected outputs.',
+          'The current state reuses cached experts between decode steps; test one proposed change that prefetches the next admitted expert instead of waiting for the following decode step, while preserving outputs.',
         experiment_design:
-          'Compare baseline and candidate builds in repeated paired benchmarks with fixed model, prompt, temperature, and machine state; require a gain larger than observed variance.',
+          'After 5 warm-up runs, run 30 paired repetitions against the unchanged baseline with fixed model, prompt, temperature, and machine state. Accept only a minimum 5% improvement with 95% bootstrap confidence and output parity; otherwise reject and fail the change.',
         risks_and_contradictions:
           'Reject the candidate if output parity breaks or its speedup disappears across repeated controlled runs.',
         references_provenance:
