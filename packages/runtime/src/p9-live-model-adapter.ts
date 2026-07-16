@@ -266,7 +266,7 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'The experiment_design lead must be executable: specify warm-up runs, a numeric repetition count, an unchanged baseline, paired runs, fixed controls, metrics, a named confidence or statistical method, a numeric minimum effect threshold, output-parity requirements, and explicit pass/accept plus fail/reject rules.',
         'Use only the admitted claims supplied. Do not copy raw JSON, markup, source metadata, or long quotations.',
         'Do not introduce unsupported numbers or factual claims. Keep each lead between 100 and 600 characters.',
-        'Every executive_summary, first_bounded_change, and experiment_design lead must cite at least one admitted claim through claimIds. claimIds controls which exact admitted evidence sentences appear after the lead; use only IDs assigned to that section.',
+        'The first_bounded_change section must cite at least one admitted claim assigned to that section through claimIds. Other sections should cite claims only when assigned evidence is available. Never move or reuse a claim across sections merely to add a citation. claimIds controls which exact admitted evidence sentences appear after the lead; use only IDs assigned to that section.',
         'Return only the governed JSON object with a sections array containing sectionId, lead, and claimIds.',
       ].join(' '),
       JSON.stringify({

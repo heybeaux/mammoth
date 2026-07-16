@@ -139,6 +139,12 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     expect(JSON.stringify(requests[2])).toContain(
       'Keep each lead between 100 and 600 characters',
     );
+    expect(JSON.stringify(requests[2])).toContain(
+      'Never move or reuse a claim across sections merely to add a citation',
+    );
+    expect(JSON.stringify(requests[2])).not.toContain(
+      'Every executive_summary, first_bounded_change, and experiment_design',
+    );
     expect(JSON.stringify(requests[1]?.response_format)).not.toContain(
       '"maxItems":0',
     );
