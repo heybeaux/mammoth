@@ -6,6 +6,7 @@ import {
 import { z } from 'zod';
 import type {
   P9LiveClaimSeed,
+  P9LiveClaimSlot,
   P9LiveEvaluatorFinding,
   P9LiveModelAdapter,
   P9LiveModelOutcome,
@@ -34,15 +35,14 @@ export interface OpenAICompatibleP9LiveModelAdapterInput {
   readonly now?: () => Date;
 }
 
-const ClaimSelectionSchema = z.object({
-  claimId: z.string().min(1),
-  evidenceSpanId: z.string().min(1),
-  subquestionIds: z.array(z.string().min(1)).min(1),
-  sectionId: z.string().min(1),
-  claimGroupId: z.string().min(1),
-  critical: z.boolean(),
-  contradictionIds: z.array(z.string().min(1)).default([]),
-});
+const ClaimSlotSelectionSchema = z
+  .object({
+    claimId: z.string().min(1),
+    claimGroupId: z.string().min(1),
+    critical: z.boolean(),
+    contradictionIds: z.array(z.string().min(1)).default([]),
+  })
+  .strict();
 
 const EvaluatorFindingSchema = z.object({
   claimId: z.string().min(1),
@@ -51,9 +51,11 @@ const EvaluatorFindingSchema = z.object({
   reasonCodes: z.array(z.string().min(1)).min(1),
 });
 
-const ClaimSeedResponseSchema = z.object({
-  claims: z.array(ClaimSelectionSchema).min(12),
-});
+const ClaimSeedResponseSchema = z
+  .object({
+    claimSlots: z.record(z.string().min(1), ClaimSlotSelectionSchema),
+  })
+  .strict();
 
 const EvaluatorResponseSchema = z.object({
   findings: z.array(EvaluatorFindingSchema).min(6),
@@ -145,12 +147,16 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
   async proposeClaims(request: {
     readonly plan: ResearchPlan;
     readonly snapshots: readonly P9ObservedSourceSnapshot[];
+    readonly claimSlots: readonly P9LiveClaimSlot[];
   }): Promise<P9LiveModelOutcome<readonly P9LiveClaimSeed[]>> {
     const spans = deriveP9GovernedClaimSpans(request.snapshots);
     const spansById = new Map(spans.map((span) => [span.evidenceSpanId, span]));
-    const sectionIds = request.plan.reportOutline.sections.map(
-      (section) => section.sectionId,
-    );
+    const slotIds = request.claimSlots.map((slot) => slot.evidenceSpanId);
+    if (new Set(slotIds).size !== slotIds.length || slotIds.length < 12) {
+      throw new Error(
+        'P9 live proposer requires at least twelve unique prevalidated claim slots',
+      );
+    }
     const outcome = await this.#complete(
       this.proposerProfile.modelId,
       [
@@ -168,54 +174,62 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'When an upstream_model_docs snapshot exposes an id field containing a',
         'model identifier named in the upstream subquestion, select that id field',
         'and map it to the upstream subquestion instead of selecting pipeline_tag.',
-        'Prefer coverage across distinct source',
-        'classes and all mandatory subquestions over multiple claims from one',
-        'source. Return at least twelve claim selections. Before adding a second',
-        'claim from',
-        'any source class, return one valid claim from every distinct sourceClass',
-        'present in the snapshots. Then add redundant claims from distinct sources',
-        'until there are at least twelve, while directly covering every mandatory',
-        'subquestion. Never use a page title, navigation label, breadcrumb, or',
+        'Each provided claim slot is already bound to exactly one immutable',
+        'evidence span, report section, and set of relevant subquestions. Return',
+        'exactly one filled entry for every claim slot key, with no omissions,',
+        'extras, or duplicate claimIds. You cannot change evidence, section, or',
+        'subquestion binding. Never use a page title, navigation label, breadcrumb, or',
         'source name as a claim. Choose substantive body sentences. A claim from',
         'security_advisory evidence must quote text that explicitly discusses at',
         'least two of memory safety, security, vulnerabilities, guidance, or risk.',
         'Mark a claim critical only',
         'when its quote directly supports a',
         'factual premise essential to the bounded-change decision.',
-        'Set each claim sectionId to exactly one sectionId from the plan',
-        'reportOutline, choosing the report section the quote most directly',
-        'supports. Every reportOutline section is mandatory. Assign at least two',
-        'plan-relevant claims selected from two distinct evidenceSpanIds to every',
-        'reportOutline section, including first_bounded_change. Do not reuse the',
-        'same evidenceSpanId as both redundant seeds for a section.',
-        'Return the governed JSON object whose claims array contains objects',
-        'with keys: claimId, evidenceSpanId, subquestionIds, sectionId,',
-        'claimGroupId, critical, contradictionIds.',
+        'Return the governed JSON object whose claimSlots object is keyed by the',
+        'provided immutable evidence span IDs. Each value contains only:',
+        'claimId, claimGroupId, critical, contradictionIds.',
       ].join(' '),
-      proposerPromptContext(request.plan, spans),
+      proposerPromptContext(request.plan, spans, request.claimSlots),
       this.input.proposerMaxOutputTokens,
-      claimSeedResponseFormat(
-        spans.map((span) => span.evidenceSpanId),
-        sectionIds,
-      ),
+      claimSeedResponseFormat(slotIds),
     );
     const selections = ClaimSeedResponseSchema.parse(
       JSON.parse(outcome.content),
-    ).claims;
-    const validSectionIds = new Set(sectionIds);
-    for (const selection of selections) {
-      if (!validSectionIds.has(selection.sectionId)) {
+    ).claimSlots;
+    const returnedSlotIds = Object.keys(selections);
+    if (
+      returnedSlotIds.length !== slotIds.length ||
+      slotIds.some((slotId) => !(slotId in selections)) ||
+      returnedSlotIds.some((slotId) => !slotIds.includes(slotId))
+    ) {
+      throw new Error(
+        'P9 live proposer claim slots must match prevalidated seed span IDs exactly',
+      );
+    }
+    const claimIds = returnedSlotIds.map((slotId) => {
+      const selection = selections[slotId];
+      if (!selection) {
         throw new Error(
-          `P9 live proposer assigned a claim to an unknown report section: ${selection.sectionId}`,
+          `P9 live proposer omitted prevalidated claim slot: ${slotId}`,
         );
       }
+      return selection.claimId;
+    });
+    if (new Set(claimIds).size !== claimIds.length) {
+      throw new Error('P9 live proposer claimIds must be unique');
     }
     return {
-      value: selections.map((selection) => {
-        const span = spansById.get(selection.evidenceSpanId);
+      value: request.claimSlots.map((slot) => {
+        const selection = selections[slot.evidenceSpanId];
+        if (!selection) {
+          throw new Error(
+            `P9 live proposer omitted prevalidated claim slot: ${slot.evidenceSpanId}`,
+          );
+        }
+        const span = spansById.get(slot.evidenceSpanId);
         if (!span) {
           throw new Error(
-            `P9 live proposer selected an unknown evidence span: ${selection.evidenceSpanId}`,
+            `P9 live proposer claim slot references an unknown evidence span: ${slot.evidenceSpanId}`,
           );
         }
         return {
@@ -223,8 +237,8 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
           candidateId: span.candidateId,
           quote: span.quote,
           statement: span.quote,
-          subquestionIds: selection.subquestionIds,
-          sectionId: selection.sectionId,
+          subquestionIds: slot.subquestionIds,
+          sectionId: slot.sectionId,
           claimGroupId: selection.claimGroupId,
           critical: selection.critical,
           contradictionIds: selection.contradictionIds,
@@ -393,6 +407,7 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
 function proposerPromptContext(
   plan: ResearchPlan,
   spans: readonly P9GovernedClaimSpan[],
+  claimSlots: readonly P9LiveClaimSlot[],
 ): string {
   const planSummary = {
     question: plan.question,
@@ -400,7 +415,13 @@ function proposerPromptContext(
     reportOutline: plan.reportOutline,
     contradictionRequirements: plan.contradictionRequirements,
   };
-  return `Research plan:\n${JSON.stringify(planSummary)}\n\nGoverned evidence spans:\n${JSON.stringify(spans)}`;
+  const spansById = new Map(spans.map((span) => [span.evidenceSpanId, span]));
+  const governedSlots = claimSlots.map((slot) => ({
+    ...slot,
+    sourceClass: spansById.get(slot.evidenceSpanId)?.sourceClass,
+    sourceFamilyId: spansById.get(slot.evidenceSpanId)?.sourceFamilyId,
+  }));
+  return `Research plan:\n${JSON.stringify(planSummary)}\n\nPrevalidated claim slots:\n${JSON.stringify(governedSlots)}`;
 }
 
 function evaluatorPromptContext(
@@ -422,21 +443,12 @@ function evaluatorPromptContext(
   return `Research plan:\n${JSON.stringify(planSummary)}\n\nSource snapshots:\n${JSON.stringify(boundedSnapshots)}`;
 }
 
-function claimSeedResponseFormat(
-  evidenceSpanIds: readonly string[],
-  sectionIds: readonly string[],
-): object {
-  return structuredResponseFormat('p9_live_claim_seeds', 'claims', {
+function claimSeedResponseFormat(evidenceSpanIds: readonly string[]): object {
+  const slotSchema = {
     type: 'object',
     additionalProperties: false,
     properties: {
       claimId: { type: 'string', minLength: 1 },
-      evidenceSpanId: { type: 'string', enum: [...evidenceSpanIds] },
-      subquestionIds: {
-        type: 'array',
-        items: { type: 'string', minLength: 1 },
-      },
-      sectionId: { type: 'string', enum: [...sectionIds] },
       claimGroupId: { type: 'string', minLength: 1 },
       critical: { type: 'boolean' },
       contradictionIds: {
@@ -444,16 +456,33 @@ function claimSeedResponseFormat(
         items: { type: 'string', minLength: 1 },
       },
     },
-    required: [
-      'claimId',
-      'evidenceSpanId',
-      'subquestionIds',
-      'sectionId',
-      'claimGroupId',
-      'critical',
-      'contradictionIds',
-    ],
-  });
+    required: ['claimId', 'claimGroupId', 'critical', 'contradictionIds'],
+  };
+  return {
+    type: 'json_schema',
+    json_schema: {
+      name: 'p9_live_claim_seeds',
+      strict: true,
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          claimSlots: {
+            type: 'object',
+            additionalProperties: false,
+            properties: Object.fromEntries(
+              evidenceSpanIds.map((evidenceSpanId) => [
+                evidenceSpanId,
+                slotSchema,
+              ]),
+            ),
+            required: [...evidenceSpanIds],
+          },
+        },
+        required: ['claimSlots'],
+      },
+    },
+  };
 }
 
 function evaluatorResponseFormat(): object {

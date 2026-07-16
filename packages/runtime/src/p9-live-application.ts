@@ -80,7 +80,10 @@ import {
   priceObservedUsage,
   type P9LiveEffectObservation,
 } from './p9-live-executor.js';
-import { deriveP9GovernedClaimSpans } from './p9-live-span-derivation.js';
+import {
+  deriveP9GovernedClaimSpans,
+  type P9GovernedClaimSpan,
+} from './p9-live-span-derivation.js';
 
 export const P9_LIVE_EXHIBITION_QUESTION =
   'Using the current upstream repository and primary technical sources, which bounded change to JustVugg/colibri should be tested first on a 128 GB Apple-silicon machine, and what experiment would distinguish a real improvement from measurement noise?';
@@ -178,6 +181,14 @@ export interface P9LiveClaimSeed {
   readonly contradictionIds: readonly string[];
 }
 
+export interface P9LiveClaimSlot {
+  readonly evidenceSpanId: string;
+  readonly candidateId: string;
+  readonly quote: string;
+  readonly subquestionIds: readonly string[];
+  readonly sectionId: string;
+}
+
 export interface P9LiveModelOutcome<T> {
   readonly value: T;
   readonly usage: P9ObservedUsage | null;
@@ -200,6 +211,7 @@ export interface P9LiveModelAdapter {
   readonly proposeClaims: (input: {
     readonly plan: ResearchPlan;
     readonly snapshots: readonly P9ObservedSourceSnapshot[];
+    readonly claimSlots: readonly P9LiveClaimSlot[];
   }) => Promise<P9LiveModelOutcome<readonly P9LiveClaimSeed[]>>;
   readonly evaluateClaims: (input: {
     readonly plan: ResearchPlan;
@@ -270,6 +282,158 @@ export interface P9LiveRejectionResidue {
 
 export interface P9LiveRejectionResidueWriter {
   readonly persist: (residue: P9LiveRejectionResidue) => Promise<void>;
+}
+
+const GOVERNED_SUBQUESTION_IDS_BY_SECTION: Readonly<
+  Record<string, readonly string[]>
+> = {
+  executive_summary: [],
+  upstream_colibri_facts: ['sq-upstream'],
+  apple_silicon_constraints: ['sq-apple-silicon'],
+  first_bounded_change: ['sq-upstream'],
+  experiment_design: ['sq-experiment'],
+  risks_and_contradictions: ['sq-risk'],
+};
+
+function governedSubquestionIdsForSection(
+  plan: ResearchPlan,
+  sectionId: string,
+): readonly string[] {
+  const configured = GOVERNED_SUBQUESTION_IDS_BY_SECTION[sectionId];
+  return configured?.length
+    ? configured
+    : plan.subquestions.map((subquestion) => subquestion.subquestionId);
+}
+
+function relevantSubquestionIdsForSpan(
+  plan: ResearchPlan,
+  sectionId: string,
+  span: P9GovernedClaimSpan,
+): readonly string[] {
+  const governedIds = new Set(
+    governedSubquestionIdsForSection(plan, sectionId),
+  );
+  return plan.subquestions
+    .filter(
+      (subquestion) =>
+        governedIds.has(subquestion.subquestionId) &&
+        isStatementRelevantToSubquestion({
+          statement: span.quote,
+          sourceClass: span.sourceClass,
+          question: subquestion.question,
+        }),
+    )
+    .map((subquestion) => subquestion.subquestionId);
+}
+
+function derivePrevalidatedClaimSlots(input: {
+  readonly plan: ResearchPlan;
+  readonly snapshots: readonly P9ObservedSourceSnapshot[];
+  readonly requiredSourceClasses: ReadonlySet<string>;
+}): readonly P9LiveClaimSlot[] {
+  const spans = deriveP9GovernedClaimSpans(input.snapshots);
+  const selectedSpanIds = new Set<string>();
+  const selectedSourceClasses = new Set<string>();
+  const slots: P9LiveClaimSlot[] = [];
+  const sectionIds = input.plan.reportOutline.sections.map(
+    (section) => section.sectionId,
+  );
+  const orderedSectionIds = [
+    ...sectionIds.filter((sectionId) => sectionId !== 'executive_summary'),
+    ...sectionIds.filter((sectionId) => sectionId === 'executive_summary'),
+  ];
+  const candidatesForSection = (sectionId: string) =>
+    spans
+      .map((span) => ({
+        span,
+        subquestionIds: relevantSubquestionIdsForSpan(
+          input.plan,
+          sectionId,
+          span,
+        ),
+      }))
+      .filter(
+        (candidate) =>
+          candidate.subquestionIds.length > 0 &&
+          !selectedSpanIds.has(candidate.span.evidenceSpanId),
+      )
+      .sort((left, right) => {
+        const leftPriority =
+          input.requiredSourceClasses.has(left.span.sourceClass) &&
+          !selectedSourceClasses.has(left.span.sourceClass)
+            ? 0
+            : 1;
+        const rightPriority =
+          input.requiredSourceClasses.has(right.span.sourceClass) &&
+          !selectedSourceClasses.has(right.span.sourceClass)
+            ? 0
+            : 1;
+        return (
+          leftPriority - rightPriority ||
+          left.span.sourceClass.localeCompare(right.span.sourceClass) ||
+          left.span.evidenceSpanId.localeCompare(right.span.evidenceSpanId)
+        );
+      });
+  const addSlot = (
+    sectionId: string,
+    candidate: {
+      readonly span: P9GovernedClaimSpan;
+      readonly subquestionIds: readonly string[];
+    },
+  ) => {
+    selectedSpanIds.add(candidate.span.evidenceSpanId);
+    selectedSourceClasses.add(candidate.span.sourceClass);
+    slots.push({
+      evidenceSpanId: candidate.span.evidenceSpanId,
+      candidateId: candidate.span.candidateId,
+      quote: candidate.span.quote,
+      subquestionIds: candidate.subquestionIds,
+      sectionId,
+    });
+  };
+
+  for (const sectionId of orderedSectionIds) {
+    const candidates = candidatesForSection(sectionId);
+    if (candidates.length < 2) {
+      throw new GovernanceError(
+        'mandatory_section_seed_redundancy_missing',
+        `P9 live claim proposal requires two distinct plan-relevant governed seed spans for report section: ${sectionId}`,
+      );
+    }
+    const [firstCandidate, secondCandidate] = candidates;
+    if (!firstCandidate || !secondCandidate) {
+      throw new GovernanceError(
+        'mandatory_section_seed_redundancy_missing',
+        `P9 live claim proposal requires two distinct plan-relevant governed seed spans for report section: ${sectionId}`,
+      );
+    }
+    addSlot(sectionId, firstCandidate);
+    addSlot(sectionId, secondCandidate);
+  }
+
+  for (const sourceClass of input.requiredSourceClasses) {
+    if (selectedSourceClasses.has(sourceClass)) continue;
+    const candidate = orderedSectionIds
+      .flatMap((sectionId) =>
+        candidatesForSection(sectionId)
+          .filter(
+            (entry) =>
+              entry.span.sourceClass === sourceClass &&
+              !selectedSpanIds.has(entry.span.evidenceSpanId),
+          )
+          .map((entry) => ({ sectionId, entry })),
+      )
+      .at(0);
+    if (!candidate) {
+      throw new GovernanceError(
+        'mandatory_seed_spans_missing',
+        `P9 live pre-spend seed check failed: no evaluator-visible plan-relevant candidate span for mandatory source class: ${sourceClass}`,
+      );
+    }
+    addSlot(candidate.sectionId, candidate.entry);
+  }
+
+  return slots;
 }
 
 export interface P9LiveApplicationRun extends P9GenericResearchRun {
@@ -1004,6 +1168,7 @@ async function runP9LiveApplicationExclusive(
   // claim. A seed span qualifies only when it is evaluator-visible (derived
   // from the same bounded snapshot excerpt the evaluator sees) and lexically
   // relevant to at least one plan subquestion.
+  let claimSlots: readonly P9LiveClaimSlot[];
   {
     const requiredSourceClasses = new Set(
       planBundle.plan.sourceClassTargets
@@ -1012,6 +1177,13 @@ async function runP9LiveApplicationExclusive(
     );
     const snapshotSourceClasses = new Set(
       snapshots.map((snapshot) => snapshot.sourceClass),
+    );
+    const activeRequiredSourceClasses = new Set(
+      [...requiredSourceClasses].filter(
+        (sourceClass) =>
+          input.includeMandatorySourceTargets === true ||
+          snapshotSourceClasses.has(sourceClass),
+      ),
     );
     const seedableSourceClasses = new Set(
       deriveP9GovernedClaimSpans(snapshots)
@@ -1026,13 +1198,7 @@ async function runP9LiveApplicationExclusive(
         )
         .map((span) => span.sourceClass),
     );
-    for (const sourceClass of requiredSourceClasses) {
-      if (
-        input.includeMandatorySourceTargets !== true &&
-        !snapshotSourceClasses.has(sourceClass)
-      ) {
-        continue;
-      }
+    for (const sourceClass of activeRequiredSourceClasses) {
       if (!seedableSourceClasses.has(sourceClass)) {
         throw new GovernanceError(
           'mandatory_seed_spans_missing',
@@ -1040,6 +1206,11 @@ async function runP9LiveApplicationExclusive(
         );
       }
     }
+    claimSlots = derivePrevalidatedClaimSlots({
+      plan: planBundle.plan,
+      snapshots,
+      requiredSourceClasses: activeRequiredSourceClasses,
+    });
   }
 
   const proposerResult = await executor.execute<readonly P9LiveClaimSeed[]>({
@@ -1052,7 +1223,11 @@ async function runP9LiveApplicationExclusive(
       durationMs: 120_000,
     }),
     transport: modelTransport(now, () =>
-      input.model.proposeClaims({ plan: planBundle.plan, snapshots }),
+      input.model.proposeClaims({
+        plan: planBundle.plan,
+        snapshots,
+        claimSlots,
+      }),
     ),
   });
   if (proposerResult.status === 'failed') {
@@ -1170,23 +1345,11 @@ async function runP9LiveApplicationExclusive(
       return [seed.claimId, relevant] as const;
     }),
   );
-  const governedSubquestionIdsBySection: Readonly<
-    Record<string, readonly string[]>
-  > = {
-    executive_summary: planBundle.plan.subquestions.map(
-      (subquestion) => subquestion.subquestionId,
-    ),
-    upstream_colibri_facts: ['sq-upstream'],
-    apple_silicon_constraints: ['sq-apple-silicon'],
-    first_bounded_change: ['sq-upstream'],
-    experiment_design: ['sq-experiment'],
-    risks_and_contradictions: ['sq-risk'],
-  };
   const proposalSectionRelevance = new Map(
     seeds.map((seed) => {
       const span = governedSpanBySeed.get(seed.claimId);
       const governedSubquestionIds = new Set(
-        governedSubquestionIdsBySection[seed.sectionId] ?? [],
+        governedSubquestionIdsForSection(planBundle.plan, seed.sectionId),
       );
       const relevant =
         span !== undefined &&
