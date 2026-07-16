@@ -16,7 +16,10 @@ describe('OpenAI-compatible P9 live model adapter', () => {
             claimId: `claim-${String(claimNumber)}`,
             evidenceSpanId: 'candidate-1:span:0',
             subquestionIds: ['sq-upstream'],
-            sectionId: 'upstream_colibri_facts',
+            sectionId:
+              claimNumber === 8
+                ? 'first_bounded_change'
+                : 'upstream_colibri_facts',
             claimGroupId: 'group-1',
             critical: false,
             contradictionIds: [],
@@ -111,10 +114,23 @@ describe('OpenAI-compatible P9 live model adapter', () => {
       narrative.value.find(
         (section) => section.sectionId === 'upstream_colibri_facts',
       )?.claimIds,
-    ).toEqual(proposed.value.map((claim) => claim.claimId));
+    ).toEqual(
+      proposed.value
+        .filter((claim) => claim.sectionId === 'upstream_colibri_facts')
+        .map((claim) => claim.claimId),
+    );
+    expect(
+      narrative.value.find(
+        (section) => section.sectionId === 'first_bounded_change',
+      )?.claimIds,
+    ).toEqual(['claim-8']);
     expect(
       narrative.value
-        .filter((section) => section.sectionId !== 'upstream_colibri_facts')
+        .filter(
+          (section) =>
+            section.sectionId !== 'upstream_colibri_facts' &&
+            section.sectionId !== 'first_bounded_change',
+        )
         .flatMap((section) => section.claimIds),
     ).toEqual([]);
 
