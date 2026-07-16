@@ -378,7 +378,14 @@ function claimSpans(
       .slice(0, MAX_SNAPSHOT_EXCERPT)
       .split(/(?<=[.!?])\s+|\n+/u)
       .map((quote) => quote.trim())
-      .filter((quote) => quote.length >= 12)
+      .filter(
+        (quote) =>
+          quote.length >= 12 &&
+          quote.length <= 600 &&
+          !/chat_template_jinja|<\|(?:system|user|assistant|tool)|\\n\{%-|"availableInferenceProviders"/u.test(
+            quote,
+          ),
+      )
       .map((quote, index) => ({
         evidenceSpanId: `${snapshot.candidateId}:span:${String(index)}`,
         candidateId: snapshot.candidateId,
