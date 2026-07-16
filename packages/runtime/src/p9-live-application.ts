@@ -44,6 +44,7 @@ import {
   MemoryP9DurableJournalStore,
   P9DurableJournalRecordSchema,
   P9_DOMAIN_POLICY_PACKS,
+  isClaimRelevantToPlan,
   isClaimRelevantToSubquestion,
   isStatementRelevantToSubquestion,
   type P9BudgetAuthority,
@@ -69,6 +70,7 @@ import { z } from 'zod';
 import {
   boundedP9SentenceContext,
   compileP9ObservedResearchBundle,
+  P9GenericResearchError,
   verifyP9ExactBundle,
   type P9GenericResearchRun,
   type P9ObservedSourceSnapshot,
@@ -1257,9 +1259,32 @@ async function runP9LiveApplicationExclusive(
     });
   }
 
-  const admittedClaimIds = admissions
-    .filter((admission) => admission.decision === 'admitted')
-    .map((admission) => admission.proposalId);
+  const relevantAdmittedBindings = bindings.filter(
+    (binding) =>
+      binding.admission.decision === 'admitted' &&
+      isClaimRelevantToPlan(binding, planBundle.plan),
+  );
+  const admittedClaimIds = relevantAdmittedBindings.map(
+    (binding) => binding.proposal.proposalId,
+  );
+  const admittedClaimIdSet = new Set(admittedClaimIds);
+  const admittedClaims = seeds.filter((seed) =>
+    admittedClaimIdSet.has(seed.claimId),
+  );
+  const firstBoundedChangeClaimIds = relevantAdmittedBindings
+    .filter(
+      (binding) => binding.evidence.reportSectionId === 'first_bounded_change',
+    )
+    .map((binding) => binding.proposal.proposalId);
+  if (
+    relevantAdmittedBindings.length > 0 &&
+    firstBoundedChangeClaimIds.length === 0
+  ) {
+    throw new P9GenericResearchError(
+      'report_synthesis_incomplete',
+      'first_bounded_change has no plan-relevant admitted claim before report synthesis',
+    );
+  }
   const narrativeResult = await executor.execute<
     readonly P9LiveNarrativeSection[]
   >({
@@ -1274,7 +1299,7 @@ async function runP9LiveApplicationExclusive(
     transport: modelTransport(now, () =>
       input.model.synthesizeReport({
         plan: planBundle.plan,
-        claims: seeds,
+        claims: admittedClaims,
         admittedClaimIds,
       }),
     ),
@@ -1296,6 +1321,17 @@ async function runP9LiveApplicationExclusive(
   const narratedClaimIds = narrativeResult.value.flatMap(
     (section) => section.claimIds,
   );
+  const sectionBindingsMatch = narrativeResult.value.every((section) => {
+    const expected = relevantAdmittedBindings
+      .filter(
+        (binding) => binding.evidence.reportSectionId === section.sectionId,
+      )
+      .map((binding) => binding.proposal.proposalId);
+    return (
+      section.claimIds.length === expected.length &&
+      section.claimIds.every((claimId) => expected.includes(claimId))
+    );
+  });
   if (
     new Set(returnedSectionIds).size !== expectedSectionIds.length ||
     expectedSectionIds.some(
@@ -1306,10 +1342,12 @@ async function runP9LiveApplicationExclusive(
     ) ||
     new Set(narratedClaimIds).size !== narratedClaimIds.length ||
     admittedClaimIds.some((claimId) => !narratedClaimIds.includes(claimId)) ||
-    narratedClaimIds.some((claimId) => !admittedClaimIds.includes(claimId))
+    narratedClaimIds.some((claimId) => !admittedClaimIds.includes(claimId)) ||
+    !sectionBindingsMatch
   ) {
-    throw new Error(
-      'P9 live synthesizer must return every section and place every admitted claim exactly once',
+    throw new P9GenericResearchError(
+      'report_synthesis_claim_binding_invalid',
+      'P9 live synthesizer must return every section and place every plan-relevant admitted claim exactly once in its governed report section',
     );
   }
   const narrativeSections = Object.fromEntries(

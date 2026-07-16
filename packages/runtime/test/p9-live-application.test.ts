@@ -1552,7 +1552,55 @@ describe('P9 live application', () => {
           },
         }),
       ),
-    ).rejects.toMatchObject({ code: 'exact_bundle_chain_invalid' });
+    ).rejects.toMatchObject({
+      code: 'report_synthesis_claim_binding_invalid',
+    });
+  });
+
+  it('does not purchase report synthesis when no relevant admitted claim survives for the bounded change', async () => {
+    const counter = { calls: 0 };
+    const model = makeModel(counter);
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          model: {
+            ...model,
+            proposeClaims: async (input) => {
+              const proposed = await model.proposeClaims(input);
+              return {
+                ...proposed,
+                value: [
+                  ...proposed.value,
+                  ...proposed.value.map((claim) => ({
+                    ...claim,
+                    claimId: `${claim.claimId}-other-section`,
+                    sectionId: 'upstream_colibri_facts',
+                  })),
+                ],
+              };
+            },
+            evaluateClaims: ({ claims }) => {
+              counter.calls += 1;
+              return Promise.resolve({
+                value: claims.map((claim) => ({
+                  claimId: claim.claimId,
+                  verdict:
+                    claim.sectionId === 'first_bounded_change'
+                      ? ('insufficient' as const)
+                      : ('entailed' as const),
+                })),
+                usage: modelUsage,
+              });
+            },
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'report_synthesis_incomplete',
+      message:
+        'first_bounded_change has no plan-relevant admitted claim before report synthesis',
+    });
+    expect(counter.calls).toBe(2);
   });
 
   it('rejects a non-executable experiment narrative', async () => {
