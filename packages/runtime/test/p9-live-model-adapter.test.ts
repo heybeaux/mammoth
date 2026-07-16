@@ -2,29 +2,46 @@ import { describe, expect, it } from 'vitest';
 import {
   OpenAICompatibleP9LiveModelAdapter,
   buildAcceptedP9LivePlan,
+  type P9LiveClaimSlot,
 } from '../src/index.js';
+
+const CLAIM_QUOTES = Array.from(
+  { length: 12 },
+  (_, index) =>
+    `Exact governed source sentence ${String(index + 1)} contains sufficient technical detail for deterministic claim binding.`,
+);
+
+function makeClaimSlots(): readonly P9LiveClaimSlot[] {
+  return CLAIM_QUOTES.map((quote, index) => ({
+    evidenceSpanId: `candidate-1:span:${String(index)}`,
+    candidateId: 'candidate-1',
+    quote,
+    subquestionIds: ['sq-upstream'],
+    sectionId:
+      index === CLAIM_QUOTES.length - 1
+        ? 'first_bounded_change'
+        : 'upstream_colibri_facts',
+  }));
+}
 
 describe('OpenAI-compatible P9 live model adapter', () => {
   it('binds each call to its reserved output ceiling and a strict JSON schema', async () => {
     const requests: Record<string, unknown>[] = [];
     const requestUrls: string[] = [];
+    const claimSlots = makeClaimSlots();
     const responses: unknown[] = [
       {
-        claims: Array.from({ length: 12 }, (_, index) => {
-          const claimNumber = index + 1;
-          return {
-            claimId: `claim-${String(claimNumber)}`,
-            evidenceSpanId: 'candidate-1:span:0',
-            subquestionIds: ['sq-upstream'],
-            sectionId:
-              claimNumber === 12
-                ? 'first_bounded_change'
-                : 'upstream_colibri_facts',
-            claimGroupId: 'group-1',
-            critical: false,
-            contradictionIds: [],
-          };
-        }),
+        claimSlots: Object.fromEntries(
+          claimSlots.map((slot, index) => [
+            slot.evidenceSpanId,
+            {
+              claimId: `claim-${String(index + 1)}`,
+              claimGroupId: 'group-1',
+              critical: false,
+              contradictionIds: [],
+            },
+          ]),
+        ),
       },
       {
         findings: Array.from({ length: 12 }, (_, index) => ({
@@ -83,12 +100,16 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     const snapshots = [
       {
         candidateId: 'candidate-1',
-        body: 'Exact source quote.',
+        body: CLAIM_QUOTES.join(' '),
         sourceClass: 'repository_docs',
         sourceFamilyId: 'github.com',
       },
     ];
-    const proposed = await adapter.proposeClaims({ plan, snapshots });
+    const proposed = await adapter.proposeClaims({
+      plan,
+      snapshots,
+      claimSlots,
+    });
     await adapter.evaluateClaims({
       plan,
       snapshots,
@@ -154,7 +175,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
       'Never invent, rewrite, or combine evidence text',
     );
     expect(JSON.stringify(requests[0])).toContain(
-      'Never use a page title, navigation label, breadcrumb, or source name',
+      'exactly one filled entry for every claim slot key',
     );
     expect(JSON.stringify(requests[1])).toContain(
       'semanticDeltas must always be an empty array',
@@ -174,6 +195,19 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     expect(JSON.stringify(requests[0]?.response_format)).not.toContain(
       'minItems',
     );
+    for (const forbiddenField of [
+      'evidenceSpanId',
+      'candidateId',
+      'quote',
+      'startOffset',
+      'endOffset',
+      'sectionId',
+      'subquestionIds',
+    ]) {
+      expect(JSON.stringify(requests[0]?.response_format)).not.toContain(
+        forbiddenField,
+      );
+    }
     expect(JSON.stringify(requests[1]?.response_format)).not.toContain(
       'minItems',
     );
@@ -184,10 +218,18 @@ describe('OpenAI-compatible P9 live model adapter', () => {
       json_schema: {
         schema: {
           properties: {
-            claims: {
-              items: {
-                properties: {
-                  evidenceSpanId: { enum: ['candidate-1:span:0'] },
+            claimSlots: {
+              additionalProperties: false,
+              required: claimSlots.map((slot) => slot.evidenceSpanId),
+              properties: {
+                'candidate-1:span:0': {
+                  additionalProperties: false,
+                  required: [
+                    'claimId',
+                    'claimGroupId',
+                    'critical',
+                    'contradictionIds',
+                  ],
                 },
               },
             },
@@ -296,7 +338,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     ).rejects.toThrow(/at least 6/u);
   });
 
-  it('fails closed when the provider ignores the twelve-claim response contract', async () => {
+  it('rejects the legacy free-form evidenceSpanId response shape', async () => {
     const adapter = new OpenAICompatibleP9LiveModelAdapter({
       baseUrl: 'https://openrouter.ai/api/v1',
       apiKeyEnvironmentVariable: 'TEST_MODEL_KEY',
@@ -321,17 +363,15 @@ describe('OpenAI-compatible P9 live model adapter', () => {
                 {
                   message: {
                     content: JSON.stringify({
-                      claims: [
-                        {
-                          claimId: 'claim-1',
-                          evidenceSpanId: 'candidate-1:span:0',
-                          subquestionIds: ['sq-upstream'],
-                          sectionId: 'upstream_colibri_facts',
-                          claimGroupId: 'group-1',
-                          critical: false,
-                          contradictionIds: [],
-                        },
-                      ],
+                      claims: Array.from({ length: 12 }, (_, index) => ({
+                        claimId: `claim-${String(index + 1)}`,
+                        evidenceSpanId: `candidate-1:span:${String(index)}`,
+                        subquestionIds: ['sq-upstream'],
+                        sectionId: 'upstream_colibri_facts',
+                        claimGroupId: 'group-1',
+                        critical: false,
+                        contradictionIds: [],
+                      })),
                     }),
                   },
                 },
@@ -349,8 +389,94 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     }).plan;
 
     await expect(
-      adapter.proposeClaims({ plan, snapshots: [] }),
-    ).rejects.toThrow(/at least 12/u);
+      adapter.proposeClaims({
+        plan,
+        snapshots: [
+          {
+            candidateId: 'candidate-1',
+            body: CLAIM_QUOTES.join(' '),
+            sourceClass: 'repository_docs',
+            sourceFamilyId: 'github.com',
+          },
+        ],
+        claimSlots: makeClaimSlots(),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('makes wrong-span binding unrepresentable inside a filled claim slot', async () => {
+    const claimSlots = makeClaimSlots();
+    const adapter = new OpenAICompatibleP9LiveModelAdapter({
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKeyEnvironmentVariable: 'TEST_MODEL_KEY',
+      proposerProfile: {
+        profileVersionId: 'proposer-v1',
+        profileFamilyId: 'proposer-family',
+        modelId: 'provider/proposer',
+      },
+      evaluatorProfile: {
+        profileVersionId: 'evaluator-v1',
+        profileFamilyId: 'evaluator-family',
+        modelId: 'provider/evaluator',
+      },
+      proposerMaxOutputTokens: 1_200,
+      evaluatorMaxOutputTokens: 800,
+      environment: { TEST_MODEL_KEY: 'secret-not-for-output' },
+      fetchImpl: (() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      claimSlots: Object.fromEntries(
+                        claimSlots.map((slot, index) => [
+                          slot.evidenceSpanId,
+                          {
+                            claimId: `claim-${String(index + 1)}`,
+                            claimGroupId: 'group-1',
+                            critical: false,
+                            contradictionIds: [],
+                            ...(index === 0
+                              ? {
+                                  evidenceSpanId:
+                                    'pinned:colibri-repository-docs:span:82',
+                                }
+                              : {}),
+                          },
+                        ]),
+                      ),
+                    }),
+                  },
+                },
+              ],
+              usage: { prompt_tokens: 100, completion_tokens: 20 },
+            }),
+            { status: 200 },
+          ),
+        )) as typeof fetch,
+    });
+    const plan = buildAcceptedP9LivePlan({
+      budgetUsd: 5,
+      now: '2026-07-15T18:00:00.000Z',
+      proposerProfile: adapter.proposerProfile,
+    }).plan;
+
+    await expect(
+      adapter.proposeClaims({
+        plan,
+        snapshots: [
+          {
+            candidateId: 'candidate-1',
+            body: CLAIM_QUOTES.join(' '),
+            sourceClass: 'repository_docs',
+            sourceFamilyId: 'github.com',
+          },
+        ],
+        claimSlots,
+      }),
+    ).rejects.toThrow(/unrecognized key/iu);
   });
 
   it('rejects semantic deltas for character-identical extractive claims', async () => {

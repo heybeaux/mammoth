@@ -32,6 +32,14 @@ const QUOTE =
   'Upstream Colibri documentation states the router reuses cached experts between decode steps.';
 const QUOTE_TWO =
   'Current upstream Colibri documentation records cache behavior that constrains a bounded first change.';
+const UPSTREAM_QUOTES = [
+  QUOTE,
+  QUOTE_TWO,
+  'Upstream Colibri repository facts identify the current expert cache path used during decode.',
+  'The current upstream Colibri documentation records a cache fact that constrains the first bounded change.',
+  'A bounded Colibri change can target the documented expert-loading path without changing model outputs.',
+  'The upstream decode loop exposes one bounded expert-prefetch seam for controlled measurement.',
+] as const;
 const APPLE_QUOTES = [
   'Apple silicon memory bandwidth constrains performance on a 128 GB machine.',
   'Unified memory performance matters for Apple silicon on a 128 GB machine.',
@@ -46,8 +54,7 @@ const RISK_QUOTES = [
 ] as const;
 const SOURCE_BODY = [
   'Colibri caches mmap-backed experts on Apple silicon.',
-  QUOTE,
-  QUOTE_TWO,
+  ...UPSTREAM_QUOTES,
   ...APPLE_QUOTES,
   ...EXPERIMENT_QUOTES,
   ...RISK_QUOTES,
@@ -391,7 +398,11 @@ const seeds: readonly P9LiveClaimSeed[] = governedSectionIds.flatMap(
           ? (['sq-experiment', EXPERIMENT_QUOTES] as const)
           : sectionId === 'risks_and_contradictions'
             ? (['sq-risk', RISK_QUOTES] as const)
-            : (['sq-upstream', [QUOTE, QUOTE_TWO]] as const);
+            : sectionId === 'executive_summary'
+              ? (['sq-upstream', UPSTREAM_QUOTES.slice(0, 2)] as const)
+              : sectionId === 'upstream_colibri_facts'
+                ? (['sq-upstream', UPSTREAM_QUOTES.slice(2, 4)] as const)
+                : (['sq-upstream', UPSTREAM_QUOTES.slice(4, 6)] as const);
     return quotes.map((quote, quoteIndex) => ({
       claimId:
         sectionId === 'first_bounded_change' && quoteIndex === 0

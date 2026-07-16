@@ -2937,6 +2937,10 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
   const upstreamQuotes = [
     'Upstream Colibri cache constrains one bounded change.',
     'Colibri documentation logs current cache constraints.',
+    'Current upstream Colibri documentation records a cache fact for the bounded change.',
+    'Upstream Colibri repository facts identify the current expert cache path.',
+    'A bounded Colibri change can target the documented expert-loading path.',
+    'The upstream cache loop exposes one bounded prefetch seam for measurement.',
   ] as const;
   const appleQuotes = [
     'Apple silicon memory bandwidth affects performance on a 128 GB machine.',
@@ -3005,7 +3009,11 @@ async function verifyT6DurableLiveExecutor(): Promise<void> {
           ? (['sq-experiment', experimentQuotes] as const)
           : sectionId === 'risks_and_contradictions'
             ? (['sq-risk', riskQuotes] as const)
-            : (['sq-upstream', upstreamQuotes] as const);
+            : sectionId === 'executive_summary'
+              ? (['sq-upstream', upstreamQuotes.slice(0, 2)] as const)
+              : sectionId === 'upstream_colibri_facts'
+                ? (['sq-upstream', upstreamQuotes.slice(2, 4)] as const)
+                : (['sq-upstream', upstreamQuotes.slice(4, 6)] as const);
     return quotes.map((quote, index) => ({
       claimId: `verify-claim-${sectionId}-${String(index + 1)}`,
       candidateId,
