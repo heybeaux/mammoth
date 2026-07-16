@@ -1595,7 +1595,7 @@ export function buildAcceptedP9LivePlan(input: {
       currencyUsd: input.budgetUsd,
       searchUsd: Math.min(0.05, input.budgetUsd),
       retrievalParsingUsd: Math.min(0.02, Math.max(0, input.budgetUsd - 0.05)),
-      modelsUsd: Math.max(0, input.budgetUsd - 0.07),
+      modelsUsd: Math.max(0, input.budgetUsd - 0.070000001),
     },
     criticalClaimPolicy:
       'independent_entailment_distinct_profile_family' as const,

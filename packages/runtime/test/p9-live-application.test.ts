@@ -710,10 +710,18 @@ describe('P9 live application', () => {
     expect(plan.plan.budget.currencyUsd).toBe(5);
     expect(plan.plan.budget.searchUsd).toBe(0.05);
     expect(plan.plan.budget.retrievalParsingUsd).toBe(0.02);
-    expect(plan.plan.budget.modelsUsd).toBe(4.93);
+    expect(plan.plan.budget.modelsUsd).toBe(4.929999999);
     expect(
       plan.plan.sourceClassTargets.map((target) => target.sourceClass),
     ).toContain('hardware_vendor_docs');
+
+    expect(
+      buildAcceptedP9LivePlan({
+        budgetUsd: 0.912465499997,
+        now: '2026-07-15T18:00:00.000Z',
+        proposerProfile: makeModel({ calls: 0 }).proposerProfile,
+      }).plan.budget.currencyUsd,
+    ).toBe(0.912465499997);
     expect(
       plan.plan.sourceClassTargets.find(
         (target) => target.sourceClass === 'security_advisory',
