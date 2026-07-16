@@ -355,10 +355,11 @@ function assertReadableNarrative(
     !/(current state|currently|today).*(proposed|change|instead|rather than|from)/iu.test(
       change,
     ) ||
-    !/(add|introduce|replace|remove|modify)/iu.test(change) ||
+    !/(add|introduce|replace|remove|modify|implement)/iu.test(change) ||
     !/(flag|harness|benchmark|test|function|kernel|configuration|mode|check)/iu.test(
       change,
     ) ||
+    /(?:verification|optimization) path/iu.test(change) ||
     !/(warm[- ]?up)/iu.test(experiment) ||
     !/(repeat|repetition|paired run)/iu.test(experiment) ||
     !/(confidence|statistical|bootstrap|t-test|wilcoxon)/iu.test(experiment) ||
