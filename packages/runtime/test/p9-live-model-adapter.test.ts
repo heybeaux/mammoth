@@ -26,14 +26,12 @@ describe('OpenAI-compatible P9 live model adapter', () => {
         }),
       },
       {
-        findings: [
-          {
-            claimId: 'claim-1',
-            verdict: 'entailed',
-            semanticDeltas: [],
-            reasonCodes: ['exact_quote_entails_statement'],
-          },
-        ],
+        findings: Array.from({ length: 6 }, (_, index) => ({
+          claimId: `claim-${String(index + 1)}`,
+          verdict: 'entailed',
+          semanticDeltas: [],
+          reasonCodes: ['exact_quote_entails_statement'],
+        })),
       },
     ];
     const fetchImpl: typeof fetch = (url, init) => {
@@ -112,6 +110,9 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     expect(JSON.stringify(requests[1])).toContain(
       'semanticDeltas must always be an empty array',
     );
+    expect(JSON.stringify(requests[1])).toContain(
+      'with no omissions, extras, or duplicate claimIds',
+    );
     expect(JSON.stringify(requests[1]?.response_format)).not.toContain(
       '"maxItems":0',
     );
@@ -127,6 +128,7 @@ describe('OpenAI-compatible P9 live model adapter', () => {
         schema: {
           properties: {
             findings: {
+              minItems: 6,
               items: {
                 properties: {
                   semanticDeltas: {
@@ -239,14 +241,21 @@ describe('OpenAI-compatible P9 live model adapter', () => {
                 {
                   message: {
                     content: JSON.stringify({
-                      findings: [
-                        {
-                          claimId: 'claim-1',
-                          verdict: 'insufficient',
-                          semanticDeltas: ['quantity'],
-                          reasonCodes: ['quote_does_not_entail_statement'],
-                        },
-                      ],
+                      findings: Array.from({ length: 6 }, (_, index) =>
+                        index === 0
+                          ? {
+                              claimId: 'claim-1',
+                              verdict: 'insufficient',
+                              semanticDeltas: ['quantity'],
+                              reasonCodes: ['quote_does_not_entail_statement'],
+                            }
+                          : {
+                              claimId: `claim-${String(index + 1)}`,
+                              verdict: 'entailed',
+                              semanticDeltas: [],
+                              reasonCodes: ['exact_quote_entails_statement'],
+                            },
+                      ),
                     }),
                   },
                 },

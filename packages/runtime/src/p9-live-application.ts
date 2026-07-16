@@ -1012,6 +1012,24 @@ async function runP9LiveApplicationExclusive(
   }
   const evaluatorResults = evaluatorResult.value;
 
+  const expectedClaimIds = new Set(seeds.map((seed) => seed.claimId));
+  if (expectedClaimIds.size !== seeds.length) {
+    throw new Error('P9 live proposer returned duplicate claimIds');
+  }
+  const evaluatedClaimIds = new Set(
+    evaluatorResults.map((result) => result.claimId),
+  );
+  if (
+    evaluatorResults.length !== seeds.length ||
+    evaluatedClaimIds.size !== evaluatorResults.length ||
+    [...expectedClaimIds].some((claimId) => !evaluatedClaimIds.has(claimId)) ||
+    [...evaluatedClaimIds].some((claimId) => !expectedClaimIds.has(claimId))
+  ) {
+    throw new Error(
+      'P9 live evaluator findings must match proposed claimIds exactly',
+    );
+  }
+
   const evaluatorByClaimId = new Map(
     evaluatorResults.map((result) => [result.claimId, result]),
   );
