@@ -144,6 +144,9 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
   }): Promise<P9LiveModelOutcome<readonly P9LiveClaimSeed[]>> {
     const spans = claimSpans(request.snapshots);
     const spansById = new Map(spans.map((span) => [span.evidenceSpanId, span]));
+    const sectionIds = request.plan.reportOutline.sections.map(
+      (section) => section.sectionId,
+    );
     const outcome = await this.#complete(
       this.proposerProfile.modelId,
       [
@@ -175,17 +178,42 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'Mark a claim critical only',
         'when its quote directly supports a',
         'factual premise essential to the bounded-change decision.',
+        'Set each claim sectionId to exactly one sectionId from the plan',
+        'reportOutline, choosing the report section the quote most directly',
+        'supports. Assign at least one claim whose quote supports the',
+        'bounded-change decision to the first_bounded_change section.',
         'Return the governed JSON object whose claims array contains objects',
         'with keys: claimId, evidenceSpanId, subquestionIds, sectionId,',
         'claimGroupId, critical, contradictionIds.',
       ].join(' '),
       proposerPromptContext(request.plan, spans),
       this.input.proposerMaxOutputTokens,
-      claimSeedResponseFormat(spans.map((span) => span.evidenceSpanId)),
+      claimSeedResponseFormat(
+        spans.map((span) => span.evidenceSpanId),
+        sectionIds,
+      ),
     );
     const selections = ClaimSeedResponseSchema.parse(
       JSON.parse(outcome.content),
     ).claims;
+    const validSectionIds = new Set(sectionIds);
+    for (const selection of selections) {
+      if (!validSectionIds.has(selection.sectionId)) {
+        throw new Error(
+          `P9 live proposer assigned a claim to an unknown report section: ${selection.sectionId}`,
+        );
+      }
+    }
+    if (
+      validSectionIds.has('first_bounded_change') &&
+      !selections.some(
+        (selection) => selection.sectionId === 'first_bounded_change',
+      )
+    ) {
+      throw new Error(
+        'P9 live proposer must assign at least one claim to the first_bounded_change section',
+      );
+    }
     return {
       value: selections.map((selection) => {
         const span = spansById.get(selection.evidenceSpanId);
@@ -441,7 +469,10 @@ function evaluatorPromptContext(
   return `Research plan:\n${JSON.stringify(planSummary)}\n\nSource snapshots:\n${JSON.stringify(boundedSnapshots)}`;
 }
 
-function claimSeedResponseFormat(evidenceSpanIds: readonly string[]): object {
+function claimSeedResponseFormat(
+  evidenceSpanIds: readonly string[],
+  sectionIds: readonly string[],
+): object {
   return structuredResponseFormat(
     'p9_live_claim_seeds',
     'claims',
@@ -456,7 +487,7 @@ function claimSeedResponseFormat(evidenceSpanIds: readonly string[]): object {
           minItems: 1,
           items: { type: 'string', minLength: 1 },
         },
-        sectionId: { type: 'string', minLength: 1 },
+        sectionId: { type: 'string', enum: [...sectionIds] },
         claimGroupId: { type: 'string', minLength: 1 },
         critical: { type: 'boolean' },
         contradictionIds: {
