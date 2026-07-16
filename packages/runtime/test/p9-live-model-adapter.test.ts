@@ -109,6 +109,12 @@ describe('OpenAI-compatible P9 live model adapter', () => {
     expect(JSON.stringify(requests[0])).toContain(
       'statement must be exactly identical to the quote',
     );
+    expect(JSON.stringify(requests[1])).toContain(
+      'semanticDeltas must always be an empty array',
+    );
+    expect(JSON.stringify(requests[1]?.response_format)).not.toContain(
+      '"maxItems":0',
+    );
     expect(requests[0]?.response_format).toMatchObject({
       json_schema: {
         schema: {
@@ -124,7 +130,6 @@ describe('OpenAI-compatible P9 live model adapter', () => {
               items: {
                 properties: {
                   semanticDeltas: {
-                    maxItems: 0,
                     items: {
                       enum: [
                         'negation',
