@@ -155,8 +155,10 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'or other inference. Every number, unit, scope word, comparison, causal',
         'term, certainty term, timeframe, and recommendation term in a statement',
         'must also appear in its quote. Map claims only to subquestions they',
-        'directly answer, and the quote itself must include at least two material',
-        'words from each mapped subquestion. Prefer coverage across distinct source',
+        'directly answer, and the quote itself must include material words from',
+        'each mapped subquestion. For upstream_model_docs, a concise governed',
+        'model id, pipeline task, or library field is valid technical metadata.',
+        'Prefer coverage across distinct source',
         'classes and all mandatory subquestions over multiple claims from one',
         'source. Return at least eight claim selections. Before adding a second',
         'claim from',
@@ -373,8 +375,8 @@ interface GovernedClaimSpan {
 function claimSpans(
   snapshots: readonly P9ObservedSourceSnapshot[],
 ): readonly GovernedClaimSpan[] {
-  return snapshots.flatMap((snapshot) =>
-    snapshot.body
+  return snapshots.flatMap((snapshot) => {
+    const prose = snapshot.body
       .slice(0, MAX_SNAPSHOT_EXCERPT)
       .split(/(?<=[.!?])\s+|\n+/u)
       .map((quote) => quote.trim())
@@ -386,14 +388,23 @@ function claimSpans(
             quote,
           ),
       )
-      .map((quote, index) => ({
-        evidenceSpanId: `${snapshot.candidateId}:span:${String(index)}`,
-        candidateId: snapshot.candidateId,
-        sourceClass: snapshot.sourceClass,
-        sourceFamilyId: snapshot.sourceFamilyId,
-        quote,
-      })),
-  );
+      .map((quote) => quote);
+    const metadata =
+      snapshot.sourceClass === 'upstream_model_docs'
+        ? [
+            ...snapshot.body.matchAll(
+              /"(?:id|pipeline_tag|library_name|task)":"[^"\r\n]{1,120}"/gu,
+            ),
+          ].map((match) => match[0])
+        : [];
+    return [...new Set([...prose, ...metadata])].map((quote, index) => ({
+      evidenceSpanId: `${snapshot.candidateId}:span:${String(index)}`,
+      candidateId: snapshot.candidateId,
+      sourceClass: snapshot.sourceClass,
+      sourceFamilyId: snapshot.sourceFamilyId,
+      quote,
+    }));
+  });
 }
 
 function proposerPromptContext(
