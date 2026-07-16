@@ -981,10 +981,29 @@ async function runP9LiveApplicationExclusive(
       );
     }
   }
-  const seeds = proposerResult.value.map((seed) => ({
-    ...seed,
-    statement: seed.quote,
-  }));
+  const seeds = proposerResult.value.map((seed) => {
+    const declaredSnapshot = snapshots.find(
+      (entry) => entry.candidateId === seed.candidateId,
+    );
+    const matchingSnapshots = snapshots.filter((entry) =>
+      entry.body.includes(seed.quote),
+    );
+    const snapshot = declaredSnapshot?.body.includes(seed.quote)
+      ? declaredSnapshot
+      : matchingSnapshots.length === 1
+        ? matchingSnapshots[0]
+        : undefined;
+    if (!snapshot) {
+      throw new Error(
+        `P9 live proposer claim does not bind to an observed snapshot: ${seed.claimId}`,
+      );
+    }
+    return {
+      ...seed,
+      candidateId: snapshot.candidateId,
+      statement: seed.quote,
+    };
+  });
 
   const expectedClaimIds = new Set(seeds.map((seed) => seed.claimId));
   if (expectedClaimIds.size !== seeds.length) {
@@ -997,7 +1016,7 @@ async function runP9LiveApplicationExclusive(
     const attempt = attempts.find(
       (entry) => entry.candidateId === seed.candidateId,
     );
-    if (!snapshot || !attempt || !snapshot.body.includes(seed.quote)) {
+    if (!snapshot || !attempt) {
       throw new Error(
         `P9 live proposer claim does not bind to an observed snapshot: ${seed.claimId}`,
       );
