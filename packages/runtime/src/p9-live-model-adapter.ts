@@ -294,14 +294,13 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
         'P9 live synthesizer must return every required report section exactly once',
       );
     }
-    const claimById = new Map(admitted.map((claim) => [claim.claimId, claim]));
-    for (const section of sections) {
-      for (const claimId of section.claimIds) {
-        if (claimById.get(claimId)?.sectionId !== section.sectionId)
-          throw new Error(`P9 live synthesizer misassigned claim ${claimId}`);
-      }
-    }
-    return { value: sections, usage: outcome.usage };
+    const normalizedSections = sections.map((section) => ({
+      ...section,
+      claimIds: admitted
+        .filter((claim) => claim.sectionId === section.sectionId)
+        .map((claim) => claim.claimId),
+    }));
+    return { value: normalizedSections, usage: outcome.usage };
   }
 
   async #complete(

@@ -102,11 +102,21 @@ describe('OpenAI-compatible P9 live model adapter', () => {
         claimIds: [],
       })),
     };
-    await adapter.synthesizeReport({
+    const narrative = await adapter.synthesizeReport({
       plan,
       claims: proposed.value,
-      admittedClaimIds: [],
+      admittedClaimIds: proposed.value.map((claim) => claim.claimId),
     });
+    expect(
+      narrative.value.find(
+        (section) => section.sectionId === 'upstream_colibri_facts',
+      )?.claimIds,
+    ).toEqual(proposed.value.map((claim) => claim.claimId));
+    expect(
+      narrative.value
+        .filter((section) => section.sectionId !== 'upstream_colibri_facts')
+        .flatMap((section) => section.claimIds),
+    ).toEqual([]);
 
     expect(requests).toHaveLength(3);
     expect(requestUrls).toEqual([
