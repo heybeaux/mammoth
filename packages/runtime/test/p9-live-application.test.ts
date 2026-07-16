@@ -1650,6 +1650,73 @@ describe('P9 live application', () => {
     );
   });
 
+  it('aborts for free before any paid model call when a present mandatory class has no plan-relevant span', async () => {
+    const journal = new MemoryP9DurableJournalStore();
+    const modelCounter = { calls: 0 };
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          journal,
+          modelCounter,
+          retrieve: (request) =>
+            request.url.startsWith('https://api.github.com/')
+              ? fakeRetrieve(request)
+              : fakeRetrieve(request).then((retrieved) => ({
+                  ...retrieved,
+                  bytes: new TextEncoder().encode(
+                    'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt.',
+                  ),
+                })),
+        }),
+      ),
+    ).rejects.toSatisfy(
+      (error) =>
+        error instanceof GovernanceError &&
+        error.code === 'mandatory_seed_spans_missing' &&
+        error.message.includes('repository_docs'),
+    );
+    expect(modelCounter.calls).toBe(0);
+    expect(
+      records(journal).filter((record) =>
+        String(record.entry.reservationId ?? '').startsWith('model:'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('aborts for free when the only mandatory-class metadata span sits beyond the evaluator excerpt', async () => {
+    const journal = new MemoryP9DurableJournalStore();
+    const modelCounter = { calls: 0 };
+    const pageJsonBeyondWindow = `${'x'.repeat(8_500)}"pipeline_tag":"text-generation"`;
+    await expect(
+      runP9LiveApplication(
+        makeInput({
+          journal,
+          modelCounter,
+          includeMandatorySourceTargets: true,
+          maxCandidates: 6,
+          retrieve: (request) =>
+            request.url.startsWith('https://huggingface.co/')
+              ? fakeRetrieve(request).then((retrieved) => ({
+                  ...retrieved,
+                  bytes: new TextEncoder().encode(pageJsonBeyondWindow),
+                }))
+              : fakeRetrieve(request),
+        }),
+      ),
+    ).rejects.toSatisfy(
+      (error) =>
+        error instanceof GovernanceError &&
+        error.code === 'mandatory_seed_spans_missing' &&
+        error.message.includes('upstream_model_docs'),
+    );
+    expect(modelCounter.calls).toBe(0);
+    expect(
+      records(journal).filter((record) =>
+        String(record.entry.reservationId ?? '').startsWith('model:'),
+      ),
+    ).toEqual([]);
+  });
+
   it('rejects shared proposer and evaluator profile families before opening authority', async () => {
     const model = makeModel({ calls: 0 });
     await expect(

@@ -3,5 +3,6 @@ export * from './p9-generic-research.js';
 export * from './p9-live-application.js';
 export * from './p9-live-executor.js';
 export * from './p9-live-model-adapter.js';
+export * from './p9-live-span-derivation.js';
 export * from './p8-turnkey.js';
 export * from './types.js';
