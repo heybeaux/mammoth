@@ -334,7 +334,7 @@ const fakeRetrieve: typeof retrieveSource = (request) => {
   const currentCommit = request.url.startsWith('https://api.github.com/');
   const body = currentCommit
     ? JSON.stringify({
-        sha: '550ddcba83afd27a892dba92c587bfcc1d30f020',
+        sha: '12d3bd51405fc95e40686ce686b5e4ebeb12aa7b',
         commit: { committer: { date: '2026-07-10T12:00:00.000Z' } },
       })
     : SOURCE_BODY;
@@ -787,8 +787,8 @@ describe('P9 live application', () => {
     );
 
     expect(retrieved).toEqual([
-      'https://raw.githubusercontent.com/JustVugg/colibri/550ddcba83afd27a892dba92c587bfcc1d30f020/c/backend_metal.mm',
-      'https://github.com/JustVugg/colibri/blob/550ddcba83afd27a892dba92c587bfcc1d30f020/README.md',
+      'https://raw.githubusercontent.com/JustVugg/colibri/12d3bd51405fc95e40686ce686b5e4ebeb12aa7b/c/backend_metal.mm',
+      'https://github.com/JustVugg/colibri/blob/12d3bd51405fc95e40686ce686b5e4ebeb12aa7b/README.md',
       'https://huggingface.co/zai-org/GLM-5',
       'https://www.apple.com/newsroom/2024/10/apple-introduces-m4-pro-and-m4-max/',
       'https://arxiv.org/html/2509.24086v1',
@@ -937,7 +937,7 @@ describe('P9 live application', () => {
     );
     expect(currentCommitAttempt?.publishedAt).toBe('2026-07-10T12:00:00.000Z');
     expect(currentCommitAttempt?.dateObservation?.exactLocator).toContain(
-      'sha:550ddcba83afd27a892dba92c587bfcc1d30f020',
+      'sha:12d3bd51405fc95e40686ce686b5e4ebeb12aa7b',
     );
     expect(currentCommitAttempt?.dateVerdict?.verdict).toBe('accepted');
     expect(proposedSnapshotIds).not.toContain(

@@ -90,7 +90,7 @@ const RIGHTS_POLICY_ID = 'p9-live-rights-unknown/v1';
 const COORDINATE_SPACE = 'utf16-code-units/v1';
 const CURRENT_COMMIT_DATE_POLICY_ID = 'p9-live-current-commit-date/v1';
 const P9_LIVE_PARSER_CLASS = 'mammoth-deterministic-text';
-const P9_LIVE_COLIBRI_COMMIT_SHA = '550ddcba83afd27a892dba92c587bfcc1d30f020';
+const P9_LIVE_COLIBRI_COMMIT_SHA = '12d3bd51405fc95e40686ce686b5e4ebeb12aa7b';
 
 export interface P9LiveCandidate {
   readonly candidateId: string;
