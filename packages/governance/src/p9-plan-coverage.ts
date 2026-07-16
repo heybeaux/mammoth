@@ -142,25 +142,41 @@ function sharedMaterialTermCount(statement: string, question: string): number {
     .length;
 }
 
+/**
+ * Statement-level lexical relevance used both for admitted-claim coverage and
+ * for pre-spend seed checks over candidate spans that have no evidence
+ * binding yet.
+ */
+export function isStatementRelevantToSubquestion(input: {
+  readonly statement: string;
+  readonly sourceClass: string;
+  readonly question: string;
+}): boolean {
+  const sharedTerms = sharedMaterialTermCount(input.statement, input.question);
+  const boundedModelMetadata =
+    input.sourceClass === 'upstream_model_docs' &&
+    input.statement.length <= 160 &&
+    /^"(?:id|pipeline_tag|library_name|task)":"[^"\r\n]+"$/u.test(
+      input.statement,
+    );
+  return (
+    sharedTerms >= P9_MIN_SHARED_SUBQUESTION_TERMS ||
+    (boundedModelMetadata && sharedTerms >= 1)
+  );
+}
+
 export function isClaimRelevantToSubquestion(
   binding: P9ClaimEvidenceBinding,
   subquestionId: string,
   question: string,
 ): boolean {
-  const sharedTerms = sharedMaterialTermCount(
-    binding.proposal.statement,
-    question,
-  );
-  const boundedModelMetadata =
-    binding.evidence.sourceClass === 'upstream_model_docs' &&
-    binding.proposal.statement.length <= 160 &&
-    /^"(?:id|pipeline_tag|library_name|task)":"[^"\r\n]+"$/u.test(
-      binding.proposal.statement,
-    );
   return (
     binding.evidence.subquestionIds.includes(subquestionId) &&
-    (sharedTerms >= P9_MIN_SHARED_SUBQUESTION_TERMS ||
-      (boundedModelMetadata && sharedTerms >= 1))
+    isStatementRelevantToSubquestion({
+      statement: binding.proposal.statement,
+      sourceClass: binding.evidence.sourceClass,
+      question,
+    })
   );
 }
 

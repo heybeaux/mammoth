@@ -13,9 +13,13 @@ import type {
   P9LiveNarrativeSection,
 } from './p9-live-application.js';
 import type { P9ObservedSourceSnapshot } from './p9-generic-research.js';
+import {
+  deriveP9GovernedClaimSpans,
+  P9_LIVE_MAX_SNAPSHOT_EXCERPT,
+  type P9GovernedClaimSpan,
+} from './p9-live-span-derivation.js';
 
 const MAX_RESPONSE_BYTES = 2_000_000;
-const MAX_SNAPSHOT_EXCERPT = 8_000;
 const REQUEST_TIMEOUT_MS = 90_000;
 
 export interface OpenAICompatibleP9LiveModelAdapterInput {
@@ -142,7 +146,7 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
     readonly plan: ResearchPlan;
     readonly snapshots: readonly P9ObservedSourceSnapshot[];
   }): Promise<P9LiveModelOutcome<readonly P9LiveClaimSeed[]>> {
-    const spans = claimSpans(request.snapshots);
+    const spans = deriveP9GovernedClaimSpans(request.snapshots);
     const spansById = new Map(spans.map((span) => [span.evidenceSpanId, span]));
     const sectionIds = request.plan.reportOutline.sections.map(
       (section) => section.sectionId,
@@ -394,52 +398,9 @@ export class OpenAICompatibleP9LiveModelAdapter implements P9LiveModelAdapter {
   }
 }
 
-interface GovernedClaimSpan {
-  readonly evidenceSpanId: string;
-  readonly candidateId: string;
-  readonly sourceClass: string;
-  readonly sourceFamilyId: string;
-  readonly quote: string;
-}
-
-function claimSpans(
-  snapshots: readonly P9ObservedSourceSnapshot[],
-): readonly GovernedClaimSpan[] {
-  return snapshots.flatMap((snapshot) => {
-    const prose = snapshot.body
-      .slice(0, MAX_SNAPSHOT_EXCERPT)
-      .split(/(?<=[.!?])\s+|\n+/u)
-      .map((quote) => quote.trim())
-      .filter(
-        (quote) =>
-          quote.length >= 12 &&
-          quote.length <= 600 &&
-          !/chat_template_jinja|<\|(?:system|user|assistant|tool)|\\n\{%-|"availableInferenceProviders"/u.test(
-            quote,
-          ),
-      )
-      .map((quote) => quote);
-    const metadata =
-      snapshot.sourceClass === 'upstream_model_docs'
-        ? [
-            ...snapshot.body.matchAll(
-              /"(?:id|pipeline_tag|library_name|task)":"[^"\r\n]{1,120}"/gu,
-            ),
-          ].map((match) => match[0])
-        : [];
-    return [...new Set([...prose, ...metadata])].map((quote, index) => ({
-      evidenceSpanId: `${snapshot.candidateId}:span:${String(index)}`,
-      candidateId: snapshot.candidateId,
-      sourceClass: snapshot.sourceClass,
-      sourceFamilyId: snapshot.sourceFamilyId,
-      quote,
-    }));
-  });
-}
-
 function proposerPromptContext(
   plan: ResearchPlan,
-  spans: readonly GovernedClaimSpan[],
+  spans: readonly P9GovernedClaimSpan[],
 ): string {
   const planSummary = {
     question: plan.question,
@@ -464,7 +425,7 @@ function evaluatorPromptContext(
     candidateId: snapshot.candidateId,
     sourceClass: snapshot.sourceClass,
     sourceFamilyId: snapshot.sourceFamilyId,
-    body: snapshot.body.slice(0, MAX_SNAPSHOT_EXCERPT),
+    body: snapshot.body.slice(0, P9_LIVE_MAX_SNAPSHOT_EXCERPT),
   }));
   return `Research plan:\n${JSON.stringify(planSummary)}\n\nSource snapshots:\n${JSON.stringify(boundedSnapshots)}`;
 }

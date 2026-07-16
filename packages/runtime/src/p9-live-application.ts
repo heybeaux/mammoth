@@ -45,6 +45,7 @@ import {
   P9DurableJournalRecordSchema,
   P9_DOMAIN_POLICY_PACKS,
   isClaimRelevantToSubquestion,
+  isStatementRelevantToSubquestion,
   type P9BudgetAuthority,
   type P9BudgetReservation,
   type P9ClaimEvidenceBinding,
@@ -77,6 +78,7 @@ import {
   priceObservedUsage,
   type P9LiveEffectObservation,
 } from './p9-live-executor.js';
+import { deriveP9GovernedClaimSpans } from './p9-live-span-derivation.js';
 
 export const P9_LIVE_EXHIBITION_QUESTION =
   'Using the current upstream repository and primary technical sources, which bounded change to JustVugg/colibri should be tested first on a 128 GB Apple-silicon machine, and what experiment would distinguish a real improvement from measurement noise?';
@@ -961,6 +963,49 @@ async function runP9LiveApplicationExclusive(
           failure: RETRIEVAL_FAILURES.parser_failed,
         }),
       );
+    }
+  }
+
+  // Fail-closed pre-spend seed check: abort for free, before any paid model
+  // call, when a mandatory source class cannot possibly yield an admissible
+  // claim. A seed span qualifies only when it is evaluator-visible (derived
+  // from the same bounded snapshot excerpt the evaluator sees) and lexically
+  // relevant to at least one plan subquestion.
+  {
+    const requiredSourceClasses = new Set(
+      planBundle.plan.sourceClassTargets
+        .filter((target) => target.mandatory)
+        .map((target) => target.sourceClass),
+    );
+    const snapshotSourceClasses = new Set(
+      snapshots.map((snapshot) => snapshot.sourceClass),
+    );
+    const seedableSourceClasses = new Set(
+      deriveP9GovernedClaimSpans(snapshots)
+        .filter((span) =>
+          planBundle.plan.subquestions.some((subquestion) =>
+            isStatementRelevantToSubquestion({
+              statement: span.quote,
+              sourceClass: span.sourceClass,
+              question: subquestion.question,
+            }),
+          ),
+        )
+        .map((span) => span.sourceClass),
+    );
+    for (const sourceClass of requiredSourceClasses) {
+      if (
+        input.includeMandatorySourceTargets !== true &&
+        !snapshotSourceClasses.has(sourceClass)
+      ) {
+        continue;
+      }
+      if (!seedableSourceClasses.has(sourceClass)) {
+        throw new GovernanceError(
+          'mandatory_seed_spans_missing',
+          `P9 live pre-spend seed check failed: no evaluator-visible plan-relevant candidate span for mandatory source class: ${sourceClass}`,
+        );
+      }
     }
   }
 
