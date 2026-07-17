@@ -571,3 +571,24 @@ investigate-governed-execution.test.ts investigate-preview.test.ts` and
 investigate-governed-execution.test.ts investigate-preview.test.ts` and
   `pnpm format:check && pnpm lint && pnpm typecheck` passed locally. Predicates
   9/10 remain incomplete pending fresh live runs and independent review.
+
+## 2026-07-17 — V28 completed, false-unresolved reader repair
+
+- **Fresh/probe live evidence:** V28 completed all three unrelated holdouts and
+  the exact world-model question through the normal governed live path with
+  exit code 0. Preserve `evals/live/mammoth-core-loop-v28/` as probe evidence;
+  do not count it as acceptance without independent review.
+- **Spend:** after V28, aggregate settled spend is **USD 3.901888390004**,
+  leaving **USD 11.098111609996** under the USD 15 ceiling.
+- **Assessment before repair:** V28 still surfaced false unresolved constraints
+  when the same constraint text was present in cited portfolio items, and direct
+  answers could include noisy `not resolved by synthesis` facts even when no
+  question term was unsupported.
+- **Repair:** the reader now suppresses unresolved constraints already covered
+  by cited portfolio text and only emits direct unresolved-evidence facts when
+  unsupported question terms remain. This is a projection repair over the same
+  evidence model; it does not add topic logic or fixed conclusions.
+- **Focused verification:** `pnpm --filter @mammoth/runtime test --
+investigate-governed-execution.test.ts investigate-preview.test.ts` and
+  `pnpm format:check && pnpm lint && pnpm typecheck` passed locally. Predicates
+  9/10 remain incomplete pending fresh live runs and independent review.

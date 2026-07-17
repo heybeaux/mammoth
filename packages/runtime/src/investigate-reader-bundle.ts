@@ -420,9 +420,6 @@ export function composeGovernedInvestigationBundle(
       5,
     ),
   ].sort((left, right) => left.rank - right.rank);
-  const unresolvedConstraints = readerVisibleReviewLines(
-    execution.liveReview?.unresolvedConstraints,
-  );
 
   const title = READER_FORBIDDEN_PATTERN.test(plan.question)
     ? 'Investigation findings'
@@ -438,6 +435,16 @@ export function composeGovernedInvestigationBundle(
       ...item.constraints,
     ]),
   ].join(' ');
+  const unresolvedConstraints = readerVisibleReviewLines(
+    execution.liveReview?.unresolvedConstraints,
+  ).filter((constraint) => {
+    const terms = readerQuestionTerms(constraint);
+    if (terms.length === 0) return true;
+    return (
+      readerRelevanceScore(reviewCoverageText, terms) <
+      Math.ceil(terms.length / 2)
+    );
+  });
   const unsupportedQuestionTerms = questionTerms
     .filter(
       (term) =>
@@ -461,7 +468,7 @@ export function composeGovernedInvestigationBundle(
     ),
   );
   const directConstraintFacts =
-    rawReviewAnswerBullets.length > 0
+    rawReviewAnswerBullets.length > 0 && unsupportedQuestionTerms.length > 0
       ? facts
           .filter((fact) => !citedBeforeConstraintEvidence.has(fact.citation))
           .map((fact) => ({
