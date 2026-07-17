@@ -72,5 +72,5 @@ export function assertProgramId(value: string): void {
 }
 
 export function usage(): string {
-  return 'usage: mammoth <run|status|resume|cancel|inspect|projection-inspect> <subject> [--root PATH] [--json] [--max-steps N]';
+  return 'usage: mammoth investigate "QUESTION OR THEORY" [--output PATH]\n       mammoth <run|status|resume|cancel|inspect|projection-inspect> <subject> [--root PATH] [--json] [--max-steps N]';
 }

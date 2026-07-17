@@ -1,3 +1,4 @@
+export * from './investigate-operator.js';
 export * from './operator.js';
 export * from './p9-live-authority.js';
 export * from './p9-operator.js';

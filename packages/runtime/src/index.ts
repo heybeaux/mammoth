@@ -1,4 +1,7 @@
 export * from './runtime.js';
+export * from './investigate-application.js';
+export * from './investigate-report.js';
+export * from './investigate-planner.js';
 export * from './p9-generic-research.js';
 export * from './p9-live-application.js';
 export * from './p9-live-executor.js';
