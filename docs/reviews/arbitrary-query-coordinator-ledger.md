@@ -46,3 +46,22 @@
   smallest runtime composition lane. TaskFlow runtime mutation is unavailable to
   this cron worker's exposed tool surface; this ledger and the coordinator state
   are the durable reconciliation record for the next coordinator turn.
+
+## 2026-07-16 — predicate 1 integrated; predicate 2 claimed
+
+- **Predicate 1 evidence:** plan/authority session
+  `agent:scout:subagent:7c9d7a13-f2e0-4f41-a9f3-80ca1a2816d6` completed at
+  `806d223`. Its committed diff is confined to declared `packages/domain` and
+  `packages/governance` files; tracked tree is clean, with only injected OpenClaw
+  bootstrap files untracked. The coordinator serially integrated it as `dfb75e7`.
+- **Contract:** `investigation.approval.v1` digest-binds a human approval; the
+  immutable `investigation.plan.v1` binds preview and approval digests, permits no
+  effects (`none_granted` / `not_granted`), and rejects drift, forged digests,
+  non-approvals, non-human actors, and mismatched investigations. It is generic and
+  clock-free.
+- **Coordinator gates:** domain tests **76/76**, governance tests **64/64**, and
+  runtime regression tests **116/116** passed at the integration head. No provider
+  or other effect authority was used.
+- **Current predicate:** accepted immutable plan drives generic discovery and
+  acquisition without topic branches. A fresh path-disjoint runtime/CLI lane is
+  being claimed while the separate retrieval/evidence stocktake remains active.
