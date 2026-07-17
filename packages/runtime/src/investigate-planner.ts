@@ -184,7 +184,7 @@ export function deriveDecisionConstraints(question: string): readonly string[] {
     return words.slice(0, 9).join(' ');
   };
   for (const segment of question.split(
-    /\b(?:after|before|during|for|on|under|using|when|where|while|with|without|based\s+on)\b|[.,;:?!]/giu,
+    /\b(?:after|before|during|for|on|under|using|when|where|while|with|without|based\s+on)\b|[.;:?!]/giu,
   )) {
     const terms = orderedFocusTerms(segment);
     if (terms.length < 2) continue;

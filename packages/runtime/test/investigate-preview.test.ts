@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   createInvestigationPreview,
+  deriveDecisionConstraints,
   INVESTIGATION_ARTIFACT_NAMES,
   planInvestigation,
 } from '../src/index.js';
@@ -120,6 +121,17 @@ describe('local investigation preview', () => {
           query.includes('gpu'),
       ),
     ).toBe(true);
+  });
+
+  it('keeps comma-separated delivery constraints in the governed review contract', () => {
+    const constraints = deriveDecisionConstraints(
+      'Yann LeCun argues that world models are important beyond the limitations of LLMs. With compute increasingly scarce, where do the biggest opportunities lie today for individuals building open-source, private, local systems based on world models using a single consumer GPU?',
+    )
+      .join('\n')
+      .toLocaleLowerCase('en-US');
+
+    expect(constraints).toContain('open-source private local');
+    expect(constraints).toContain('single consumer gpu');
   });
 
   it('projects one digest-bound preview into the required machine and reader artifacts', () => {

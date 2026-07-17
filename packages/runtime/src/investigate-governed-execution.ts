@@ -1947,9 +1947,7 @@ export async function executeGovernedLiveAcquisition(
           ...(input.fetchImpl === undefined
             ? {}
             : { fetchImpl: input.fetchImpl }),
-          decisionConstraints: deriveDecisionConstraints(
-            intentSet.question,
-          ).slice(0, 4),
+          decisionConstraints: deriveDecisionConstraints(intentSet.question),
           broadDecisionQuestion: isBroadDecisionQuestion(intentSet.question),
           claims: reviewClaims,
         });
@@ -1978,20 +1976,14 @@ export async function executeGovernedLiveAcquisition(
     assertDecisionGradeReview({
       review: modelReview.value,
       admittedEvidenceCount: reviewEvidenceClaims.length,
-      decisionConstraints: deriveDecisionConstraints(intentSet.question).slice(
-        0,
-        4,
-      ),
+      decisionConstraints: deriveDecisionConstraints(intentSet.question),
       question: intentSet.question,
       reviewClaims: reviewEvidenceClaims,
     });
     const acceptanceReview = buildLiveAcceptanceReview({
       review: modelReview.value,
       reviewClaims: reviewEvidenceClaims,
-      decisionConstraints: deriveDecisionConstraints(intentSet.question).slice(
-        0,
-        4,
-      ),
+      decisionConstraints: deriveDecisionConstraints(intentSet.question),
       question: intentSet.question,
       now: input.now,
     });
