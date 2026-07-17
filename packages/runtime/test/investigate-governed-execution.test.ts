@@ -652,8 +652,17 @@ describe('governed acquisition execution', () => {
       'effect-receipt:',
     );
     const firstPortfolioItem = execution.liveReview?.portfolio?.[0];
+    const firstMechanism = execution.liveReview?.mechanisms?.[0];
+    const firstBoundary = execution.liveReview?.boundaryConditions?.[0];
+    const firstHypothesis = execution.liveReview?.hypotheses?.[0];
     const acceptanceReview = execution.acceptanceReview;
-    if (!firstPortfolioItem || !acceptanceReview) {
+    if (
+      !firstPortfolioItem ||
+      !firstMechanism ||
+      !firstBoundary ||
+      !firstHypothesis ||
+      !acceptanceReview
+    ) {
       throw new Error('live fixture did not produce review artifacts');
     }
     const partialBundle = composeGovernedInvestigationBundle({
@@ -673,6 +682,24 @@ describe('governed acquisition execution', () => {
               unsupportedTerms: ['consumer'],
               evidenceIndexes: firstPortfolioItem.evidenceIndexes,
             },
+            {
+              assertionLabel: 'mechanism 1',
+              statement: firstMechanism.statement,
+              unsupportedTerms: ['private'],
+              evidenceIndexes: firstMechanism.evidenceIndexes,
+            },
+            {
+              assertionLabel: 'boundary condition 1',
+              statement: firstBoundary.statement,
+              unsupportedTerms: ['private'],
+              evidenceIndexes: firstBoundary.evidenceIndexes,
+            },
+            {
+              assertionLabel: 'hypothesis 1',
+              statement: firstHypothesis.statement,
+              unsupportedTerms: ['private'],
+              evidenceIndexes: firstHypothesis.evidenceIndexes,
+            },
           ],
         },
       },
@@ -685,6 +712,18 @@ describe('governed acquisition execution', () => {
     );
     expect(partialBundle.files['reader/report.md']).toContain(
       '**Suggestive, not established:**',
+    );
+    expect(partialBundle.files['reader/report.md']).toContain(
+      '**Suggestive limitation:**',
+    );
+    expect(partialBundle.files['reader/report.md']).toContain(
+      '**Suggestive mechanism:**',
+    );
+    expect(partialBundle.files['reader/report.md']).toContain(
+      '**Suggestive boundary:**',
+    );
+    expect(partialBundle.files['reader/report.md']).toContain(
+      '**Suggestive hypothesis:**',
     );
   });
 

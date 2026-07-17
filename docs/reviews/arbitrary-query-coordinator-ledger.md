@@ -880,3 +880,35 @@ investigate-preview.test.ts`, and `pnpm format:check` passed locally. No
   25/25; runtime typecheck, repository lint, format check, and diff check pass.
   No search, provider, paid, Tavily, merge, tag, release, or deploy effect was
   used for this correction.
+
+## 2026-07-17 — V51 partial-report live validation
+
+- **Exact-head gate:** CI run `29617466164` passed every validation group plus
+  the aggregate gate and CodeRabbit on `744b886` before live execution.
+- **Operator launch residue:** the first launch stopped before provider effects
+  because the sourced Brave variable was not exported under the CLI's expected
+  `MAMMOTH_SEARCH_BRAVE_API_KEY` name; it was settled at USD 0. The second
+  launch completed Brave retrieval but stopped at the model boundary because
+  sourced `OPENROUTER_API_KEY` was also not exported to the child process. Its
+  exact journal settlement was USD `0.17`. Both incomplete paths are preserved
+  as audit residue; the final launch explicitly exported both authorized
+  variables and used a fresh output path.
+- **Successful live result:** `world-model-local-a3` completed through the
+  normal governed path with 16 snapshots, 46 admitted claims, one rejected
+  claim, a reader report, references, audit projection, acceptance review, and
+  settled effect receipts. The successful run cost USD `0.17006477`.
+- **Partial behavior proved:** the reader report survived with status
+  `partial`, presented LingBot-World and SANA-WM as two leads, cited the
+  open-source/single-GPU evidence, and recorded seven `consumer` evidence gaps
+  instead of treating consumer hardware as proved. Machine acceptance remained
+  `fail`: only two portfolio items, evidence-binding gaps, non-numeric
+  experiment thresholds, and unresolved compute-scarcity coverage.
+- **Manual-read follow-up:** the Evidence Gaps and portfolio sections were
+  correctly labelled, but the same weak assertions were repeated without the
+  label in limitation, mechanism, boundary, hypothesis, and rationale sections.
+  The renderer and regression fixture now propagate the suggestive label to all
+  repeated projections; focused tests 25/25, typecheck, lint, and format pass.
+- **Spend/status:** aggregate governed spend is USD `5.331666870001`, leaving
+  USD `9.668333129999` under the USD 15 ceiling. Brave/OpenRouter only; no
+  Tavily credential was read or used. Predicates 9/10 remain incomplete and
+  11/12 remain blocked; no merge, tag, release, or deploy occurred.

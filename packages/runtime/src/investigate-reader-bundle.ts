@@ -529,12 +529,18 @@ export function composeGovernedInvestigationBundle(
             : [
                 '## Cross-domain mechanisms',
                 '',
-                ...reviewMechanisms.map(
-                  (mechanism) =>
-                    `- Deduction from admitted evidence: ${
-                      mechanism.sentence
-                    } ${citationSuffix(mechanism.citations)}`,
-                ),
+                ...reviewMechanisms.map((mechanism) => {
+                  const gap = evidenceGapForStatement(mechanism.statement);
+                  return gap
+                    ? `- **Suggestive mechanism:** ${mechanism.sentence} ${citationSuffix(
+                        mechanism.citations,
+                      )} Direct evidence is missing for: ${gap.unsupportedTerms.join(
+                        ', ',
+                      )}.`
+                    : `- Deduction from admitted evidence: ${mechanism.sentence} ${citationSuffix(
+                        mechanism.citations,
+                      )}`;
+                }),
                 '',
               ]),
           ...(reviewDissent.length === 0
@@ -555,12 +561,18 @@ export function composeGovernedInvestigationBundle(
             : [
                 '## Boundary conditions',
                 '',
-                ...reviewBoundaries.map(
-                  (boundary) =>
-                    `- Applicability limit: ${
-                      boundary.sentence
-                    } ${citationSuffix(boundary.citations)}`,
-                ),
+                ...reviewBoundaries.map((boundary) => {
+                  const gap = evidenceGapForStatement(boundary.statement);
+                  return gap
+                    ? `- **Suggestive boundary:** ${boundary.sentence} ${citationSuffix(
+                        boundary.citations,
+                      )} Direct evidence is missing for: ${gap.unsupportedTerms.join(
+                        ', ',
+                      )}.`
+                    : `- Applicability limit: ${boundary.sentence} ${citationSuffix(
+                        boundary.citations,
+                      )}`;
+                }),
                 '',
               ]),
           ...(reviewHypotheses.length === 0
@@ -572,10 +584,17 @@ export function composeGovernedInvestigationBundle(
                   const falsifier = readerVisibleDeduction(
                     hypothesis.falsifier,
                   );
+                  const gap = evidenceGapForStatement(hypothesis.statement);
                   return [
-                    `- Hypothesis from admitted evidence: ${
-                      hypothesis.sentence
-                    } ${citationSuffix(hypothesis.citations)}`,
+                    gap
+                      ? `- **Suggestive hypothesis:** ${hypothesis.sentence} ${citationSuffix(
+                          hypothesis.citations,
+                        )} Direct evidence is missing for: ${gap.unsupportedTerms.join(
+                          ', ',
+                        )}.`
+                      : `- Hypothesis from admitted evidence: ${hypothesis.sentence} ${citationSuffix(
+                          hypothesis.citations,
+                        )}`,
                     ...(falsifier ? [`  - Falsifier: ${falsifier}`] : []),
                   ];
                 }),
@@ -657,12 +676,18 @@ export function composeGovernedInvestigationBundle(
             item.citations,
           )}`;
     }),
-    ...directAnswerLimitations.map(
-      (item) =>
-        `- Limitation from admitted evidence: ${item.sentence} ${citationSuffix(
-          item.citations,
-        )}`,
-    ),
+    ...directAnswerLimitations.map((item) => {
+      const gap = evidenceGapForStatement(item.statement);
+      return gap
+        ? `- **Suggestive limitation:** ${item.sentence} ${citationSuffix(
+            item.citations,
+          )} Direct evidence is missing for: ${gap.unsupportedTerms.join(
+            ', ',
+          )}.`
+        : `- Limitation from admitted evidence: ${item.sentence} ${citationSuffix(
+            item.citations,
+          )}`;
+    }),
     ...directConstraintFacts.map(
       (fact) =>
         `- Admitted constraint evidence not resolved by synthesis: ${
@@ -702,9 +727,15 @@ export function composeGovernedInvestigationBundle(
               '',
               ...(rationale
                 ? [
-                    `- Why it ranks here: ${rationale} ${citationSuffix(
+                    `- Why it ranks${gap ? ' (partially supported)' : ''}: ${rationale} ${citationSuffix(
                       item.citations,
-                    )}`,
+                    )}${
+                      gap
+                        ? ` Missing direct support for: ${gap.unsupportedTerms.join(
+                            ', ',
+                          )}.`
+                        : ''
+                    }`,
                   ]
                 : []),
               ...item.constraints.flatMap((constraint) => {
