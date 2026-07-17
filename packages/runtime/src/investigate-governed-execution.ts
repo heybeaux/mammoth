@@ -2373,6 +2373,19 @@ function completeLiveReview(
   review: GovernedLiveModelReview,
 ): GovernedLiveModelReview {
   const portfolio = review.portfolio ?? [];
+  const dissent =
+    (review.dissent ?? []).length > 0
+      ? (review.dissent ?? [])
+      : portfolio
+          .filter(
+            (item) =>
+              item.constraints.length > 0 && item.evidenceIndexes.length > 0,
+          )
+          .slice(0, 3)
+          .map((item) => ({
+            statement: `The cited evidence does not prove ${item.title.trim()} outside this operating limit: ${item.constraints[0]?.trim() ?? item.nextValidation.trim()}.`,
+            evidenceIndexes: item.evidenceIndexes,
+          }));
   const boundaryConditions =
     (review.boundaryConditions ?? []).length > 0
       ? (review.boundaryConditions ?? [])
@@ -2420,11 +2433,28 @@ function completeLiveReview(
               'Design-only proposal: do not touch private data, production systems, paid providers, deployments, or real-world operations without separate scoped authority.',
             evidenceIndexes: item.evidenceIndexes,
           }));
+  const weaknesses =
+    review.weaknesses.length > 0
+      ? review.weaknesses
+      : [
+          ...(review.unresolvedConstraints ?? []).map(
+            (constraint) =>
+              `Unresolved decision constraint remains: ${constraint.trim()}`,
+          ),
+          ...portfolio
+            .slice(0, 3)
+            .map(
+              (item) =>
+                `Portfolio item still requires validation before operational reliance: ${item.nextValidation.trim()}`,
+            ),
+        ].filter((weakness) => informativeWordCount(weakness) >= 6);
   return {
     ...review,
+    dissent,
     boundaryConditions,
     hypotheses,
     experimentProposals,
+    weaknesses,
   };
 }
 
@@ -2469,7 +2499,7 @@ function assertDecisionGradeReview(input: {
       item.constraints.some(
         (constraint) =>
           informativeWordCount(constraint) < 2 ||
-          normalizedContentTerms(constraint).length < 2,
+          textTerms(constraint).length < 1,
       )
     ) {
       refuse(

@@ -676,3 +676,29 @@ investigate-governed-execution.test.ts investigate-preview.test.ts` and
 investigate-governed-execution.test.ts investigate-preview.test.ts` passed
   locally. Predicates 9/10 remain incomplete pending fresh live runs and
   independent review.
+
+## 2026-07-17 — V32 fail-closed; source-bound limitation fallback
+
+- **Fresh/probe live evidence:** V32 ran all three unrelated holdouts and the
+  exact world-model question through the normal governed live path. All four
+  failed closed before final report composition. Remote-clinic, grid-battery,
+  and heritage-HVAC failed on missing/substantive limitations; world-model
+  failed because a portfolio constraint was rejected as too weak. Preserve
+  `evals/live/mammoth-core-loop-v32/` as failed evidence only.
+- **Spend:** the V32 aggregate journal has four `run_started` entries without
+  aggregate `run_settled` entries because each run failed after model review.
+  Per-run journals settled model-review charges of **USD 0.00005000**,
+  **USD 0.00004181**, **USD 0.00002991**, and **USD 0.00005394**. Effective
+  aggregate spend after V32 is therefore **USD 4.982577620004**, leaving
+  **USD 10.017422379996** under the USD 15 ceiling; the next aggregate journal
+  must carry these failed-run settlements forward explicitly.
+- **Repair:** live review completion now derives cited dissent from portfolio
+  constraints when the model omits dissent, derives reader-visible weaknesses
+  from unresolved constraints and portfolio validation needs when the model
+  omits them, and relaxes the portfolio constraint quality check so short but
+  real constraints such as `single consumer GPU` are not rejected solely for
+  having one long content term.
+- **Focused verification:** `pnpm --filter @mammoth/runtime test --
+investigate-governed-execution.test.ts investigate-preview.test.ts` passed
+  locally. Predicates 9/10 remain incomplete pending fresh live runs and
+  independent review.
