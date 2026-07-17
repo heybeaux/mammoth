@@ -1,16 +1,20 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { canonicalDigest, P9LiveAuthorityReceiptSchema } from '@mammoth/domain';
 import {
   bindApprovedInvestigationPlan,
   recordInvestigationApproval,
 } from '@mammoth/governance';
 import {
+  buildInvestigateLivePriceCatalog,
   buildOfflineNoEffectAdapters,
   composeGovernedInvestigationBundle,
   createInvestigationPreview,
   deriveAcquisitionIntents,
   evaluateAcquisitionRelease,
   executeGovernedAcquisition,
+  executeGovernedLiveAcquisition,
   INVESTIGATION_ARTIFACT_NAMES,
   mintOfflineFixtureAuthorityReceipt,
   OFFLINE_FIXTURE_ISSUER_ID,
@@ -224,12 +228,25 @@ async function executeGovernedOfflineRun(
   let sourcesOption: string | undefined;
   let trustedIssuerOption: string | undefined;
   let actorOption: string | undefined;
+  let live = false;
+  let budgetJournalOption: string | undefined;
+  let searchProviderOption: 'brave' | 'tavily' = 'brave';
+  let searchEnvOption = 'MAMMOTH_SEARCH_BRAVE_API_KEY';
+  let modelEnvOption = 'OPENROUTER_API_KEY';
+  let modelBaseUrlOption = 'https://openrouter.ai/api/v1';
+  let modelIdOption = 'openai/gpt-4o-mini';
+  const authorizedRetrievalOrigins: string[] = [];
   let approve = false;
   for (let index = 3; index < argv.length; index += 1) {
     const option = argv[index];
     if (option === '--approve') {
       if (approve) throw new Error('duplicate --approve');
       approve = true;
+      continue;
+    }
+    if (option === '--live') {
+      if (live) throw new Error('duplicate --live');
+      live = true;
       continue;
     }
     const value = argv[index + 1];
@@ -261,6 +278,55 @@ async function executeGovernedOfflineRun(
         throw new Error('--actor requires an operator id');
       }
       actorOption = value;
+    } else if (option === '--budget-journal') {
+      if (budgetJournalOption !== undefined) {
+        throw new Error('duplicate --budget-journal');
+      }
+      if (!value || value.startsWith('-')) {
+        throw new Error('--budget-journal requires a path');
+      }
+      budgetJournalOption = value;
+    } else if (option === '--brave-env') {
+      if (!value || value.startsWith('-')) {
+        throw new Error('--brave-env requires an environment variable name');
+      }
+      searchEnvOption = value;
+    } else if (option === '--search-provider') {
+      if (value !== 'brave' && value !== 'tavily') {
+        throw new Error('--search-provider must be brave or tavily');
+      }
+      searchProviderOption = value;
+      if (
+        value === 'tavily' &&
+        searchEnvOption === 'MAMMOTH_SEARCH_BRAVE_API_KEY'
+      ) {
+        searchEnvOption = 'TAVILY_API_KEY';
+      }
+    } else if (option === '--search-env') {
+      if (!value || value.startsWith('-')) {
+        throw new Error('--search-env requires an environment variable name');
+      }
+      searchEnvOption = value;
+    } else if (option === '--model-env') {
+      if (!value || value.startsWith('-')) {
+        throw new Error('--model-env requires an environment variable name');
+      }
+      modelEnvOption = value;
+    } else if (option === '--model-base-url') {
+      if (!value || value.startsWith('-')) {
+        throw new Error('--model-base-url requires a URL');
+      }
+      modelBaseUrlOption = value;
+    } else if (option === '--model') {
+      if (!value || value.startsWith('-')) {
+        throw new Error('--model requires a model id');
+      }
+      modelIdOption = value;
+    } else if (option === '--authorized-retrieval-origin') {
+      if (!value || value.startsWith('-')) {
+        throw new Error('--authorized-retrieval-origin requires an origin URL');
+      }
+      authorizedRetrievalOrigins.push(new URL(value).origin);
     } else {
       throw new Error(`unknown investigate option: ${String(option)}`);
     }
@@ -271,9 +337,14 @@ async function executeGovernedOfflineRun(
       'governed execution requires an explicit operator approval: pass --approve to approve the previewed plan',
     );
   }
-  if (!sourcesOption) {
+  if (!live && !sourcesOption) {
     throw new Error(
       'governed offline execution requires --offline-sources CATALOG.json declaring the complete source universe',
+    );
+  }
+  if (live && !budgetJournalOption) {
+    throw new Error(
+      'governed live execution requires --budget-journal PATH for the durable spend journal',
     );
   }
   const now = dependencies.now?.() ?? new Date().toISOString();
@@ -300,15 +371,27 @@ async function executeGovernedOfflineRun(
   }
   const plan = binding.plan;
   const intentSet = deriveAcquisitionIntents(plan);
-  // OFFLINE FIXTURE authority: deterministically minted and only usable
-  // because the operator explicitly pinned its issuer via --trusted-issuer.
-  const effectAuthority = mintOfflineFixtureAuthorityReceipt({
-    planId: plan.planId,
-    planDigest: plan.planDigest,
-    question: plan.question,
-    actorId,
-    authorizedAt: now,
-  });
+  const budgetJournalPath =
+    budgetJournalOption === undefined
+      ? undefined
+      : resolve(cwd, budgetJournalOption);
+  const effectAuthority = live
+    ? mintLoopLiveAuthorityReceipt({
+        plan,
+        bindingReceiptDigest: binding.receipt.receiptDigest,
+        actorId,
+        authorizedAt: now,
+        budgetJournalPath: budgetJournalPath ?? '',
+        modelBaseUrl: modelBaseUrlOption,
+        authorizedRetrievalOrigins,
+      })
+    : mintOfflineFixtureAuthorityReceipt({
+        planId: plan.planId,
+        planDigest: plan.planDigest,
+        question: plan.question,
+        actorId,
+        authorizedAt: now,
+      });
   const release = evaluateAcquisitionRelease({
     intentSet,
     effectAuthority,
@@ -369,17 +452,33 @@ async function executeGovernedOfflineRun(
     return 0;
   }
 
-  const adapters = buildOfflineNoEffectAdapters(
-    await readJson(resolve(cwd, sourcesOption), 'offline source catalog'),
-  );
-  const execution = executeGovernedAcquisition({
-    intentSet,
-    release,
-    effectAuthority,
-    trustedIssuerId: trustedIssuerOption,
-    adapters,
-    now,
-  });
+  const execution = live
+    ? await executeGovernedLiveAcquisition({
+        intentSet,
+        release,
+        effectAuthority,
+        trustedIssuerId: trustedIssuerOption,
+        now,
+        budgetJournalPath: budgetJournalPath ?? '',
+        searchProvider: searchProviderOption,
+        searchApiKeyEnvVar: searchEnvOption,
+        modelApiKeyEnvVar: modelEnvOption,
+        modelBaseUrl: modelBaseUrlOption,
+        modelId: modelIdOption,
+      })
+    : executeGovernedAcquisition({
+        intentSet,
+        release,
+        effectAuthority,
+        trustedIssuerId: trustedIssuerOption,
+        adapters: buildOfflineNoEffectAdapters(
+          await readJson(
+            resolve(cwd, sourcesOption ?? ''),
+            'offline source catalog',
+          ),
+        ),
+        now,
+      });
   const bundle = composeGovernedInvestigationBundle({
     plan,
     intentSet,
@@ -390,10 +489,22 @@ async function executeGovernedOfflineRun(
   for (const [name, content] of Object.entries(bundle.files)) {
     await writeArtifact(name, content);
   }
+  await writeJsonArtifact(
+    'live-price-catalog.json',
+    buildInvestigateLivePriceCatalog(),
+  );
+  if (live && budgetJournalPath) {
+    await writeArtifact(
+      'audit/durable-budget-journal.jsonl',
+      await readFile(budgetJournalPath, 'utf8'),
+    );
+  }
   io.stdout(
     JSON.stringify({
       command: 'investigate',
-      status: 'governed_execution_complete',
+      status: live
+        ? 'governed_live_execution_complete'
+        : 'governed_execution_complete',
       outputDirectory,
       runId: bundle.runId,
       planDigest: plan.planDigest,
@@ -401,6 +512,7 @@ async function executeGovernedOfflineRun(
       releaseDigest: release.releaseDigest,
       trustedIssuerId: trustedIssuerOption,
       offlineFixtureIssuerId: OFFLINE_FIXTURE_ISSUER_ID,
+      executionMode: execution.executionMode,
       decision: release.decision,
       reasonCodes: release.reasonCodes,
       admittedClaims: execution.claims.filter(
@@ -411,10 +523,136 @@ async function executeGovernedOfflineRun(
       ).length,
       snapshots: execution.snapshots.length,
       executionAuthorized: true,
-      externalEffectsExecuted: false,
+      externalEffectsExecuted: execution.externalEffectsExecuted,
     }),
   );
   return 0;
+}
+
+function mintLoopLiveAuthorityReceipt(input: {
+  readonly plan: {
+    readonly planId: string;
+    readonly planDigest: string;
+    readonly question: string;
+    readonly sourcePreviewDigest: string;
+  };
+  readonly bindingReceiptDigest: string;
+  readonly actorId: string;
+  readonly authorizedAt: string;
+  readonly budgetJournalPath: string;
+  readonly modelBaseUrl: string;
+  readonly authorizedRetrievalOrigins: readonly string[];
+}) {
+  if (!input.budgetJournalPath.trim()) {
+    throw new Error('live authority requires a budget journal path');
+  }
+  const consumptionNonce = `loop-live-${randomUUID()}`;
+  const executionId = `investigate-live:${canonicalDigest({
+    planDigest: input.plan.planDigest,
+    consumptionNonce,
+  }).slice(7, 23)}`;
+  const budgetLimit = {
+    currencyUsd: 15,
+    requests: 10_000,
+    inputTokens: 2_000_000,
+    outputTokens: 500_000,
+    bytes: 2_000_000_000,
+    durationMs: 7_200_000,
+  };
+  const priceCatalog = buildInvestigateLivePriceCatalog();
+  const modelOrigin = new URL(input.modelBaseUrl).origin;
+  if (modelOrigin !== 'https://openrouter.ai') {
+    throw new Error(
+      'governed live investigate currently authorizes only the OpenRouter model destination',
+    );
+  }
+  const consumptionStoreDigest = canonicalDigest({
+    kind: 'p9-consumption-store/v1',
+    id: input.budgetJournalPath,
+  });
+  const planScope = {
+    proposalId: `proposal:${input.plan.planId}`,
+    proposalDigest: input.plan.sourcePreviewDigest,
+    planId: input.plan.planId,
+    planDigest: input.plan.planDigest,
+    acceptanceReceiptDigest: input.bindingReceiptDigest,
+    question: input.plan.question,
+    questionDigest: canonicalDigest(input.plan.question),
+    domainPackId: 'general-web/v1' as const,
+    packDigest: canonicalDigest({
+      kind: 'investigate-live-general-web-pack/v1',
+    }),
+    budgetAllocation: {
+      currencyUsd: 15,
+      searchUsd: 4,
+      retrievalParsingUsd: 1,
+      modelsUsd: 10,
+    },
+  };
+  const identity = {
+    schemaVersion: '1.0.0' as const,
+    contractFamily: 'p9.v1' as const,
+    authorityId: `authority:${executionId}`,
+    issuerId: 'mammoth-core-loop-live-authority/v1',
+    decision: 'authorized' as const,
+    reason:
+      'Active live-effect authority in AGENTS.md granted 2026-07-17 for Outcome 1 normal-path holdouts under a USD 15 aggregate ceiling.',
+    executionId,
+    executionDigest: canonicalDigest({
+      executionId,
+      planDigest: input.plan.planDigest,
+      questionDigest: canonicalDigest(input.plan.question),
+      consumptionNonce,
+    }),
+    consumptionNonce,
+    consumptionStoreId: input.budgetJournalPath,
+    consumptionStoreDigest,
+    maximumExecutions: 1 as const,
+    planScope,
+    priceCatalogId: priceCatalog.catalogId,
+    priceCatalogVersion: priceCatalog.version,
+    priceCatalogDigest: priceCatalog.catalogDigest,
+    providerProfileCatalogId: 'investigate-live-provider-profiles/v1',
+    providerProfileCatalogVersion: '1.0.0',
+    providerProfileCatalogDigest: canonicalDigest({
+      kind: 'investigate-live-provider-profiles/v1',
+      modelOrigin,
+    }),
+    sourceClassificationPolicyDigest: canonicalDigest({
+      kind: 'investigate-live-source-classification/v1',
+      sourceClasses: ['public_web', 'counterevidence'],
+    }),
+    authorizedProfileIds: [
+      'brave-search-live',
+      'public-retrieval-live',
+      'bounded-parser-live',
+      'openai-compatible-review-live',
+    ],
+    proposerProfileId: 'openai-compatible-review-live',
+    evaluatorProfileId: 'openai-compatible-review-live',
+    budgetLimit,
+    authorizedEffectKinds: ['search', 'retrieval', 'parser', 'model'] as const,
+    authorizedDestinationOrigins: [
+      'https://api.search.brave.com',
+      'https://api.tavily.com',
+      modelOrigin,
+    ],
+    authorizedRetrievalOrigins:
+      input.authorizedRetrievalOrigins.length > 0
+        ? [...new Set(input.authorizedRetrievalOrigins)]
+        : ['https://example.com'],
+    authorizedBillingAccountIds: ['mammoth-core-loop-live'],
+    actorId: input.actorId,
+    authorizedAt: input.authorizedAt,
+    notBeforeAt: input.authorizedAt,
+    expiresAt: new Date(
+      Date.parse(input.authorizedAt) + 48 * 60 * 60 * 1000,
+    ).toISOString(),
+  };
+  return P9LiveAuthorityReceiptSchema.parse({
+    ...identity,
+    receiptDigest: canonicalDigest(identity),
+  });
 }
 
 async function readJson(path: string, label: string): Promise<unknown> {
@@ -441,5 +679,5 @@ function slug(value: string): string {
 }
 
 function investigateUsage(): string {
-  return 'usage: mammoth investigate "QUESTION OR THEORY" [--output PATH]\n       mammoth investigate --plan PLAN.json [--authority RECEIPT.json] [--trusted-issuer ISSUER_ID] [--output PATH]\n       mammoth investigate --execute "QUESTION OR THEORY" --offline-sources CATALOG.json --approve [--trusted-issuer ISSUER_ID] [--actor OPERATOR_ID] [--output PATH]';
+  return 'usage: mammoth investigate "QUESTION OR THEORY" [--output PATH]\n       mammoth investigate --plan PLAN.json [--authority RECEIPT.json] [--trusted-issuer ISSUER_ID] [--output PATH]\n       mammoth investigate --execute "QUESTION OR THEORY" --offline-sources CATALOG.json --approve [--trusted-issuer ISSUER_ID] [--actor OPERATOR_ID] [--output PATH]\n       mammoth investigate --execute "QUESTION OR THEORY" --live --approve --trusted-issuer mammoth-core-loop-live-authority/v1 --budget-journal PATH [--search-provider brave|tavily] [--authorized-retrieval-origin ORIGIN] [--model MODEL] [--output PATH]';
 }

@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
+import { mkdtemp } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import {
   P9LiveAuthorityReceiptSchema,
+  canonicalDigest,
   type InvestigationPlan,
 } from '@mammoth/domain';
 import {
@@ -11,9 +15,11 @@ import { describe, expect, it } from 'vitest';
 import {
   buildOfflineNoEffectAdapters,
   composeGovernedInvestigationBundle,
+  buildInvestigateLivePriceCatalog,
   deriveAcquisitionIntents,
   evaluateAcquisitionRelease,
   executeGovernedAcquisition,
+  executeGovernedLiveAcquisition,
   GovernedExecutionError,
   mintOfflineFixtureAuthorityReceipt,
   OFFLINE_FIXTURE_ISSUER_ID,
@@ -99,6 +105,95 @@ function authorizedScenario(question = QUESTION): Scenario {
     now: NOW,
   });
   return { plan, intentSet, authority, release };
+}
+
+function liveAuthority(input: {
+  readonly plan: InvestigationPlan;
+  readonly journalPath: string;
+}) {
+  const consumptionNonce = 'live-test-consumption-nonce';
+  const executionId = `investigate-live:${canonicalDigest({
+    planDigest: input.plan.planDigest,
+    consumptionNonce,
+  }).slice(7, 23)}`;
+  const priceCatalog = buildInvestigateLivePriceCatalog();
+  const planScope = {
+    proposalId: `proposal:${input.plan.planId}`,
+    proposalDigest: input.plan.sourcePreviewDigest,
+    planId: input.plan.planId,
+    planDigest: input.plan.planDigest,
+    acceptanceReceiptDigest: input.plan.approvalDigest,
+    question: input.plan.question,
+    questionDigest: canonicalDigest(input.plan.question),
+    domainPackId: 'general-web/v1' as const,
+    packDigest: canonicalDigest({ kind: 'test-live-pack/v1' }),
+    budgetAllocation: {
+      currencyUsd: 15,
+      searchUsd: 4,
+      retrievalParsingUsd: 1,
+      modelsUsd: 10,
+    },
+  };
+  const identity = {
+    schemaVersion: '1.0.0' as const,
+    contractFamily: 'p9.v1' as const,
+    authorityId: `authority:${executionId}`,
+    issuerId: 'mammoth-core-loop-live-authority/v1',
+    decision: 'authorized' as const,
+    reason: 'test scoped live authority',
+    executionId,
+    executionDigest: canonicalDigest({
+      executionId,
+      planDigest: input.plan.planDigest,
+      questionDigest: canonicalDigest(input.plan.question),
+      consumptionNonce,
+    }),
+    consumptionNonce,
+    consumptionStoreId: input.journalPath,
+    consumptionStoreDigest: canonicalDigest({
+      kind: 'p9-consumption-store/v1',
+      id: input.journalPath,
+    }),
+    maximumExecutions: 1 as const,
+    planScope,
+    priceCatalogId: priceCatalog.catalogId,
+    priceCatalogVersion: priceCatalog.version,
+    priceCatalogDigest: priceCatalog.catalogDigest,
+    providerProfileCatalogId: 'test-live-profiles',
+    providerProfileCatalogVersion: '1.0.0',
+    providerProfileCatalogDigest: canonicalDigest({
+      kind: 'test-live-profiles',
+    }),
+    sourceClassificationPolicyDigest: canonicalDigest({
+      kind: 'test-live-source-policy',
+    }),
+    authorizedProfileIds: ['search', 'retrieval', 'parser', 'model'],
+    proposerProfileId: 'model',
+    evaluatorProfileId: 'model',
+    budgetLimit: {
+      currencyUsd: 15,
+      requests: 10_000,
+      inputTokens: 2_000_000,
+      outputTokens: 500_000,
+      bytes: 2_000_000_000,
+      durationMs: 7_200_000,
+    },
+    authorizedEffectKinds: ['search', 'retrieval', 'parser', 'model'] as const,
+    authorizedDestinationOrigins: [
+      'https://api.tavily.com',
+      'https://openrouter.ai',
+    ],
+    authorizedRetrievalOrigins: ['https://sources.example.test'],
+    authorizedBillingAccountIds: ['test'],
+    actorId: 'operator:test',
+    authorizedAt: NOW,
+    notBeforeAt: NOW,
+    expiresAt: '2026-07-17T12:00:00.000Z',
+  };
+  return P9LiveAuthorityReceiptSchema.parse({
+    ...identity,
+    receiptDigest: canonicalDigest(identity),
+  });
 }
 
 function countedAdapters(): {
@@ -228,6 +323,129 @@ describe('governed acquisition execution', () => {
         proposal.proposerWork.profileFamilyId,
       );
     }
+  });
+
+  it('executes the governed live path through search, retrieval, parser, and model reservations', async () => {
+    process.env.TEST_TAVILY_KEY = 'tvly-test';
+    process.env.TEST_MODEL_KEY = 'sk-test';
+    const plan = boundPlan(
+      'Which field data synchronization strategies help remote clinics operate during intermittent connectivity?',
+    );
+    const journalPath = join(
+      await mkdtemp(join(tmpdir(), 'mammoth-live-test-')),
+      'budget.jsonl',
+    );
+    const authority = liveAuthority({ plan, journalPath });
+    const intentSet = deriveAcquisitionIntents(plan);
+    const release = evaluateAcquisitionRelease({
+      intentSet,
+      effectAuthority: authority,
+      trustedIssuerId: 'mammoth-core-loop-live-authority/v1',
+      now: NOW,
+    });
+    const sourceBody =
+      'Local-first systems keep writes available on devices while connectivity is intermittent. Conflict-free replicated data types can merge concurrent updates without a central coordinator. Remote clinic deployments need explicit conflict resolution workflows for ambiguous patient records.';
+    const fetchImpl: typeof fetch = (url) => {
+      const href =
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      if (href === 'https://api.tavily.com/search') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              results: [
+                {
+                  url: 'https://sources.example.test/clinic-sync',
+                  title: 'Clinic sync guide',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        );
+      }
+      if (href.endsWith('/chat/completions')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      summary:
+                        'The admitted evidence supports offline writes and conflict handling.',
+                      weaknesses: [
+                        'Only one source was available in the fixture.',
+                      ],
+                      suggestedSearches: ['remote clinic conflict resolution'],
+                    }),
+                  },
+                },
+              ],
+              usage: { prompt_tokens: 120, completion_tokens: 40 },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${href}`));
+    };
+    const execution = await executeGovernedLiveAcquisition({
+      intentSet,
+      release,
+      effectAuthority: authority,
+      trustedIssuerId: 'mammoth-core-loop-live-authority/v1',
+      now: NOW,
+      budgetJournalPath: journalPath,
+      searchProvider: 'tavily',
+      searchApiKeyEnvVar: 'TEST_TAVILY_KEY',
+      modelApiKeyEnvVar: 'TEST_MODEL_KEY',
+      modelBaseUrl: 'https://openrouter.ai/api/v1',
+      modelId: 'test/model',
+      fetchImpl,
+      retrieve: (request) =>
+        Promise.resolve({
+          requestedUrl: request.url,
+          finalUrl: request.url,
+          redirectChain: [],
+          retrievedAt: NOW,
+          status: 200,
+          headers: { 'content-type': 'text/plain' },
+          mediaType: 'text/plain',
+          bytes: new TextEncoder().encode(sourceBody),
+          networkReceipts: [],
+        }),
+      sourceClassTargets: [
+        {
+          sourceClass: 'public_web',
+          minimumIndependentSources: 1,
+          mandatory: true,
+        },
+      ],
+      maxCandidates: 1,
+      maxClaimsPerSnapshot: 2,
+    });
+    expect(execution.executionMode).toBe('governed_live');
+    expect(execution.externalEffectsExecuted).toBe(true);
+    expect(execution.effectReceipts.length).toBeGreaterThanOrEqual(4);
+    expect(
+      execution.claims.some((claim) => claim.decision === 'admitted'),
+    ).toBe(true);
+    expect(
+      execution.modelWork.some((work) => work.workId.startsWith('live-')),
+    ).toBe(true);
+    const bundle = composeGovernedInvestigationBundle({
+      plan,
+      intentSet,
+      release,
+      execution,
+      now: NOW,
+    });
+    expect(bundle.files['execution-receipt.json']).toContain(
+      '"externalEffectsExecuted": true',
+    );
+    expect(bundle.files['audit/live-effect-receipts.jsonl']).toContain(
+      'effect-receipt:',
+    );
   });
 
   it('is deterministic for a fixed clock and catalog', () => {

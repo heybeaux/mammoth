@@ -224,8 +224,12 @@ export function composeGovernedInvestigationBundle(
     '## Method and limits',
     '',
     'Every factual sentence above is quoted verbatim from a preserved source and passed an independent admission review; sentences that failed review were excluded and are preserved in the audit projection.',
-    `This investigation ran strictly offline against an operator-declared source universe: ${String(execution.snapshots.length)} source snapshot(s) were preserved and ${String(rejected.length)} candidate statement(s) were rejected rather than repaired.`,
-    'No network, provider, or paid effect was executed at any point.',
+    execution.externalEffectsExecuted
+      ? `This investigation ran with governed live effects under scoped authority: ${String(execution.snapshots.length)} source snapshot(s) were preserved and ${String(rejected.length)} candidate statement(s) were rejected rather than repaired.`
+      : `This investigation ran strictly offline against an operator-declared source universe: ${String(execution.snapshots.length)} source snapshot(s) were preserved and ${String(rejected.length)} candidate statement(s) were rejected rather than repaired.`,
+    execution.externalEffectsExecuted
+      ? 'Network, provider, and model effects were reserved and settled before use; the audit projection preserves live effect receipts and the durable journal copy.'
+      : 'No network, provider, or paid effect was executed at any point.',
     '',
     ...renderSynthesisReaderLines(synthesis, { citationNumbersForClaim }),
   ];
@@ -321,24 +325,27 @@ export function composeGovernedInvestigationBundle(
       })),
     ),
     'audit/model-work.jsonl': jsonlArtifact(execution.modelWork),
-    'audit/budget-journal.jsonl': jsonlArtifact([
-      ...execution.intentReceipts.map((receipt) => ({
-        entryId: `budget:${receipt.intentId}`,
-        effect: receipt.kind,
-        reference: receipt.intentId,
-        chargedUsd: 0,
-        note: 'strictly offline no-effect adapter; no billable effect executed',
-        recordedAt: receipt.executedAt,
-      })),
-      ...execution.retrievalAttempts.map((attempt) => ({
-        entryId: `budget:${attempt.attemptId}`,
-        effect: 'retrieval',
-        reference: attempt.attemptId,
-        chargedUsd: 0,
-        note: 'strictly offline no-effect adapter; no billable effect executed',
-        recordedAt: execution.executedAt,
-      })),
-    ]),
+    'audit/live-effect-receipts.jsonl': jsonlArtifact(execution.effectReceipts),
+    'audit/budget-journal.jsonl': execution.externalEffectsExecuted
+      ? jsonlArtifact(execution.effectReceipts)
+      : jsonlArtifact([
+          ...execution.intentReceipts.map((receipt) => ({
+            entryId: `budget:${receipt.intentId}`,
+            effect: receipt.kind,
+            reference: receipt.intentId,
+            chargedUsd: 0,
+            note: 'strictly offline no-effect adapter; no billable effect executed',
+            recordedAt: receipt.executedAt,
+          })),
+          ...execution.retrievalAttempts.map((attempt) => ({
+            entryId: `budget:${attempt.attemptId}`,
+            effect: 'retrieval',
+            reference: attempt.attemptId,
+            chargedUsd: 0,
+            note: 'strictly offline no-effect adapter; no billable effect executed',
+            recordedAt: execution.executedAt,
+          })),
+        ]),
   };
 
   const manifest = jsonArtifact({
@@ -350,6 +357,8 @@ export function composeGovernedInvestigationBundle(
     intentSetDigest: intentSet.intentSetDigest,
     releaseDigest: release.releaseDigest,
     authorityReceiptDigest: execution.authorityReceiptDigest,
+    externalEffectsExecuted: execution.externalEffectsExecuted,
+    executionMode: execution.executionMode,
     readerProjectionDigest: sha256Text(projection),
     coverage: execution.coverage,
     discovery: {
@@ -386,7 +395,8 @@ export function composeGovernedInvestigationBundle(
     intentSetDigest: intentSet.intentSetDigest,
     releaseDigest: release.releaseDigest,
     authorityReceiptDigest: execution.authorityReceiptDigest,
-    externalEffectsExecuted: false,
+    externalEffectsExecuted: execution.externalEffectsExecuted,
+    executionMode: execution.executionMode,
     executedAt: execution.executedAt,
     artifactDigests,
   });

@@ -178,3 +178,58 @@ test:harness` passed (`outcome-1.v1` 4 cases + governed-execution e2e);
   into a comprehensive, readable, decision-grade, auditable answer with
   offline/no-effect proof. Proceeding to PR against `main` (merge only after
   exact-head CI green; no tag/release today — Friday).
+
+## 2026-07-17 — Predicate 9 live lane claimed; provider search blocked
+
+- **Current predicate:** replace the offline fixture executor behind
+  `mammoth investigate --execute` with governed live search, retrieval, parser,
+  and model effects under the active USD 15 loop authority.
+- **Integration slot:** `/private/tmp/mammoth-core-live-coordinator-v3`, branch
+  `feat/core-loop-live-retrieval-v3`, based on `07259e8` (PR #143 merge). Fresh
+  `pnpm install --frozen-lockfile` completed before gates.
+- **Implementation evidence:** the normal public path now accepts
+  `--live --approve --trusted-issuer mammoth-core-loop-live-authority/v1
+--budget-journal PATH`; it mints a scoped loop authority from the approved
+  `AGENTS.md` budget, opens a fresh durable journal from 0, reserves before
+  search, retrieval, parser, and model effects, preserves live retrieval
+  receipts, emits `audit/durable-budget-journal.jsonl`, and marks live bundles
+  as `externalEffectsExecuted: true`. Search providers are cataloged as
+  `brave-search` and `tavily-search`; model review uses an OpenAI-compatible
+  strict JSON-schema response without provider-facing cardinality keywords.
+- **Regression evidence:** runtime focused test
+  `investigate-governed-execution.test.ts` now includes an injected live
+  transport path proving search, retrieval, parser, and model reservations plus
+  live effect receipts and reader/audit composition. Focused runtime test passed
+  **17/17**; full repository `pnpm typecheck` passed.
+- **Live provider attempt:** a real Brave run for an unrelated CRDT/remote-clinic
+  holdout started under a fresh journal and stopped on the first search with
+  `Brave search failed with HTTP 429; rate limit reset 1, 1242819 seconds`.
+  This is an operational provider quota block, not a product acceptance pass.
+  A second strategy was prepared using Tavily based on official API docs, but the
+  available `~/projects/tra/.env` entry `TAVILY_API_KEY` is empty, so it cannot
+  run without a credential.
+- **Remaining gap:** predicates 9-12 are not complete. The code seam is live-path
+  ready and machine-tested with injected transports, but the required three
+  unrelated real live holdouts and exact world-model live review remain blocked
+  on an available search credential/provider or a non-rate-limited Brave window.
+  No release, tag, or deployment is permitted today (Friday).
+
+## 2026-07-17 — Independent review findings repaired on PR #144
+
+- **Independent reviewer:** native worker
+  `019f7094-1b57-75d1-801d-be960bd70ce3` reviewed commit `acaafd5` without
+  edits or live effects. It found two high-severity authority defects and two
+  medium audit-truth defects: retrieval origins were not enforced, model
+  destination authority was expanded from a CLI-supplied URL, live budget text
+  pointed at an offline-shaped journal, and destination/profile fields were not
+  validated before effects.
+- **Repairs:** live execution now checks authorized search/model destination
+  origins before reservation/transport, filters retrieval candidates to
+  authority-listed origins before fetch, restricts the current CLI-minted model
+  destination to OpenRouter, adds explicit `--authorized-retrieval-origin`
+  configuration for governed live runs, and renders live `audit/budget-journal`
+  content from live effect receipts instead of offline zero-charge placeholders.
+- **Verification after repair:** focused runtime live/offline test passed
+  **17/17**, full repository `pnpm typecheck` passed, and `pnpm lint` passed.
+  The provider blocker remains unchanged: Brave is rate-limited and Tavily has
+  no usable credential in the available environment.
