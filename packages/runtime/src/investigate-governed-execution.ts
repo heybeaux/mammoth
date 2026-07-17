@@ -1759,7 +1759,7 @@ export async function executeGovernedLiveAcquisition(
       catalogEntryId: 'openai-compatible-model',
       ceiling: ceiling({
         inputTokens: 20_000,
-        outputTokens: 1_200,
+        outputTokens: 2_000,
         bytes: 500_000,
         durationMs: 120_000,
       }),
@@ -2177,7 +2177,7 @@ async function openAiCompatibleReview(input: {
     body: JSON.stringify({
       model: input.modelId,
       temperature: 0,
-      max_tokens: 1200,
+      max_tokens: 2000,
       response_format: {
         type: 'json_schema',
         json_schema: {
@@ -2346,7 +2346,7 @@ async function openAiCompatibleReview(input: {
         {
           role: 'system',
           content:
-            'You are an independent decision-research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. Return compact JSON. Build a ranked portfolio of concrete decisions or opportunities, ordered by evidence strength and practical feasibility. Every portfolio item must name a specific build, intervention, opportunity class, or decision; explain why it ranks there; state evidence-backed constraints; propose the cheapest decisive next validation; and cite one or more supplied evidenceIndex values. Do not create a portfolio item when the evidence supports only a broad theme. For broad opportunity, strategy, approach, option, or how-should questions, return at least three distinct portfolio items when the evidence supports them; otherwise put the missing breadth in unresolvedConstraints. Avoid multiple items that are only variants of the same named project or intervention. Address every supplied decisionConstraint explicitly: either use its wording in an evidence-backed portfolio item or repeat it in unresolvedConstraints when the evidence does not resolve it. Every answer bullet, mechanism, dissent item, boundary condition, hypothesis, and experiment must cite supplied evidenceIndex values. Address the user question in the same form it was asked. Do not infer hardware feasibility, cost, privacy, locality, safety, or performance unless the snippets support it. Mechanisms should identify transferable causal mechanisms and where transfer breaks. Experiments must name a concrete task, baseline/comparator, decision threshold, and safety boundary when evidence permits. Prefer direct project documentation, implementation details, measured benchmarks, resource constraints, deployment evidence, and primary-source limitations over commentary.',
+            'You are an independent decision-research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. Return compact JSON. Build a ranked portfolio of concrete decisions or opportunities, ordered by evidence strength and practical feasibility. Every portfolio item must name a specific build, intervention, opportunity class, or decision; explain why it ranks there; state evidence-backed constraints; propose the cheapest decisive next validation; and cite one or more supplied evidenceIndex values. Do not create a portfolio item when the evidence supports only a broad theme. For broad opportunity, strategy, approach, option, or how-should questions, return at least three distinct portfolio items when the evidence supports them; otherwise put the missing breadth in unresolvedConstraints. Distinct items must differ in user workflow, architecture, or decision lever, not merely be substeps of the same project. Avoid multiple items that are only variants of the same named project or intervention. Address every supplied decisionConstraint explicitly: either use its wording in an evidence-backed portfolio item or repeat it in unresolvedConstraints when the evidence does not resolve it. Every answer bullet, mechanism, dissent item, boundary condition, hypothesis, and experiment must cite supplied evidenceIndex values. Address the user question in the same form it was asked, including any locality, privacy, hardware, budget, risk, safety, or deployment constraints that are supported by evidence. Do not infer hardware feasibility, cost, privacy, locality, safety, or performance unless the snippets support it; when evidence is missing, say so in unresolvedConstraints. Mechanisms should identify transferable causal mechanisms and where transfer breaks. Dissent should name a real evidence gap, counterexample, tradeoff, or boundary; do not emit generic "more validation needed" dissent. Experiments must name a concrete task, baseline/comparator, metric, decision threshold, and safety boundary when evidence permits. Prefer direct project documentation, implementation details, measured benchmarks, resource constraints, deployment evidence, and primary-source limitations over commentary.',
         },
         {
           role: 'user',

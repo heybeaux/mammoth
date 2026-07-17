@@ -237,7 +237,7 @@ async function executeGovernedOfflineRun(
   let searchEnvOption = 'MAMMOTH_SEARCH_BRAVE_API_KEY';
   let modelEnvOption = 'OPENROUTER_API_KEY';
   let modelBaseUrlOption = 'https://openrouter.ai/api/v1';
-  let modelIdOption = 'openai/gpt-4o-mini';
+  let modelIdOption = 'openai/gpt-4o';
   const authorizedRetrievalOrigins: string[] = [];
   let approve = false;
   for (let index = 3; index < argv.length; index += 1) {
