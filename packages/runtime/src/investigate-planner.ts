@@ -223,10 +223,6 @@ function stableIndex(seed: string, offset: number, size: number): number {
   return Number.parseInt(digest.slice(0, 8), 16) % size;
 }
 
-function searchStem(question: string): string {
-  return question;
-}
-
 function compactQuery(value: string, maxTerms = 18): string {
   const terms: string[] = [];
   const seen = new Set<string>();
@@ -318,7 +314,6 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
         : best,
     directConstraintFocus,
   );
-  const directSearch = searchStem(question);
   const sourceTopic = orderedFocusTerms(question).slice(0, 6).join(' ');
   const implementationQuery = compactQuery(
     [implementationFocus, ...constraints].join(' '),
@@ -429,12 +424,12 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
         `${subjectConstraintFocus} ${lateConstraintFocus} measured benchmark resource requirements`,
         `${subjectConstraintFocus} ${lateConstraintFocus} deployment hardware requirements`,
         `${boundaryQuery || implementationQuery || sourceTopic || primary} limitations counterexamples failure cases`,
-        `${sourceTopic || directSearch} official project documentation`,
-        `${sourceTopic || primary} ${directConstraintFocus} primary source technical report`,
+        `${subjectConstraintFocus} ${lateConstraintFocus} official project documentation tested hardware configuration`,
+        `${subjectConstraintFocus} ${lateConstraintFocus} primary source technical report`,
         `${sourceTopic || primary} ${resourceConstraintFocus} measured benchmark resource requirements`,
         `${constraintQuery || implementationQuery || sourceTopic || primary} official implementation constraints`,
         `${boundaryQuery || implementationQuery || sourceTopic || primary} benchmark feasibility comparison`,
-        `${sourceTopic || primary} ${directConstraintFocus} independent evaluation comparison`,
+        `${subjectConstraintFocus} ${lateConstraintFocus} independent evaluation measured comparison`,
       ],
       evidenceRequirements: [
         'Prefer direct, current, and reproducible evidence for critical factual claims.',
