@@ -647,3 +647,32 @@ investigate-governed-execution.test.ts investigate-preview.test.ts` and
 investigate-governed-execution.test.ts investigate-preview.test.ts` and
   `pnpm format:check && pnpm lint && pnpm typecheck` passed locally. Predicates
   9/10 remain incomplete pending fresh live runs and independent review.
+
+## 2026-07-17 — V31 completed; breadth and substance repair
+
+- **Fresh/probe live evidence:** V31 completed all three unrelated holdouts and
+  the exact world-model question through the normal governed live path with
+  exit code 0. Preserve `evals/live/mammoth-core-loop-v31/` as probe evidence;
+  do not count it as acceptance.
+- **Spend:** V31 started from the V30 aggregate journal plus explicit
+  failed-run settlements. After the four V31 runs, aggregate settled spend is
+  **USD 4.982401960004**, leaving **USD 10.017598039996** under the USD 15
+  ceiling.
+- **Assessment before repair:** V31 still produced acceptance-shaped but
+  product-thin reports. The exact world-model report collapsed to a single
+  LeWM item instead of ranking distinct open-source/private/local/single-GPU
+  opportunity classes. Holdout reports still used generic limits and
+  validation thresholds that were structurally present but not decision-grade.
+- **Repair:** broad opportunity/strategy/how-should questions now fail closed
+  unless live synthesis produces at least three distinct evidence-bound
+  portfolio items. Live review assertions now reject weak portfolio constraints,
+  require visible dissent and substantive weaknesses, and require experiment
+  thresholds with comparator/threshold language. Derived boundary and
+  experiment fallback text now uses portfolio validation/rationale instead of
+  generic “applicability depends” and “supported enough” phrasing. The planner
+  also adds generic alternatives/comparison searches to reduce single-project
+  lock-in without adding topic logic.
+- **Focused verification:** `pnpm --filter @mammoth/runtime test --
+investigate-governed-execution.test.ts investigate-preview.test.ts` passed
+  locally. Predicates 9/10 remain incomplete pending fresh live runs and
+  independent review.

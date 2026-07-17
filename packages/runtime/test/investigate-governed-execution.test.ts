@@ -430,6 +430,34 @@ describe('governed acquisition execution', () => {
                             'Replay a bounded set of concurrent record edits and require every ambiguous merge to surface for review.',
                           evidenceIndexes: [1, 3],
                         },
+                        {
+                          rank: 2,
+                          title: 'Local write queue with later synchronization',
+                          statement:
+                            'Use a local write queue so clinic work can continue when connectivity drops.',
+                          rationale:
+                            'The admitted evidence supports local offline writes as the availability mechanism during intermittent connectivity.',
+                          constraints: [
+                            'Offline local writes require later synchronization when connectivity returns.',
+                          ],
+                          nextValidation:
+                            'Compare queued offline encounters against always-online entry for completion rate and synchronization error rate.',
+                          evidenceIndexes: [1, 2],
+                        },
+                        {
+                          rank: 3,
+                          title: 'Duplicate-record registry review',
+                          statement:
+                            'Use a registry review workflow to detect duplicate or incomplete patient records before accepting merged data.',
+                          rationale:
+                            'The admitted conflict evidence supports explicit duplicate-record management rather than silent automated acceptance.',
+                          constraints: [
+                            'Duplicate or incomplete patient records require explicit review before merged data is accepted.',
+                          ],
+                          nextValidation:
+                            'Compare registry-assisted review with manual review on duplicate detection rate and false merge rate.',
+                          evidenceIndexes: [3],
+                        },
                       ],
                       unresolvedConstraints: [
                         'No admitted field trial establishes clinical outcome safety.',

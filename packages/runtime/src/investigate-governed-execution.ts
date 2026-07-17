@@ -305,6 +305,43 @@ function textTerms(value: string): readonly string[] {
   ];
 }
 
+function isBroadDecisionQuestion(question: string): boolean {
+  return /\b(?:opportunities|strategies|approaches|options|where\s+do|where\s+should|which\s+.+\s+strategies|how\s+should)\b/iu.test(
+    question,
+  );
+}
+
+function normalizedContentTerms(value: string): readonly string[] {
+  return textTerms(value).filter((term) => term.length >= 5);
+}
+
+function portfolioItemSignature(
+  item: GovernedLiveReviewPortfolioItem,
+): readonly string[] {
+  return [
+    ...new Set(
+      normalizedContentTerms(
+        [item.title, item.statement, item.rationale].join(' '),
+      ),
+    ),
+  ].slice(0, 12);
+}
+
+function jaccardOverlap(
+  left: readonly string[],
+  right: readonly string[],
+): number {
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  const union = new Set([...leftSet, ...rightSet]);
+  if (union.size === 0) return 0;
+  let intersection = 0;
+  for (const term of leftSet) {
+    if (rightSet.has(term)) intersection += 1;
+  }
+  return intersection / union.size;
+}
+
 function isLowInformationLiveSpan(quote: string): boolean {
   const normalized = quote.replace(/\s+/gu, ' ').trim();
   if (normalized.length < 48) return true;
@@ -367,6 +404,12 @@ function minimumHintRelevance(input: {
   const questionMinimum = Math.min(6, Math.ceil(questionTerms.length / 5));
   const queryMinimum = Math.min(4, Math.ceil(queryTerms.length / 6));
   return Math.max(3, questionMinimum + queryMinimum);
+}
+
+function hasComparatorLanguage(value: string): boolean {
+  return /\b(?:baseline|compar(?:e|ator|ison)|control|before[- ]?after|current|existing|alternative|threshold|target|versus|vs\.?|fail(?:ure)? rate|error rate|latency|cost|accuracy|safety|energy|outcome)\b/iu.test(
+    value,
+  );
 }
 
 function rankLiveSpans(
@@ -1717,6 +1760,7 @@ export async function executeGovernedLiveAcquisition(
           decisionConstraints: deriveDecisionConstraints(
             intentSet.question,
           ).slice(0, 4),
+          broadDecisionQuestion: isBroadDecisionQuestion(intentSet.question),
           claims: reviewClaims,
         });
         return {
@@ -1747,6 +1791,7 @@ export async function executeGovernedLiveAcquisition(
         0,
         4,
       ),
+      question: intentSet.question,
     });
     const reviewSeed = canonicalDigest(modelReview.value).slice(7, 23);
     modelWork.push(
@@ -2064,6 +2109,7 @@ async function openAiCompatibleReview(input: {
   readonly modelId: string;
   readonly question: string;
   readonly decisionConstraints: readonly string[];
+  readonly broadDecisionQuestion: boolean;
   readonly fetchImpl?: typeof fetch;
   readonly claims: readonly GovernedClaimRecord[];
 }): Promise<{
@@ -2263,13 +2309,14 @@ async function openAiCompatibleReview(input: {
         {
           role: 'system',
           content:
-            'You are an independent decision-research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. Return compact JSON. Build a ranked portfolio of concrete decisions or opportunities, ordered by evidence strength and practical feasibility. Every portfolio item must name a specific build, intervention, or decision; explain why it ranks there; state evidence-backed constraints; propose the cheapest decisive next validation; and cite one or more supplied evidenceIndex values. Do not create a portfolio item when the evidence supports only a broad theme. Address every supplied decisionConstraint explicitly: either use its wording in an evidence-backed portfolio item or repeat it in unresolvedConstraints when the evidence does not resolve it. Every answer bullet, mechanism, dissent item, boundary condition, hypothesis, and experiment must cite supplied evidenceIndex values. Address the user question in the same form it was asked. Do not infer hardware feasibility, cost, privacy, locality, safety, or performance unless the snippets support it. Mechanisms should identify transferable causal mechanisms and where transfer breaks. Experiments must name a concrete task, baseline/comparator, decision threshold, and safety boundary when evidence permits. Prefer direct project documentation, implementation details, measured benchmarks, resource constraints, deployment evidence, and primary-source limitations over commentary.',
+            'You are an independent decision-research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. Return compact JSON. Build a ranked portfolio of concrete decisions or opportunities, ordered by evidence strength and practical feasibility. Every portfolio item must name a specific build, intervention, opportunity class, or decision; explain why it ranks there; state evidence-backed constraints; propose the cheapest decisive next validation; and cite one or more supplied evidenceIndex values. Do not create a portfolio item when the evidence supports only a broad theme. For broad opportunity, strategy, approach, option, or how-should questions, return at least three distinct portfolio items when the evidence supports them; otherwise put the missing breadth in unresolvedConstraints. Avoid multiple items that are only variants of the same named project or intervention. Address every supplied decisionConstraint explicitly: either use its wording in an evidence-backed portfolio item or repeat it in unresolvedConstraints when the evidence does not resolve it. Every answer bullet, mechanism, dissent item, boundary condition, hypothesis, and experiment must cite supplied evidenceIndex values. Address the user question in the same form it was asked. Do not infer hardware feasibility, cost, privacy, locality, safety, or performance unless the snippets support it. Mechanisms should identify transferable causal mechanisms and where transfer breaks. Experiments must name a concrete task, baseline/comparator, decision threshold, and safety boundary when evidence permits. Prefer direct project documentation, implementation details, measured benchmarks, resource constraints, deployment evidence, and primary-source limitations over commentary.',
         },
         {
           role: 'user',
           content: JSON.stringify({
             question: input.question,
             decisionConstraints: input.decisionConstraints,
+            broadDecisionQuestion: input.broadDecisionQuestion,
             keyQuestionTerms: liveRelevanceTerms(input.question),
             admittedEvidence: input.claims.map((claim, index) => ({
               evidenceIndex: index + 1,
@@ -2336,7 +2383,7 @@ function completeLiveReview(
           )
           .slice(0, 3)
           .map((item) => ({
-            statement: `Applicability depends on ${item.constraints[0]?.trim() ?? item.title.trim()}`,
+            statement: `Before choosing ${item.title.trim()}, validate ${item.constraints[0]?.trim() ?? item.nextValidation.trim()} against the cited operating evidence.`,
             evidenceIndexes: item.evidenceIndexes,
           }));
   const hypotheses =
@@ -2367,8 +2414,8 @@ function completeLiveReview(
           .slice(0, 3)
           .map((item) => ({
             statement: item.nextValidation,
-            resolvesUncertainty: `Whether ${item.title.trim()} is supported enough to keep or change its current portfolio rank.`,
-            threshold: `Pass only if the validation records the named outcome, a baseline or comparator, and any adverse constraint failure for: ${item.nextValidation.trim()}`,
+            resolvesUncertainty: `Whether ${item.title.trim()} produces the intended outcome under the cited constraints.`,
+            threshold: `Pass only if ${item.nextValidation.trim()} records a baseline or comparator, a named outcome threshold, and any adverse constraint failure.`,
             safetyBoundary:
               'Design-only proposal: do not touch private data, production systems, paid providers, deployments, or real-world operations without separate scoped authority.',
             evidenceIndexes: item.evidenceIndexes,
@@ -2385,6 +2432,7 @@ function assertDecisionGradeReview(input: {
   readonly review: GovernedLiveModelReview;
   readonly admittedEvidenceCount: number;
   readonly decisionConstraints: readonly string[];
+  readonly question: string;
 }): void {
   const portfolio = input.review.portfolio ?? [];
   if (portfolio.length === 0) {
@@ -2417,6 +2465,18 @@ function assertDecisionGradeReview(input: {
         'live synthesis produced an invalid or unbound decision portfolio item',
       );
     }
+    if (
+      item.constraints.some(
+        (constraint) =>
+          informativeWordCount(constraint) < 2 ||
+          normalizedContentTerms(constraint).length < 2,
+      )
+    ) {
+      refuse(
+        'decision_portfolio_weak_constraints',
+        'live synthesis portfolio constraints must be substantive and evidence-readable',
+      );
+    }
     ranks.add(item.rank);
   }
   const ordered = [...portfolio].sort((left, right) => left.rank - right.rank);
@@ -2425,6 +2485,31 @@ function assertDecisionGradeReview(input: {
       'decision_portfolio_rank_gap',
       'live synthesis portfolio ranks must be contiguous and deterministic',
     );
+  }
+  if (isBroadDecisionQuestion(input.question)) {
+    if (portfolio.length < 3) {
+      refuse(
+        'decision_portfolio_too_narrow',
+        'broad decision questions require at least three distinct evidence-bound portfolio items or must fail closed',
+      );
+    }
+    const signatures = portfolio.map(portfolioItemSignature);
+    for (let left = 0; left < signatures.length; left += 1) {
+      for (let right = left + 1; right < signatures.length; right += 1) {
+        const leftSignature = signatures[left] ?? [];
+        const rightSignature = signatures[right] ?? [];
+        if (
+          leftSignature.length > 0 &&
+          rightSignature.length > 0 &&
+          jaccardOverlap(leftSignature, rightSignature) > 0.72
+        ) {
+          refuse(
+            'decision_portfolio_not_distinct',
+            'broad decision questions require distinct portfolio items rather than repeated variants of the same option',
+          );
+        }
+      }
+    }
   }
   const coverageText = [
     ...portfolio.flatMap((item) => [
@@ -2452,6 +2537,18 @@ function assertDecisionGradeReview(input: {
     refuse(
       'missing_bounded_experiments',
       'live synthesis requires at least one cited bounded experiment proposal',
+    );
+  }
+  if (
+    (input.review.dissent ?? []).length === 0 ||
+    input.review.weaknesses.some(
+      (weakness) => informativeWordCount(weakness) < 6,
+    ) ||
+    input.review.weaknesses.length === 0
+  ) {
+    refuse(
+      'missing_live_limitations',
+      'live synthesis requires visible dissent and substantive weaknesses',
     );
   }
   const citedSections = [
@@ -2496,6 +2593,7 @@ function assertDecisionGradeReview(input: {
       /meets? the decision criterion|portfolio rank|supported enough/iu.test(
         threshold,
       ) ||
+      !hasComparatorLanguage(threshold) ||
       experiment.safetyBoundary.trim().length < 24 ||
       experiment.evidenceIndexes.length === 0 ||
       experiment.evidenceIndexes.some(
