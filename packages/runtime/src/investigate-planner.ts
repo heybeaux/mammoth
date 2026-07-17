@@ -188,7 +188,10 @@ export function deriveDecisionConstraints(question: string): readonly string[] {
   )) {
     const terms = orderedFocusTerms(segment);
     if (terms.length < 2) continue;
-    add(segmentPhrases, readableSegment(segment) || terms.slice(0, 6).join(' '));
+    add(
+      segmentPhrases,
+      readableSegment(segment) || terms.slice(0, 6).join(' '),
+    );
     if (terms.length > 5) add(supportingPhrases, terms.slice(-4).join(' '));
     for (let index = 0; index < terms.length - 1; index += 1) {
       add(supportingPhrases, terms.slice(index, index + 3).join(' '));
