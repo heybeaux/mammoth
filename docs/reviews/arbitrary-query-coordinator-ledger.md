@@ -169,7 +169,7 @@
 - **Coordinator gates at `f4bac11`:** full-repo `pnpm test` passed (all
   packages, including runtime 139/139 and CLI 52/52), repo typecheck, lint,
   `format:check`, and build all passed; `pnpm --filter outcome-1-acceptance
-  test:harness` passed (`outcome-1.v1` 4 cases + governed-execution e2e);
+test:harness` passed (`outcome-1.v1` 4 cases + governed-execution e2e);
   `verify:p8` ok and `verify:p9` ok. No provider, network, paid, or other
   effect authority was used at any point.
 - **Completion contract status:** an arbitrary difficult question now flows
