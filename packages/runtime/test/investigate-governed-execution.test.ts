@@ -344,7 +344,7 @@ describe('governed acquisition execution', () => {
       now: NOW,
     });
     const sourceBody =
-      'Local-first systems keep writes available on devices while connectivity is intermittent. Conflict-free replicated data types can merge concurrent updates without a central coordinator. Remote clinic deployments need explicit conflict resolution workflows for ambiguous patient records.';
+      'Skip to main content. An official website of the United States government. Local-first systems keep writes available on devices while connectivity is intermittent. Conflict-free replicated data types can merge concurrent updates without a central coordinator. Remote clinic deployments need explicit conflict resolution workflows for ambiguous patient records.';
     const fetchImpl: typeof fetch = (url) => {
       const href =
         typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
@@ -430,6 +430,16 @@ describe('governed acquisition execution', () => {
     expect(
       execution.claims.some((claim) => claim.decision === 'admitted'),
     ).toBe(true);
+    expect(
+      execution.claims
+        .filter((claim) => claim.decision === 'admitted')
+        .map((claim) => claim.statement),
+    ).not.toEqual(
+      expect.arrayContaining([
+        'Skip to main content.',
+        'An official website of the United States government.',
+      ]),
+    );
     expect(
       execution.modelWork.some((work) => work.workId.startsWith('live-')),
     ).toBe(true);

@@ -23,6 +23,8 @@ import {
  */
 const READER_FORBIDDEN_PATTERN =
   /sha256:|claim[_:-]|proposal[_:-]|plan digest|parser receipt|budget ledger|coverage verdict/iu;
+const LOW_INFORMATION_READER_FACT_PATTERN =
+  /^(?:skip to main content|an official website|official websites use|secure \.gov websites|menu|search|privacy policy|terms of use|cookies?|javascript|equal contribution|corresponding author|received:|accepted:|published:)/iu;
 
 function sha256Text(value: string): string {
   return contentDigest(new TextEncoder().encode(value));
@@ -40,6 +42,18 @@ function jsonlArtifact(entries: readonly unknown[]): string {
 
 function singleLine(value: string): string {
   return value.replace(/\s+/gu, ' ').trim();
+}
+
+function informativeWordCount(value: string): number {
+  return value.match(/[A-Za-z][A-Za-z'-]{2,}/gu)?.length ?? 0;
+}
+
+function isReaderQualityFact(sentence: string): boolean {
+  if (sentence.length < 48) return false;
+  if (!/[.!?]$/u.test(sentence)) return false;
+  if (informativeWordCount(sentence) < 8) return false;
+  if (LOW_INFORMATION_READER_FACT_PATTERN.test(sentence)) return false;
+  return true;
 }
 
 export interface GovernedInvestigationBundleInput {
@@ -168,6 +182,7 @@ export function composeGovernedInvestigationBundle(
   for (const claim of admitted) {
     const sentence = singleLine(claim.statement);
     if (READER_FORBIDDEN_PATTERN.test(sentence)) continue;
+    if (!isReaderQualityFact(sentence)) continue;
     if (!urls.includes(claim.requestedUrl)) urls.push(claim.requestedUrl);
     facts.push({
       claimId: claim.proposalId,

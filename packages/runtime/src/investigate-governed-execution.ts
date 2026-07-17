@@ -68,6 +68,8 @@ const LIVE_PROPOSER_PROFILE_FAMILY = 'live-openai-compatible-proposer';
 const LIVE_EVALUATOR_PROFILE_VERSION = 'live-openai-compatible-evaluator/v1';
 const LIVE_EVALUATOR_PROFILE_FAMILY = 'live-openai-compatible-evaluator';
 const LIVE_USER_AGENT = 'mammoth-investigate-live/1.0';
+const LOW_INFORMATION_SPAN_PATTERN =
+  /^(?:skip to main content|an official website|official websites use|secure \.gov websites|menu|search|privacy policy|terms of use|cookies?|javascript|equal contribution|corresponding author|received:|accepted:|published:)/iu;
 
 export class GovernedExecutionError extends Error {
   constructor(
@@ -194,6 +196,19 @@ export interface GovernedLiveAcquisitionExecutionInput {
 
 function refuse(code: string, message: string): never {
   throw new GovernedExecutionError(code, message);
+}
+
+function informativeWordCount(value: string): number {
+  return value.match(/[A-Za-z][A-Za-z'-]{2,}/gu)?.length ?? 0;
+}
+
+function isLowInformationLiveSpan(quote: string): boolean {
+  const normalized = quote.replace(/\s+/gu, ' ').trim();
+  if (normalized.length < 48) return true;
+  if (!/[.!?]$/u.test(normalized)) return true;
+  if (informativeWordCount(normalized) < 8) return true;
+  if (LOW_INFORMATION_SPAN_PATTERN.test(normalized)) return true;
+  return false;
 }
 
 /**
@@ -1239,6 +1254,7 @@ export async function executeGovernedLiveAcquisition(
         const spans = deriveBoundedEvidenceSpans({
           body: parsed.text,
           spanIdPrefix: `live:${candidate.candidateId}`,
+          isExcluded: isLowInformationLiveSpan,
         });
         recordAttempt(
           candidate,
