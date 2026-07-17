@@ -449,6 +449,23 @@ function citedPortfolioItems(
   );
 }
 
+function concreteExperimentThreshold(
+  threshold: string,
+  validation: string,
+): string {
+  const trimmed = singleLine(threshold);
+  if (
+    trimmed.length >= 24 &&
+    hasComparatorLanguage(trimmed) &&
+    !/meets? the decision criterion|portfolio rank|supported enough/iu.test(
+      trimmed,
+    )
+  ) {
+    return trimmed;
+  }
+  return `Pass only if the validation beats a baseline or current process on a named outcome threshold and records any adverse constraint failure for: ${stripFinalPunctuation(validation)}.`;
+}
+
 function rankLiveSpans(
   spans: readonly BoundedEvidenceSpan[],
   terms: readonly string[],
@@ -1557,7 +1574,7 @@ export async function executeGovernedLiveAcquisition(
         const retrievalResult = await executor.execute({
           id: `live-retrieval:${candidate.candidateId}`,
           catalogEntryId: 'public-retrieval',
-          ceiling: ceiling({ bytes: 3_000_000, durationMs: 45_000 }),
+          ceiling: ceiling({ bytes: 4_000_000, durationMs: 45_000 }),
           transport: async () => {
             const retrieved = await (input.retrieve ?? retrieveSource)(
               {
@@ -2508,14 +2525,22 @@ function completeLiveReview(
         item.safetyBoundary.trim().length >= 24 &&
         item.evidenceIndexes.length > 0,
     ).length > 0
-      ? (review.experimentProposals ?? []).filter(
-          (item) =>
-            item.statement.trim().length >= 24 &&
-            item.resolvesUncertainty.trim().length >= 24 &&
-            item.threshold.trim().length >= 24 &&
-            item.safetyBoundary.trim().length >= 24 &&
-            item.evidenceIndexes.length > 0,
-        )
+      ? (review.experimentProposals ?? [])
+          .filter(
+            (item) =>
+              item.statement.trim().length >= 24 &&
+              item.resolvesUncertainty.trim().length >= 24 &&
+              item.threshold.trim().length >= 24 &&
+              item.safetyBoundary.trim().length >= 24 &&
+              item.evidenceIndexes.length > 0,
+          )
+          .map((item) => ({
+            ...item,
+            threshold: concreteExperimentThreshold(
+              item.threshold,
+              item.statement,
+            ),
+          }))
       : citedPortfolio
           .filter(
             (item) =>
@@ -2526,7 +2551,7 @@ function completeLiveReview(
           .map((item) => ({
             statement: item.nextValidation,
             resolvesUncertainty: `Whether ${item.title.trim()} produces the intended outcome under the cited constraints.`,
-            threshold: `Pass only if the validation beats a baseline or current process on a named outcome threshold and records any adverse constraint failure for: ${stripFinalPunctuation(item.nextValidation)}.`,
+            threshold: concreteExperimentThreshold('', item.nextValidation),
             safetyBoundary:
               'Design-only proposal: do not touch private data, production systems, paid providers, deployments, or real-world operations without separate scoped authority.',
             evidenceIndexes: item.evidenceIndexes,
