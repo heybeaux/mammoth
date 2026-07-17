@@ -72,3 +72,30 @@
   on `feat/core-query-runtime-acquisition`, based on `5574785`. It must prove
   digest binding, no implied authority, generic distinct inputs, and drift refusal;
   it is strictly no-effect and requires an independent reviewer after handoff.
+
+## 2026-07-16 — evidence stocktake recovered, verified, and integrated
+
+- **Registry reconciliation:** TaskFlow child
+  `f1371911-8821-481f-8e63-38fb8797aef1` still reported `queued` during this
+  coordinator turn, but its designated worktree held a completed, staged owned
+  diff. During focused validation the worker finalized commit `4c53e57`; its
+  tracked tree then became clean. This is recorded as a scheduler-state lag,
+  not as a second lane or inferred completion.
+- **Ownership and integration:** the commit changes only declared
+  `packages/retrieval` and `packages/evidence` paths (including the lane
+  handoff). It was serially integrated at `5ecdd8d` on
+  `feat/core-thesis-arbitrary-query`; no untracked OpenClaw bootstrap files
+  were included.
+- **Predicate evidence:** discovery hints are now selected only when traced to
+  planned query and source-class targets; rejected, duplicate, insecure, and
+  over-capacity hints become typed residue. Exact spans bind quote, offsets,
+  bounded context, and snapshot digest and fail closed on body/context drift.
+  Both seams are generic and perform no effects.
+- **Coordinator gates:** integration retrieval tests **46/46**, evidence tests
+  **34/34**, and both retrieval/evidence typechecks passed. The worker also
+  reported clean builds for both packages. No provider, network, paid, or other
+  effect authority was used.
+- **Current predicate:** compose the accepted immutable plan through the
+  runtime/CLI normal path into these no-effect discovery and acquisition
+  intents, then carry snapshots through exact spans and independent admission.
+  The active runtime/CLI lane remains the only owner of that path.
