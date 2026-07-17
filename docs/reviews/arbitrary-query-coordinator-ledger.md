@@ -65,3 +65,10 @@
 - **Current predicate:** accepted immutable plan drives generic discovery and
   acquisition without topic branches. A fresh path-disjoint runtime/CLI lane is
   being claimed while the separate retrieval/evidence stocktake remains active.
+- **Assigned implementation record:** runtime/CLI session
+  `agent:scout:subagent:b42d93bd-d4e1-4088-8cb4-b68d759c2caf`, run
+  `eb144e97-2c95-42b5-be0b-5f634d5501c2`, owns only `packages/runtime/**` and
+  `packages/cli/**` in fresh worktree `/private/tmp/mammoth-core-runtime-acquisition`
+  on `feat/core-query-runtime-acquisition`, based on `5574785`. It must prove
+  digest binding, no implied authority, generic distinct inputs, and drift refusal;
+  it is strictly no-effect and requires an independent reviewer after handoff.
