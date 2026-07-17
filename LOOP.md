@@ -148,13 +148,18 @@ No transport begins before a matching authority and reservation. Keep determinis
 local, replay, and no-effect development paths available. Live provider runs use
 distinct immutable output directories; offline verifiers never overwrite them.
 
-If completion requires paid effects without an existing valid scoped authority, record
-the exact amount, provider, ceiling, and expected proof, finish every no-spend predicate,
-and set the TaskFlow to a protected-boundary wait. Do not silently spend or substitute a
-fixture result for the live claim.
+A valid scoped live-effect authority exists for this loop: USD 15.00 aggregate
+provider ceiling, granted 2026-07-17 (see `AGENTS.md`, "Active live-effect
+authority"). Track it in a fresh budget journal starting at 0.00, reserve before
+every governed effect, and never exceed the ceiling. If completion requires paid
+effects beyond it, record the exact amount, provider, ceiling, and expected proof,
+finish every no-spend predicate, and set the TaskFlow to a protected-boundary wait.
+Do not silently spend or substitute a fixture result for the live claim.
 
 Repository implementation and GitHub work for `heybeaux/mammoth` are authorized by the
-current delivery request. No Friday deployment, release publication, or tag is allowed.
+current delivery request. No deployment, release publication, or tag on Friday
+2026-07-17; from Saturday 2026-07-18 the release step is authorized without further
+owner approval once every predicate passes.
 
 ## Independent acceptance
 
@@ -185,5 +190,6 @@ merged main commit and fresh-main CI are verified, and the final artifacts inclu
 
 Do not send routine status updates. Notify the owner only when the outcome is complete,
 or when a protected authority boundary has blocked all useful progress after three
-distinct strategies. Because July 17, 2026 is Friday, any release or deployment step is
-deferred until the next permitted day even if implementation and verification finish.
+distinct strategies. Because July 17, 2026 is Friday, any release or deployment step
+waits until Saturday July 18, 2026 at the earliest; from then it is authorized and the
+loop performs it without waiting for the owner, completing the receipt afterward.

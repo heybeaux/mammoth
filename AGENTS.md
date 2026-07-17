@@ -46,9 +46,12 @@ plain-language question
   -> separate complete audit projection
 ```
 
-`mammoth investigate` currently proves only the no-effect preview and approval
-surface. Work is incomplete until the accepted plan composes existing governed
-capabilities and returns a strong answer through the normal CLI path.
+As of main `30562de` (PR #142, 2026-07-17), `mammoth investigate` proves the full
+no-effect composition of this path: preview, approval, immutable plan, derived
+intents, issuer-pinned release, governed offline execution, cited report, and audit
+chain. Work is incomplete until the same composition runs with governed live
+retrieval and passes predicates 9 and 10 in `LOOP.md`, including the unrelated
+holdouts and the exact world-model question through normal-path live review.
 
 ## Product invariants
 
@@ -87,6 +90,26 @@ The following still require valid explicit scoped authority before execution:
 Prefer deterministic fixtures, local models, replayed evidence, and zero-cost
 providers while building. Never infer spend authority from a broad implementation
 request. Do not deploy or publish a release on Friday.
+
+### Active live-effect authority (granted 2026-07-17)
+
+The owner granted this delivery loop a live provider budget with an aggregate
+ceiling of USD 15.00, covering search and model provider spend required to prove
+predicates 9 and 10 through the normal public path. Rules:
+
+- Open a fresh durable budget journal for this loop starting at 0.00 against the
+  15.00 ceiling. The historical P9 exhibition journal and its 8.00 cap are closed
+  evidence; do not mix or inherit their balances.
+- Reserve before every governed effect. Stop paid work when the remaining ceiling
+  cannot cover the worst-case cost of the next effect, and record the shortfall.
+- If the ceiling blocks completion, set the protected-boundary wait and notify the
+  owner with exact spend, remaining need, and evidence. Do not exceed the ceiling.
+- Every other restricted action above (destructive operations, external
+  publication, deployment, account changes) remains out of scope.
+
+Release timing: no tag, release, or deployment on Friday 2026-07-17. From Saturday
+2026-07-18, tagging and releasing `heybeaux/mammoth` is authorized once all
+predicates pass; the loop proceeds without further owner approval.
 
 ## Required assignment record
 
