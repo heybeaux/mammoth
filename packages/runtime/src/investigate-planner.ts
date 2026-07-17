@@ -360,6 +360,7 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
       searchQueries: [
         `${constraintQuery || implementationQuery || sourceTopic || primary} official project documentation`,
         `${implementationQuery || constraintQuery || sourceTopic || primary} repository readme implementation`,
+        `${implementationQuery || constraintQuery || sourceTopic || primary} github repository readme implementation`,
         `${implementationQuery || constraintQuery || sourceTopic || primary} measured benchmark resource requirements`,
         `${constraintQuery || implementationQuery || sourceTopic || primary} deployment hardware requirements`,
         `${boundaryQuery || implementationQuery || sourceTopic || primary} limitations counterexamples failure cases`,

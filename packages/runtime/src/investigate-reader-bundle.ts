@@ -159,6 +159,19 @@ function readerVisibleDeduction(value: string | undefined): string | null {
   return /[.!?]$/u.test(sentence) ? sentence : `${sentence}.`;
 }
 
+function readerVisibleConstraint(value: string | undefined): string | null {
+  const sentence = readerVisibleDeduction(value);
+  if (sentence) return sentence;
+  if (!value) return null;
+  const compact = singleLine(value)
+    .replace(/\s*evidence\s*indexes?\s*:?\s*\[?[\d,\s]+\]?/giu, '')
+    .replace(/\s*evidenceindex\s*:?\s*\[?[\d,\s]+\]?/giu, '')
+    .trim();
+  if (compact.length < 7) return null;
+  if (READER_FORBIDDEN_PATTERN.test(compact)) return null;
+  return /[.!?]$/u.test(compact) ? compact : `${compact}.`;
+}
+
 function citedReviewStatements<T extends GovernedLiveReviewCitedStatement>(
   values: readonly T[] | undefined,
   citationNumbersForEvidenceIndex: (index: number) => readonly number[],
@@ -415,8 +428,22 @@ export function composeGovernedInvestigationBundle(
     ? 'Investigation findings'
     : plan.question;
   const questionTerms = readerQuestionTerms(plan.question);
+  const reviewCoverageText = [
+    ...rawReviewAnswerBullets.map((item) => item.sentence),
+    ...reviewPortfolio.flatMap((item) => [
+      item.title,
+      item.statement,
+      item.rationale,
+      item.nextValidation,
+      ...item.constraints,
+    ]),
+  ].join(' ');
   const unsupportedQuestionTerms = questionTerms
-    .filter((term) => !facts.some((fact) => termAppears(fact.sentence, term)))
+    .filter(
+      (term) =>
+        !facts.some((fact) => termAppears(fact.sentence, term)) &&
+        !termAppears(reviewCoverageText, term),
+    )
     .slice(0, 6);
   const reviewAnswerBullets = rawReviewAnswerBullets.filter(
     (item) =>
@@ -632,7 +659,7 @@ export function composeGovernedInvestigationBundle(
                   ]
                 : []),
               ...item.constraints.flatMap((constraint) => {
-                const visible = readerVisibleDeduction(constraint);
+                const visible = readerVisibleConstraint(constraint);
                 return visible ? [`- Constraint: ${visible}`] : [];
               }),
               ...(nextValidation

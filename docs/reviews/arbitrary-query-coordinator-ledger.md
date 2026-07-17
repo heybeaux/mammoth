@@ -546,3 +546,28 @@ experiment proposal` before writing a final reader/audit bundle. Preserve
 investigate-governed-execution.test.ts investigate-preview.test.ts` and
   `pnpm format:check && pnpm lint && pnpm typecheck` passed locally. Predicates
   9/10 remain incomplete pending fresh live runs and independent review.
+
+## 2026-07-17 — V27 completed, reader constraint repair
+
+- **Fresh/probe live evidence:** V27 completed all three unrelated holdouts and
+  the exact world-model question through the normal governed live path with
+  exit code 0. Preserve `evals/live/mammoth-core-loop-v27/` as probe evidence;
+  do not count it as acceptance without independent review.
+- **Spend:** V27 starts from a hash-valid aggregate journal that carries the
+  V26 failed-run settlement. After the four V27 runs, aggregate settled spend is
+  **USD 3.421708780004**, leaving **USD 11.578291219996** under the USD 15
+  ceiling.
+- **Assessment before repair:** V27 is structurally closer, but the reader still
+  hid short central constraints such as `single consumer gpu` and then sometimes
+  reported them as unresolved despite cited portfolio coverage. The world-model
+  evidence also still needs stronger direct repository/open-source evidence for
+  final acceptance.
+- **Repair:** the reader now treats cited portfolio statements, rationales,
+  validations, and constraints as coverage for question constraints, renders
+  short decision constraints instead of dropping them, and the planner adds a
+  generic GitHub/repository implementation search. This remains
+  question-derived and topic-agnostic.
+- **Focused verification:** `pnpm --filter @mammoth/runtime test --
+investigate-governed-execution.test.ts investigate-preview.test.ts` and
+  `pnpm format:check && pnpm lint && pnpm typecheck` passed locally. Predicates
+  9/10 remain incomplete pending fresh live runs and independent review.
