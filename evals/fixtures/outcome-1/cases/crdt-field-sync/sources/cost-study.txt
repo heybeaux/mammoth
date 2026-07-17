@@ -1,0 +1,6 @@
+Synthetic fixture source.
+
+Systems Lab C observed that tombstone and causal-context growth tripled radio
+bytes after a 14-day partition and exceeded the test device's energy ceiling.
+Compaction reduced the cost but deleted evidence needed to explain two operator
+corrections. Convergence alone was therefore an insufficient benchmark outcome.

@@ -1,0 +1,6 @@
+Synthetic fixture source.
+
+An independent reanalysis found that the light association weakened after habitat
+edge and pesticide frequency were included. The confidence interval still
+included an ecologically important light effect, so the result was inconclusive
+rather than evidence of no effect.

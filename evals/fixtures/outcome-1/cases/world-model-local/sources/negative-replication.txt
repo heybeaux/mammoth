@@ -1,0 +1,7 @@
+Synthetic fixture source; not a claim about the live world.
+
+Lab C reproduced the arena result but observed no advantage over a reactive
+baseline after camera height and floor texture changed. Its report argues that
+the learned latent state encoded local appearance rather than transferable
+dynamics. It recommends a held-out-environment test before claiming planning
+value.

@@ -4,6 +4,7 @@ import { basename, join, resolve } from 'node:path';
 import { P9ExecutionReceiptSchema } from '@mammoth/domain';
 import { executeCli, nodeDependencies } from './operator.js';
 import { executeLocalP7ResearchCli } from './p7-local.js';
+import { executeInvestigateCli } from './investigate-operator.js';
 import { executeP8ResearchCli } from './p8-operator.js';
 import { executeP9ResearchCli } from './p9-operator.js';
 import { usage } from './parser.js';
@@ -12,6 +13,11 @@ const args = process.argv.slice(2);
 if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
   process.stdout.write(`${usage()}\n`);
   process.exitCode = 0;
+} else if (args[0] === 'investigate') {
+  process.exitCode = await executeInvestigateCli(args, {
+    stdout: (value) => process.stdout.write(`${value}\n`),
+    stderr: (value) => process.stderr.write(`${value}\n`),
+  });
 } else if (args[0] === 'research') {
   if (isP9Command(args)) {
     process.exitCode = await executeP9ResearchCli(args, {

@@ -1,0 +1,5 @@
+Synthetic fixture source.
+
+City A's cool-roof pilot reduced peak indoor temperature by a median 1.8 degrees
+Celsius in treated buildings. The evaluation covered 64 buildings for one summer
+and did not measure rent changes. Evidence marker: heat_canary_c84d.

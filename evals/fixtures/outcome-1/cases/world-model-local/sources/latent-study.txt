@@ -1,0 +1,7 @@
+Synthetic fixture source; not a claim about the live world.
+
+Lab A trained a compact latent predictive state model on 42 hours of robot-camera
+sequences using one 24 GB GPU. The model improved success in the training arena,
+but the study did not test a new building or a new robot body. The practical
+opportunity demonstrated here is task-bounded adaptation, not general world-model
+pretraining. Evidence marker: wm_canary_7f3a.

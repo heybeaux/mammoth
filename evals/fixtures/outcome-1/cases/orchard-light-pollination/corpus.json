@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0.0",
+  "caseId": "orchard-light-pollination",
+  "corpusId": "outcome1-orchard-light-pollination/v1",
+  "sources": [
+    {
+      "sourceId": "moth-observational-study",
+      "sourceClass": "observational_study",
+      "sourceFamily": "fixture-ecology-a",
+      "bodyFile": "sources/observational-study.txt",
+      "position": "supporting"
+    },
+    {
+      "sourceId": "moth-reanalysis",
+      "sourceClass": "independent_reanalysis",
+      "sourceFamily": "fixture-statistics-b",
+      "bodyFile": "sources/reanalysis.txt",
+      "position": "contradicting"
+    },
+    {
+      "sourceId": "moth-field-protocol",
+      "sourceClass": "experimental_protocol",
+      "sourceFamily": "fixture-ecology-c",
+      "bodyFile": "sources/field-protocol.txt",
+      "position": "context"
+    }
+  ],
+  "contradictionPairs": [
+    {
+      "leftSourceId": "moth-observational-study",
+      "rightSourceId": "moth-reanalysis",
+      "issue": "whether artificial light or correlated habitat and pesticide exposure explains lower nocturnal pollination"
+    }
+  ],
+  "falsifier": "A randomized light crossover with fixed habitat and pesticide strata finds no reduction in visits or pollen deposition at the preregistered effect threshold.",
+  "decoyClaim": "Artificial light is proven to cause every observed decline in moth pollination."
+}

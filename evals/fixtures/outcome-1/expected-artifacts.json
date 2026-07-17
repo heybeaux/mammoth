@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "1.0.0",
+  "preview": [
+    "problem-contract.json",
+    "team-plan.json",
+    "research-plan-proposal.json",
+    "approval-request.json"
+  ],
+  "reader": [
+    "reader/report.md",
+    "reader/references.md",
+    "reader/projection.json"
+  ],
+  "audit": [
+    "audit/manifest.json",
+    "audit/problem-contract.json",
+    "audit/team-plan.json",
+    "audit/research-plan.json",
+    "audit/retrieval-attempts.jsonl",
+    "audit/parser-receipts.jsonl",
+    "audit/claim-admissions.jsonl",
+    "audit/rejected-claims.jsonl",
+    "audit/contradictions.jsonl",
+    "audit/model-work.jsonl",
+    "audit/budget-journal.jsonl",
+    "execution-receipt.json"
+  ]
+}
