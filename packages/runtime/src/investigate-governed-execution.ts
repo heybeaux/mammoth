@@ -2866,7 +2866,21 @@ function assertDecisionGradeReview(input: {
     (constraint) => {
       const terms = textTerms(constraint);
       if (terms.length === 0) return false;
+      const portfolioResolved =
+        textRelevanceScore(
+          portfolio
+            .flatMap((item) => [
+              item.title,
+              item.statement,
+              item.rationale,
+              ...item.constraints,
+              item.nextValidation,
+            ])
+            .join(' '),
+          terms,
+        ) >= Math.ceil(terms.length / 2);
       return (
+        !portfolioResolved &&
         textRelevanceScore(unresolvedText, terms) >= Math.ceil(terms.length / 2)
       );
     },
@@ -2989,16 +3003,12 @@ function buildLiveAcceptanceReview(input: {
       ...item.constraints,
     ])
     .join(' ');
-  const unresolvedText = (input.review.unresolvedConstraints ?? []).join(' ');
   const decisionConstraintCriteria = input.decisionConstraints.map(
     (constraint, index) => {
       const terms = textTerms(constraint);
-      const resolved =
-        terms.length === 0 ||
-        (textRelevanceScore(portfolioText, terms) >=
-          Math.ceil(terms.length / 2) &&
-          textRelevanceScore(unresolvedText, terms) <
-            Math.ceil(terms.length / 2));
+      const portfolioResolved =
+        textRelevanceScore(portfolioText, terms) >= Math.ceil(terms.length / 2);
+      const resolved = terms.length === 0 || portfolioResolved;
       return criterion(
         `decision-constraint-${String(index + 1)}`,
         resolved,
