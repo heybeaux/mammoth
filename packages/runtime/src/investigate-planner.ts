@@ -152,8 +152,16 @@ function orderedFocusTerms(question: string): readonly string[] {
   return terms;
 }
 
+function stripAttributionFraming(value: string): string {
+  return value.replace(
+    /(^|[.!?]\s*)[^.!?]{0,120}?\b(?:argues?|claims?|says?|suggests?)\s+that\b/giu,
+    '$1',
+  );
+}
+
 export function deriveDecisionConstraints(question: string): readonly string[] {
-  const ordered = orderedFocusTerms(question);
+  const decisionText = stripAttributionFraming(question);
+  const ordered = orderedFocusTerms(decisionText);
   const segmentPhrases: string[] = [];
   const supportingPhrases: string[] = [];
   const seen = new Set<string>();
@@ -183,7 +191,7 @@ export function deriveDecisionConstraints(question: string): readonly string[] {
     if (words.length < 2) return '';
     return words.slice(0, 9).join(' ');
   };
-  for (const segment of question.split(
+  for (const segment of decisionText.split(
     /\b(?:after|before|during|for|on|under|using|when|where|while|with|without|based\s+on)\b|[.;:?!]/giu,
   )) {
     const terms = orderedFocusTerms(segment);

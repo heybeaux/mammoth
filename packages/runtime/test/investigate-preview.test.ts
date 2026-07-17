@@ -132,6 +132,9 @@ describe('local investigation preview', () => {
 
     expect(constraints).toContain('open-source private local');
     expect(constraints).toContain('single consumer gpu');
+    expect(constraints).toContain('world models');
+    expect(constraints).not.toContain('yann');
+    expect(constraints).not.toContain('lecun');
 
     const queries = planInvestigation(question).plan.searchQueries;
     expect(
