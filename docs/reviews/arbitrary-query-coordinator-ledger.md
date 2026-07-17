@@ -523,3 +523,26 @@ investigate-governed-execution.test.ts investigate-preview.test.ts`,
   `pnpm format:check && pnpm lint && pnpm typecheck` passed locally before the
   repair checkpoint. Predicates 9/10 remain incomplete pending fresh live runs
   and independent review.
+
+## 2026-07-17 — V26 fail-closed experiment repair
+
+- **Fresh/probe live evidence:** V26 started from the V25 aggregate journal and
+  attempted the remote-clinic holdout through the normal governed live path. It
+  failed closed with `live synthesis requires at least one cited bounded
+experiment proposal` before writing a final reader/audit bundle. Preserve
+  `evals/live/mammoth-core-loop-v26/holdout-remote-clinic/` as failed evidence.
+- **Spend:** the V26 per-run journal settled the model review at **USD
+  0.00004923** after zero-cost search/retrieval/parser settlements. The copied
+  aggregate journal contains a `run_started` entry for this failed attempt but
+  no aggregate `run_settled`; count the per-run settled amount manually in the
+  coordinator state before any acceptance claim.
+- **Repair:** live review completion now derives design-only experiment
+  proposals from cited portfolio validation steps when the model returns an
+  empty experiment array. The gate still requires at least one cited bounded
+  experiment proposal, but the product no longer fails solely because the model
+  omitted a required section that can be derived from already cited review
+  content.
+- **Focused verification:** `pnpm --filter @mammoth/runtime test --
+investigate-governed-execution.test.ts investigate-preview.test.ts` and
+  `pnpm format:check && pnpm lint && pnpm typecheck` passed locally. Predicates
+  9/10 remain incomplete pending fresh live runs and independent review.

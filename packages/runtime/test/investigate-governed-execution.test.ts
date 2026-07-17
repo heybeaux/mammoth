@@ -474,19 +474,7 @@ describe('governed acquisition execution', () => {
                           evidenceIndexes: [2, 3],
                         },
                       ],
-                      experimentProposals: [
-                        {
-                          statement:
-                            'Run a no-effect design review comparing offline writes, merge behavior, and explicit patient-record conflict handling.',
-                          resolvesUncertainty:
-                            'Whether the proposed synchronization strategy preserves both availability and patient-record safety.',
-                          threshold:
-                            'The design passes only if every ambiguous patient-record conflict has a documented review path.',
-                          safetyBoundary:
-                            'No patient data is touched and any real deployment requires separate authority.',
-                          evidenceIndexes: [1, 3],
-                        },
-                      ],
+                      experimentProposals: [],
                       weaknesses: [
                         'Only one source was available in the fixture.',
                       ],
@@ -592,6 +580,9 @@ describe('governed acquisition execution', () => {
     );
     expect(bundle.files['reader/report.md']).toContain(
       '## Unresolved constraints',
+    );
+    expect(bundle.files['reader/report.md']).toContain(
+      '## Proposed experiments',
     );
     expect(bundle.files['reader/report.md']).not.toMatch(/evidence\s*index/iu);
     expect(bundle.files['execution-receipt.json']).toContain(

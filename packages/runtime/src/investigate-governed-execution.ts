@@ -2309,7 +2309,7 @@ async function openAiCompatibleReview(input: {
     throw new Error('model review failed schema validation');
   }
   return {
-    review,
+    review: completeLiveReview(review),
     usage: parsed.usage
       ? usageOf({
           requests: 1,
@@ -2319,6 +2319,32 @@ async function openAiCompatibleReview(input: {
           durationMs: Math.max(0, Date.now() - startedAt),
         })
       : null,
+  };
+}
+
+function completeLiveReview(
+  review: GovernedLiveModelReview,
+): GovernedLiveModelReview {
+  if ((review.experimentProposals ?? []).length > 0) return review;
+  const experimentProposals = (review.portfolio ?? [])
+    .filter(
+      (item) =>
+        item.nextValidation.trim().length >= 24 &&
+        item.evidenceIndexes.length > 0,
+    )
+    .slice(0, 3)
+    .map((item) => ({
+      statement: item.nextValidation,
+      resolvesUncertainty: `Whether ${item.title.trim()} is supported enough to keep or change its current portfolio rank.`,
+      threshold:
+        'Pass only if the measured result meets the decision criterion stated in the validation design and exposes any material adverse outcome.',
+      safetyBoundary:
+        'Design-only proposal: do not touch private data, production systems, paid providers, deployments, or real-world operations without separate scoped authority.',
+      evidenceIndexes: item.evidenceIndexes,
+    }));
+  return {
+    ...review,
+    experimentProposals,
   };
 }
 
