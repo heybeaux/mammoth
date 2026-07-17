@@ -466,6 +466,26 @@ investigate-governed-execution.test.ts investigate-preview.test.ts` passed
   but the preserved live reports remain failed evidence.
 - **Current blocker:** predicates 9 and 10 remain incomplete due product
   quality and evidence fit, not provider authority, budget, or command health.
+
+## 2026-07-17 — V9 coordinator checkpoint: constrain implementation searches
+
+- **GitHub checkpoint:** branch `fix/core-live-brave-rate-limit-v6` was pushed
+  and draft PR #146 was opened after focused runtime and CLI gates passed. The
+  PR is an implementation checkpoint only; predicates 9/10 remain unclaimed.
+- **Repair:** the generic planner now carries late question constraints into
+  repository, implementation, hardware, and feasibility searches instead of
+  letting early framing terms dominate every query. This is question-derived
+  and does not add any world-model topic branch.
+- **Focused verification:** `pnpm --filter @mammoth/runtime test --
+  investigate-preview.test.ts investigate-governed-execution.test.ts` passed
+  with the new planner coverage test. The exact world-model generated query
+  set now includes `open-source private local single consumer gpu` in
+  implementation and hardware searches, plus `single consumer gpu` in the
+  benchmark feasibility search.
+- **Next action:** rerun governed Brave/OpenRouter acceptance probes in fresh
+  directories with the aggregate live budget journal, then independently
+  review three unrelated holdouts and the exact world-model report before any
+  predicate claim.
   Further progress likely requires a different generic strategy: source
   selection must favor direct implementation/benchmark/project evidence over
   commentary, and synthesis must produce a ranked decision-grade opportunity

@@ -90,6 +90,34 @@ describe('local investigation preview', () => {
     }
   });
 
+  it('carries late question constraints into implementation and feasibility searches', () => {
+    const plan = planInvestigation(
+      'Where should individuals building open-source private local world-model systems on a single consumer GPU focus first?',
+    ).plan.searchQueries.map((query) => query.toLocaleLowerCase('en-US'));
+
+    expect(
+      plan.some(
+        (query) =>
+          query.includes('repository readme implementation') &&
+          query.includes('open-source') &&
+          query.includes('private') &&
+          query.includes('local') &&
+          query.includes('single') &&
+          query.includes('consumer') &&
+          query.includes('gpu'),
+      ),
+    ).toBe(true);
+    expect(
+      plan.some(
+        (query) =>
+          query.includes('benchmark feasibility comparison') &&
+          query.includes('single') &&
+          query.includes('consumer') &&
+          query.includes('gpu'),
+      ),
+    ).toBe(true);
+  });
+
   it('projects one digest-bound preview into the required machine and reader artifacts', () => {
     const result = createInvestigationPreview(questions[1]);
     expect(Object.keys(result.artifacts)).toEqual([

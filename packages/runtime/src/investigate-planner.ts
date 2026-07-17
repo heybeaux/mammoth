@@ -191,6 +191,18 @@ function searchStem(question: string): string {
   return question;
 }
 
+function compactQuery(value: string, maxTerms = 18): string {
+  const terms: string[] = [];
+  const seen = new Set<string>();
+  for (const term of orderedFocusTerms(value)) {
+    if (seen.has(term)) continue;
+    seen.add(term);
+    terms.push(term);
+    if (terms.length >= maxTerms) break;
+  }
+  return terms.join(' ');
+}
+
 function selectOptionalRoles(
   question: string,
   focus: string,
@@ -248,6 +260,19 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
   const boundaryConstraintFocus = constraints[3] ?? secondary;
   const directSearch = searchStem(question);
   const sourceTopic = orderedFocusTerms(question).slice(0, 6).join(' ');
+  const implementationQuery = compactQuery(
+    [implementationFocus, ...constraints].join(' '),
+  );
+  const constraintQuery = compactQuery(
+    [directConstraintFocus, resourceConstraintFocus, deliveryConstraintFocus]
+      .filter(Boolean)
+      .join(' '),
+    14,
+  );
+  const boundaryQuery = compactQuery(
+    [boundaryConstraintFocus, ...constraints.slice(2)].join(' '),
+    14,
+  );
   const investigationId = canonicalDigest({ question }).slice(7, 23);
   const optionalRoles = selectOptionalRoles(question, primary);
   const proposedTeam: ProposedResearchRole[] = [
@@ -336,8 +361,10 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
         `${sourceTopic || directSearch} official project documentation`,
         `${sourceTopic || primary} ${directConstraintFocus} primary source technical report`,
         `${sourceTopic || primary} ${resourceConstraintFocus} measured benchmark resource requirements`,
-        `${sourceTopic || primary} ${deliveryConstraintFocus} repository readme implementation`,
-        `${sourceTopic || primary} ${boundaryConstraintFocus} deployment hardware requirements`,
+        `${implementationQuery || sourceTopic || primary} repository readme implementation`,
+        `${implementationQuery || sourceTopic || primary} deployment hardware requirements`,
+        `${constraintQuery || implementationQuery || sourceTopic || primary} official implementation constraints`,
+        `${boundaryQuery || implementationQuery || sourceTopic || primary} benchmark feasibility comparison`,
         `${sourceTopic || primary} ${directConstraintFocus} independent evaluation comparison`,
         `${sourceTopic || primary} ${boundaryConstraintFocus} limitations counterexamples failure cases`,
       ],
