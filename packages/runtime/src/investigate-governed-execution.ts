@@ -2336,8 +2336,7 @@ function completeLiveReview(
     .map((item) => ({
       statement: item.nextValidation,
       resolvesUncertainty: `Whether ${item.title.trim()} is supported enough to keep or change its current portfolio rank.`,
-      threshold:
-        'Pass only if the measured result meets the decision criterion stated in the validation design and exposes any material adverse outcome.',
+      threshold: `Pass only if the validation produces an observable result for: ${item.nextValidation.trim()}`,
       safetyBoundary:
         'Design-only proposal: do not touch private data, production systems, paid providers, deployments, or real-world operations without separate scoped authority.',
       evidenceIndexes: item.evidenceIndexes,
@@ -2420,6 +2419,63 @@ function assertDecisionGradeReview(input: {
       'missing_bounded_experiments',
       'live synthesis requires at least one cited bounded experiment proposal',
     );
+  }
+  const citedSections = [
+    {
+      code: 'missing_boundary_conditions',
+      label: 'boundary condition',
+      values: input.review.boundaryConditions ?? [],
+    },
+    {
+      code: 'missing_hypotheses',
+      label: 'falsifiable hypothesis',
+      values: input.review.hypotheses ?? [],
+    },
+  ] as const;
+  for (const section of citedSections) {
+    if (
+      section.values.length === 0 ||
+      section.values.some(
+        (item) =>
+          item.statement.trim().length < 24 ||
+          item.evidenceIndexes.length === 0 ||
+          item.evidenceIndexes.some(
+            (index) =>
+              !Number.isInteger(index) ||
+              index < 1 ||
+              index > input.admittedEvidenceCount,
+          ),
+      )
+    ) {
+      refuse(
+        section.code,
+        `live synthesis requires at least one cited ${section.label}`,
+      );
+    }
+  }
+  for (const experiment of input.review.experimentProposals ?? []) {
+    const threshold = experiment.threshold.trim();
+    if (
+      experiment.statement.trim().length < 24 ||
+      experiment.resolvesUncertainty.trim().length < 24 ||
+      threshold.length < 24 ||
+      /meets? the decision criterion|portfolio rank|supported enough/iu.test(
+        threshold,
+      ) ||
+      experiment.safetyBoundary.trim().length < 24 ||
+      experiment.evidenceIndexes.length === 0 ||
+      experiment.evidenceIndexes.some(
+        (index) =>
+          !Number.isInteger(index) ||
+          index < 1 ||
+          index > input.admittedEvidenceCount,
+      )
+    ) {
+      refuse(
+        'invalid_bounded_experiment',
+        'live synthesis requires concrete cited experiments with non-placeholder thresholds',
+      );
+    }
   }
 }
 

@@ -605,3 +605,22 @@ investigate-governed-execution.test.ts investigate-preview.test.ts` and
   `019f717e-e2df-7b52-8dde-fafb3f00f819` was asked to judge V29 against
   predicates 9/10. No predicate is claimed until that review returns PASS and
   subsequent gates pass.
+
+## 2026-07-17 — V29 independent review blocked; stricter synthesis gates
+
+- **Independent review:** read-only reviewer
+  `019f717e-e2df-7b52-8dde-fafb3f00f819` blocked V29. Findings: the
+  world-model report was too narrow around LeWM, did not rank a broad enough
+  set of concrete open-source/private/local/single-consumer-GPU opportunities,
+  lacked substantive dissent, limits, boundaries, cross-domain mechanisms, and
+  falsifiable experiment thresholds, and unrelated holdouts still overclaimed
+  central constraints.
+- **Repair:** live review now fails closed unless it contains cited boundary
+  conditions and cited falsifiable hypotheses. Experiment proposals must be
+  cited and have non-placeholder thresholds; derived fallback thresholds are
+  tied to the proposed validation text instead of the prior generic portfolio
+  wording.
+- **Focused verification:** `pnpm --filter @mammoth/runtime test --
+investigate-governed-execution.test.ts investigate-preview.test.ts` and
+  `pnpm format:check && pnpm lint && pnpm typecheck` passed locally. Predicates
+  9/10 remain incomplete pending fresh live runs and independent review.
