@@ -24,6 +24,40 @@ function stringArray(value: unknown): readonly string[] {
     : [];
 }
 
+const QUESTION_STOP_WORDS = new Set([
+  'and',
+  'are',
+  'for',
+  'from',
+  'have',
+  'how',
+  'should',
+  'that',
+  'the',
+  'their',
+  'them',
+  'there',
+  'these',
+  'this',
+  'what',
+  'where',
+  'which',
+  'with',
+  'without',
+  'would',
+]);
+
+function materialQuestionTerms(question: string): readonly string[] {
+  return [
+    ...new Set(
+      question
+        .toLowerCase()
+        .match(/[a-z0-9][a-z0-9-]{3,}/gu)
+        ?.filter((term) => !QUESTION_STOP_WORDS.has(term)) ?? [],
+    ),
+  ];
+}
+
 async function optionalJson(
   path: string,
 ): Promise<Record<string, unknown> | undefined> {
@@ -55,26 +89,31 @@ export async function verifyOutcome1Preview(
     failures.push('problem_contract_question_mismatch');
   }
   if (
-    typeof problem?.objective !== 'string' ||
+    typeof asRecord(problem?.interpretation)?.objective !== 'string' ||
     stringArray(problem.assumptions).length === 0 ||
-    stringArray(problem.falsifiers).length === 0
+    stringArray(asRecord(problem?.interpretation)?.falsifiers).length === 0
   ) {
     failures.push('problem_contract_not_reviewable');
   }
-  const roles = Array.isArray(team?.roles)
-    ? team.roles.map(asRecord).filter((entry) => entry !== undefined)
+  const roles = Array.isArray(team?.proposedTeam)
+    ? team.proposedTeam.map(asRecord).filter((entry) => entry !== undefined)
     : [];
   if (
     roles.length < 3 ||
     roles.some(
       (role) =>
-        typeof role.roleId !== 'string' || typeof role.reason !== 'string',
+        typeof role.roleId !== 'string' ||
+        typeof role.mission !== 'string' ||
+        typeof role.independence !== 'string',
     )
   ) {
     failures.push('team_plan_not_problem_derived');
   }
   const roleText = roles
-    .map((role) => `${String(role.roleId)} ${String(role.reason)}`)
+    .map(
+      (role) =>
+        `${String(role.roleId)} ${String(role.title)} ${String(role.mission)}`,
+    )
     .join(' ')
     .toLowerCase();
   for (const expected of fixtureCase.requiredPreviewRoles) {
@@ -82,19 +121,25 @@ export async function verifyOutcome1Preview(
       failures.push(`required_preview_role_missing:${expected}`);
     }
   }
+  const questionTermsInTeam = materialQuestionTerms(
+    fixtureCase.question,
+  ).filter((term) => roleText.includes(term));
+  if (questionTermsInTeam.length < 2) {
+    failures.push('team_plan_not_materially_question_derived');
+  }
   if (
-    proposal?.question !== fixtureCase.question ||
-    !Array.isArray(proposal.searchQueries) ||
-    proposal.searchQueries.length < 2 ||
-    !asRecord(proposal.reportOutline)
+    !asRecord(proposal?.plan) ||
+    !Array.isArray(asRecord(proposal?.plan)?.searchQueries) ||
+    (asRecord(proposal?.plan)?.searchQueries as unknown[]).length < 2 ||
+    !Array.isArray(asRecord(proposal?.plan)?.reportSections)
   ) {
     failures.push('research_plan_not_question_derived');
   }
   if (
-    approval?.status !== manifest.expectedPreviewStatus ||
-    approval.effectCount !== 0 ||
-    !asRecord(approval.requestedAuthority) ||
-    !asRecord(approval.requestedBudget)
+    asRecord(approval?.requestedAuthority)?.status !== 'not_granted' ||
+    asRecord(approval?.requestedAuthority)?.approvalRequired !== true ||
+    asRecord(approval?.requestedAuthority)?.externalEffectsExecuted !== false ||
+    typeof asRecord(approval?.requestedAuthority)?.maxSpendUsd !== 'number'
   ) {
     failures.push('approval_boundary_not_fail_closed');
   }
@@ -128,10 +173,9 @@ export function verifyOutcome1PlanDifferentiation(
     try {
       const parsed = asRecord(JSON.parse(raw));
       return JSON.stringify({
-        roles: parsed?.roles,
-        searchQueries: parsed?.searchQueries,
-        sourceClassTargets: parsed?.sourceClassTargets,
-        reportOutline: parsed?.reportOutline,
+        plan: parsed?.plan,
+        experiments: parsed?.experiments,
+        planner: parsed?.planner,
       });
     } catch {
       failures.push(`preview_invalid:${fixtureCase.caseId}`);

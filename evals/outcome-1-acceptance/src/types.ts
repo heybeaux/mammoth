@@ -34,9 +34,9 @@ export interface Outcome1Case {
 export interface Outcome1Manifest {
   readonly schemaVersion: '1.0.0';
   readonly contractFamily: 'outcome-1.v1';
-  readonly publicCommand: 'research investigate';
-  readonly expectedPreviewExitCode: 2;
-  readonly expectedPreviewStatus: 'approval_required';
+  readonly publicCommand: 'investigate';
+  readonly expectedPreviewExitCode: 0;
+  readonly expectedPreviewStatus: 'awaiting_approval';
   readonly requiredPreviewArtifacts: readonly string[];
   readonly requiredReaderArtifacts: readonly string[];
   readonly requiredAuditArtifacts: readonly string[];
@@ -48,7 +48,7 @@ export interface Outcome1Manifest {
 export interface Outcome1Preview {
   readonly caseId: string;
   readonly question: string;
-  readonly status: 'approval_required';
+  readonly status: 'awaiting_approval';
   readonly effectCount: number;
   readonly problemContract: {
     readonly objective: string;

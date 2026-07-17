@@ -33,9 +33,9 @@ export async function loadOutcome1Manifest(
   if (
     parsed.schemaVersion !== '1.0.0' ||
     parsed.contractFamily !== 'outcome-1.v1' ||
-    parsed.publicCommand !== 'research investigate' ||
-    parsed.expectedPreviewExitCode !== 2 ||
-    parsed.expectedPreviewStatus !== 'approval_required'
+    parsed.publicCommand !== 'investigate' ||
+    parsed.expectedPreviewExitCode !== 0 ||
+    parsed.expectedPreviewStatus !== 'awaiting_approval'
   ) {
     throw new Error('OUTCOME1_FIXTURE_INVALID: manifest authority');
   }

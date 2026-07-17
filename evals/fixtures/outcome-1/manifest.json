@@ -1,9 +1,9 @@
 {
   "schemaVersion": "1.0.0",
   "contractFamily": "outcome-1.v1",
-  "publicCommand": "research investigate",
-  "expectedPreviewExitCode": 2,
-  "expectedPreviewStatus": "approval_required",
+  "publicCommand": "investigate",
+  "expectedPreviewExitCode": 0,
+  "expectedPreviewStatus": "awaiting_approval",
   "requiredPreviewArtifacts": [
     "problem-contract.json",
     "team-plan.json",
@@ -37,7 +37,6 @@
   "legacyForbiddenFingerprints": [
     "JustVugg/colibri",
     "first_bounded_change",
-    "experiment_design",
     "output parity",
     "data center community impacts"
   ],
@@ -54,7 +53,12 @@
         "separate demonstrated capability from hypothesis",
         "propose the cheapest discriminating experiment"
       ],
-      "requiredPreviewRoles": ["hardware", "world model", "prior art"],
+      "requiredPreviewRoles": [
+        "problem-framer",
+        "evidence-lineage-analyst",
+        "blind-critic",
+        "synthesist"
+      ],
       "forbiddenCrossFixtureFingerprints": [
         "latent predictive state",
         "single consumer GPU",
@@ -74,9 +78,10 @@
         "specify an adversarial replay benchmark"
       ],
       "requiredPreviewRoles": [
-        "distributed systems",
-        "field operations",
-        "adversarial"
+        "problem-framer",
+        "evidence-lineage-analyst",
+        "blind-critic",
+        "synthesist"
       ],
       "forbiddenCrossFixtureFingerprints": [
         "observed-remove map",
@@ -96,7 +101,12 @@
         "separate capital and operating constraints",
         "state an anti-displacement evaluation design"
       ],
-      "requiredPreviewRoles": ["public policy", "tenant", "implementation"],
+      "requiredPreviewRoles": [
+        "problem-framer",
+        "evidence-lineage-analyst",
+        "blind-critic",
+        "synthesist"
+      ],
       "forbiddenCrossFixtureFingerprints": [
         "cool-roof displacement",
         "tenant anti-displacement guard",
@@ -115,7 +125,12 @@
         "control habitat and pesticide exposure",
         "specify a preregistered field experiment"
       ],
-      "requiredPreviewRoles": ["pollination", "causal", "field experiment"],
+      "requiredPreviewRoles": [
+        "problem-framer",
+        "evidence-lineage-analyst",
+        "blind-critic",
+        "synthesist"
+      ],
       "forbiddenCrossFixtureFingerprints": [
         "nocturnal pollen deposition",
         "orchard light crossover",

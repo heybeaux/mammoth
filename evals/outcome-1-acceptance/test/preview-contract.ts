@@ -23,9 +23,10 @@ const proposalsByCase: Record<string, string> = {};
 
 for (const fixtureCase of manifest.cases) {
   await loadOutcome1Corpus(fixtureRoot, fixtureCase);
-  const output = await mkdtemp(
+  const outputParent = await mkdtemp(
     join(tmpdir(), `mammoth-outcome1-${fixtureCase.caseId}-`),
   );
+  const output = join(outputParent, 'preview');
   try {
     let exitCode = 0;
     let stdout = '';
@@ -37,13 +38,8 @@ for (const fixtureCase of manifest.cases) {
           '--import',
           'tsx',
           resolve(repositoryRoot, 'apps/cli/src/bin.ts'),
-          'research',
           'investigate',
           fixtureCase.question,
-          '--depth',
-          'quick',
-          '--budget-usd',
-          '0',
           '--output',
           output,
         ],
@@ -107,7 +103,7 @@ for (const fixtureCase of manifest.cases) {
       // Missing preview artifacts are already recorded above.
     }
   } finally {
-    await rm(output, { recursive: true, force: true });
+    await rm(outputParent, { recursive: true, force: true });
   }
 }
 

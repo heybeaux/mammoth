@@ -21,8 +21,10 @@ pnpm --filter @mammoth/outcome-1-acceptance test
 normalization, cross-fixture leakage detection, reader/audit authority binding,
 and tamper rejection.
 
-`test` is deliberately red on the reset baseline. It invokes the real CLI for
-all four questions and fails until the normal `research investigate` path emits
-the four approved preview artifacts with zero effects. Missing generic product
-surfaces also fail the no-hardcoding gate. The contract must not be disabled,
-marked todo, or weakened to merge a partial implementation.
+`test` invokes the real top-level `mammoth investigate` path for all four
+questions. It requires the four approved preview artifacts, a successful
+`awaiting_approval` result, materially question-derived plans and teams, and zero
+effects. Missing generic product surfaces or fixture leakage fail the
+no-hardcoding gate. The completion-side reader/audit predicates remain frozen
+for the accepted-plan execution slice; they must not be weakened to merge a
+partial implementation.

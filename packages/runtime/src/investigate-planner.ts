@@ -38,13 +38,16 @@ const STOP_WORDS = new Set([
   'from',
   'have',
   'important',
+  'increasingly',
   'individuals',
   'into',
   'lie',
   'matter',
   'most',
   'novel',
+  'opportunities',
   'other',
+  'own',
   'researchers',
   'systems',
   'their',
@@ -104,24 +107,33 @@ function normalizedQuestion(question: string): string {
 }
 
 function focusTerms(question: string): readonly string[] {
-  const clauses = question.split(/(?<=[.!?])\s+/u);
-  const decisionClause = clauses.at(-1) ?? question;
-  const candidates = decisionClause
-    .toLocaleLowerCase('en-US')
-    .match(/[\p{L}\p{N}][\p{L}\p{N}-]{2,}/gu)
-    ?.filter((term) => !STOP_WORDS.has(term));
-  const unique = [...new Set(candidates ?? [])];
-  if (unique.length >= 4) return unique.slice(0, 8);
-  const fallback = [
-    ...new Set(
-      decisionClause
-        .toLocaleLowerCase('en-US')
-        .split(/\s+/u)
-        .map((term) => term.replace(/[^\p{L}\p{N}-]/gu, ''))
-        .filter((term) => term.length > 1),
-    ),
-  ];
-  return fallback.slice(0, 8);
+  const observed = [...question.matchAll(/[\p{L}\p{N}][\p{L}\p{N}-]{2,}/gu)]
+    .map((match, index) => ({
+      term: match[0]?.toLocaleLowerCase('en-US') ?? '',
+      acronym: /^[A-Z0-9]{2,}$/u.test(match[0] ?? ''),
+      index,
+    }))
+    .filter(({ term }) => term.length > 0 && !STOP_WORDS.has(term));
+  const frequency = new Map<string, number>();
+  for (const { term } of observed) {
+    frequency.set(term, (frequency.get(term) ?? 0) + 1);
+  }
+  const firstSeen = new Map<string, (typeof observed)[number]>();
+  for (const candidate of observed) {
+    if (!firstSeen.has(candidate.term))
+      firstSeen.set(candidate.term, candidate);
+  }
+  const ranked = [...firstSeen.values()].sort((left, right) => {
+    const score = (candidate: typeof left) =>
+      (frequency.get(candidate.term) ?? 0) * 20 +
+      Math.min(candidate.term.length, 14) +
+      (candidate.acronym ? 10 : 0) +
+      (candidate.term.includes('-') ? 8 : 0) +
+      candidate.index / Math.max(observed.length, 1);
+    return score(right) - score(left) || left.index - right.index;
+  });
+  if (ranked.length >= 2) return ranked.slice(0, 8).map(({ term }) => term);
+  return observed.slice(0, 8).map(({ term }) => term);
 }
 
 function stableIndex(seed: string, offset: number, size: number): number {
@@ -175,8 +187,8 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
   if (terms.length < 2) {
     throw new Error('investigate could not derive enough question terms');
   }
-  const primary = terms.slice(0, 3).join(' ');
-  const secondary = terms.slice(3, 6).join(' ') || terms.slice(0, 2).join(' ');
+  const primary = terms.slice(0, 4).join(' ');
+  const secondary = terms.slice(4, 8).join(' ') || terms.slice(0, 2).join(' ');
   const investigationId = canonicalDigest({ question }).slice(7, 23);
   const optionalRoles = selectOptionalRoles(question, primary);
   const proposedTeam: ProposedResearchRole[] = [

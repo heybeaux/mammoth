@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "test": "tsx test/contract-red.ts",
+    "test": "tsx test/preview-contract.ts",
     "test:harness": "tsx test/harness.test.ts",
     "typecheck": "tsc --noEmit"
   },
