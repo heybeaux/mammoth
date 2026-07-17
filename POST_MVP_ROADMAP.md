@@ -1,6 +1,6 @@
 # Mammoth Post-MVP Roadmap
 
-> Status: active
+> Status: historical; superseded as product authority on 2026-07-16
 >
 > Baseline: `v0.1.0-mvp`
 >
@@ -14,7 +14,11 @@
 > Latest release receipt:
 > [`v0.8.0-turnkey-research.md`](evals/reports/v0.8.0-turnkey-research.md)
 >
-> Active checkpoint: P9 Trustworthy General Research entry planning.
+> Current authority: [`CORE_THESIS.md`](CORE_THESIS.md) and
+> [`PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md).
+
+This roadmap remains a record of the P1-P9 delivery sequence. It no longer
+authorizes phase-number progression or defines Mammoth's product destination.
 
 ## Outcome
 

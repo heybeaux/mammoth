@@ -9,6 +9,14 @@ immutable source evidence — and when the evidence isn't there, Mammoth fails
 closed instead of making something up.
 </p>
 
+> **Product reset (2026-07-16):** Mammoth is governed by
+> [`CORE_THESIS.md`](CORE_THESIS.md). The thesis restores the full product:
+> domain-independent agentic research, cross-domain hypothesis generation, and
+> explicitly authorized experimentation. The P8 data-center and P9 Colibri paths
+> are bounded exhibitions, not proof that arbitrary live questions work today.
+> See the evidence-backed [`CURRENT_PRODUCT_AUDIT.md`](CURRENT_PRODUCT_AUDIT.md)
+> and outcome-based [`PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md).
+
 ---
 
 ## Why Mammoth?
@@ -66,12 +74,11 @@ artifact.
 
 ![Mammoth CLI inspecting a completed research bundle](docs/assets/research-showcase/cli-inspect.png)
 
-This is intentionally the only cross-source showcase today. The live planning
-taxonomy and search program are still specialized for data-center impact
-research; unrelated-topic examples would overstate the current product. The
-work in flight (P9, below) is a governed, question-derived planning layer that
-can produce equally strong examples in unrelated domains without hard-coded
-topic templates.
+This is intentionally a bounded cross-source showcase. The normal `research ask`
+path remains specialized for data-center impact research; unrelated-topic
+examples would overstate the current product. P9 added reusable question-derived
+planning and a separately bounded Colibri live exhibition, but did not complete a
+general arbitrary-question live path.
 
 ## Quickstart
 
@@ -122,8 +129,8 @@ Under the hood: durable Temporal workflows with replay and recovery, a
 Postgres/CAS authority with forward-only migrations, leased task queues,
 provider-idempotent side-effect receipts, multi-dimensional budgets, isolated
 research cells with blind review and preserved dissent, and deterministic
-multi-cell topology planning. The full ledger of delivered phases (P0 through
-P8) lives in [MVP_PLAN.md](MVP_PLAN.md) and
+multi-cell topology planning. The historical ledger of delivered checkpoints
+(P0 through P9) lives in [MVP_PLAN.md](MVP_PLAN.md) and
 [POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md).
 
 ## Current product boundary
@@ -132,10 +139,11 @@ Mammoth states plainly what it is not yet:
 
 - A local CLI today — the desktop UI
   ([Mammoth Observatory](docs/OBSERVATORY.md)) and hosted API are future work.
-- The live search program, mandatory coverage topics, and report framing are
-  currently data-center-specific. Accepting an arbitrary question string does
-  not yet mean honest arbitrary-domain research; that is the active P9
-  checkpoint (Trustworthy General Research).
+- The normal `research ask` path remains the frozen P8 data-center application.
+  P9 can create and verify question-derived plans offline, but the normal
+  accepted-plan path does not execute live; its separate live command is the
+  bounded Colibri exhibition. Accepting an arbitrary question string does not
+  yet mean honest arbitrary-domain research.
 - Postgres/CAS and Temporal have production-shaped local profiles and recovery
   evidence, not a managed hosted deployment.
 - Provider-dependent quality, cost, and reliability claims remain outside
@@ -147,6 +155,11 @@ Mammoth states plainly what it is not yet:
   assigns human approval.
 - Parliament provider execution, external stack adapters, and
   `mammoth-pipelines` remain future work.
+
+The current product boundary is audited in
+[`CURRENT_PRODUCT_AUDIT.md`](CURRENT_PRODUCT_AUDIT.md). Current development is
+organized by user-visible outcomes in
+[`PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md), not by a new phase number.
 
 ## Development
 
@@ -199,8 +212,11 @@ and `test` scripts, which root commands run recursively.
 ## Documentation
 
 - [MVP_PLAN.md](MVP_PLAN.md) — the completed MVP contract
-- [POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md) — delivery through P8 and the
-  P9-P12 release train
+- [CORE_THESIS.md](CORE_THESIS.md) — governing product authority
+- [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md) — current outcome-based roadmap
+- [CURRENT_PRODUCT_AUDIT.md](CURRENT_PRODUCT_AUDIT.md) — evidence-backed
+  boundary and stocktake
+- [POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md) — historical P1-P9 delivery train
 - [ARCHITECTURE.md](ARCHITECTURE.md) — system architecture
 - [docs/adr/0001-local-durable-runtime.md](docs/adr/0001-local-durable-runtime.md)
   — MVP topology limits and the production adapter boundary
