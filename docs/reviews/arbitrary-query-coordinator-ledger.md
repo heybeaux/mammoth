@@ -592,3 +592,16 @@ investigate-governed-execution.test.ts investigate-preview.test.ts` and
 investigate-governed-execution.test.ts investigate-preview.test.ts` and
   `pnpm format:check && pnpm lint && pnpm typecheck` passed locally. Predicates
   9/10 remain incomplete pending fresh live runs and independent review.
+
+## 2026-07-17 — V29 completed; independent review requested
+
+- **Fresh live evidence under review:** V29 completed all three unrelated
+  holdouts and the exact world-model question through the normal governed live
+  path with exit code 0. Artifacts are preserved under
+  `evals/live/mammoth-core-loop-v29/`.
+- **Spend:** after V29, aggregate settled spend is **USD 4.382060350004**,
+  leaving **USD 10.617939649996** under the USD 15 ceiling.
+- **Current status:** independent read-only reviewer
+  `019f717e-e2df-7b52-8dde-fafb3f00f819` was asked to judge V29 against
+  predicates 9/10. No predicate is claimed until that review returns PASS and
+  subsequent gates pass.
