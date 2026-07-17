@@ -1,4 +1,5 @@
 export * from './cas.js';
+export * from './discovery.js';
 export * from './parse.js';
 export * from './p9-metadata.js';
 export * from './retrieve.js';
