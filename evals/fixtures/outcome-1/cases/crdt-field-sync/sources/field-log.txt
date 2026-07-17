@@ -1,0 +1,6 @@
+Synthetic fixture source.
+
+Field crews reported that an automatically merged state can be operationally
+wrong even when every replica has identical bytes. Corrections, acknowledgements,
+and the identity of superseded readings must remain inspectable after a three-day
+partition.

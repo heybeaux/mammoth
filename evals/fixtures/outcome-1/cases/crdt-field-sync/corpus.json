@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0.0",
+  "caseId": "crdt-field-sync",
+  "corpusId": "outcome1-crdt-field-sync/v1",
+  "sources": [
+    {
+      "sourceId": "crdt-protocol-study",
+      "sourceClass": "primary_technical",
+      "sourceFamily": "fixture-systems-a",
+      "bodyFile": "sources/protocol-study.txt",
+      "position": "supporting"
+    },
+    {
+      "sourceId": "crdt-field-log",
+      "sourceClass": "operational_evidence",
+      "sourceFamily": "fixture-operator-b",
+      "bodyFile": "sources/field-log.txt",
+      "position": "context"
+    },
+    {
+      "sourceId": "crdt-cost-study",
+      "sourceClass": "independent_benchmark",
+      "sourceFamily": "fixture-systems-c",
+      "bodyFile": "sources/cost-study.txt",
+      "position": "contradicting"
+    }
+  ],
+  "contradictionPairs": [
+    {
+      "leftSourceId": "crdt-protocol-study",
+      "rightSourceId": "crdt-cost-study",
+      "issue": "whether intent-preserving metadata remains affordable under long partitions"
+    }
+  ],
+  "falsifier": "Adversarial replay finds a converged state that drops a causally later operator correction or exceeds the fixed energy ceiling.",
+  "decoyClaim": "Any convergent CRDT necessarily preserves operator intent."
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@mammoth/outcome-1-acceptance",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/verifier.ts",
+    "./no-hardcoding": "./src/no-hardcoding.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "tsx test/contract-red.ts",
+    "test:harness": "tsx test/harness.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.0"
+  }
+}

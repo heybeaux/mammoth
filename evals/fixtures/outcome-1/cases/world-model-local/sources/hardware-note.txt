@@ -1,0 +1,6 @@
+Synthetic fixture source; not a claim about the live world.
+
+Lab B measured that activation memory, sequence length, and replay-buffer decoding
+caused the first out-of-memory failures on a 24 GB card. Quantized frozen encoders
+left room for a small dynamics head. The measurements support profiling and
+modular adaptation before attempting end-to-end training.

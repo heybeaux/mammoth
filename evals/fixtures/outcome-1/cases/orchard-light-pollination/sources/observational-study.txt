@@ -1,0 +1,5 @@
+Synthetic fixture source.
+
+Ecology Lab A observed 24 percent fewer moth visits and lower nocturnal pollen
+deposition in illuminated orchard rows. Illuminated rows were also closer to roads
+and received more pesticide applications. Evidence marker: moth_canary_d2e6.

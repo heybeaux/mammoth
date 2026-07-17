@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0.0",
+  "caseId": "urban-heat-equity",
+  "corpusId": "outcome1-urban-heat-equity/v1",
+  "sources": [
+    {
+      "sourceId": "heat-roof-pilot",
+      "sourceClass": "implementation_evaluation",
+      "sourceFamily": "fixture-city-a",
+      "bodyFile": "sources/roof-pilot.txt",
+      "position": "supporting"
+    },
+    {
+      "sourceId": "heat-tenant-testimony",
+      "sourceClass": "stakeholder_evidence",
+      "sourceFamily": "fixture-tenants-b",
+      "bodyFile": "sources/tenant-testimony.txt",
+      "position": "contradicting"
+    },
+    {
+      "sourceId": "heat-tree-program",
+      "sourceClass": "program_audit",
+      "sourceFamily": "fixture-auditor-c",
+      "bodyFile": "sources/tree-program.txt",
+      "position": "context"
+    }
+  ],
+  "contradictionPairs": [
+    {
+      "leftSourceId": "heat-roof-pilot",
+      "rightSourceId": "heat-tenant-testimony",
+      "issue": "whether measured cooling benefits can be separated from rent and displacement pressure"
+    }
+  ],
+  "falsifier": "A matched-neighborhood evaluation shows no reduction in indoor heat exposure or shows increased involuntary displacement despite tenant protections.",
+  "decoyClaim": "Every cool-roof subsidy lowers rent and prevents displacement."
+}

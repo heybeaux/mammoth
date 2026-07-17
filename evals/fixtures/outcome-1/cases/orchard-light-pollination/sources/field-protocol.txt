@@ -1,0 +1,6 @@
+Synthetic fixture source.
+
+Ecology Lab C proposed a randomized orchard light crossover stratified by habitat
+edge and pesticide schedule. It preregistered moth visits, pollen deposition,
+fruit set, weather exclusions, and a minimum effect threshold. Dark controls and
+shielded-light treatments alternate across matched rows and weeks.

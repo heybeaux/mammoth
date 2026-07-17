@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0.0",
+  "caseId": "world-model-local",
+  "corpusId": "outcome1-world-model-local/v1",
+  "sources": [
+    {
+      "sourceId": "wm-latent-study",
+      "sourceClass": "primary_research",
+      "sourceFamily": "fixture-lab-a",
+      "bodyFile": "sources/latent-study.txt",
+      "position": "supporting"
+    },
+    {
+      "sourceId": "wm-hardware-note",
+      "sourceClass": "hardware_measurement",
+      "sourceFamily": "fixture-lab-b",
+      "bodyFile": "sources/hardware-note.txt",
+      "position": "context"
+    },
+    {
+      "sourceId": "wm-negative-replication",
+      "sourceClass": "independent_replication",
+      "sourceFamily": "fixture-lab-c",
+      "bodyFile": "sources/negative-replication.txt",
+      "position": "contradicting"
+    }
+  ],
+  "contradictionPairs": [
+    {
+      "leftSourceId": "wm-latent-study",
+      "rightSourceId": "wm-negative-replication",
+      "issue": "whether small latent predictive models transfer beyond the training environment"
+    }
+  ],
+  "falsifier": "A held-out environment shows no planning advantage over a parameter-matched reactive baseline under the same GPU-hours.",
+  "decoyClaim": "A single consumer GPU can train a generally capable physical world model from scratch."
+}

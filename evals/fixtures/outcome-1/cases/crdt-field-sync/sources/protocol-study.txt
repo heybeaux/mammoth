@@ -1,0 +1,6 @@
+Synthetic fixture source.
+
+Systems Lab A found that an observed-remove map with explicit correction records
+preserved causally later operator edits across 10,000 randomized partitions. A
+last-writer-wins map converged too, but erased 31 corrections when device clocks
+drifted. Evidence marker: crdt_canary_b921.

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0.0",
+  "preview": {
+    "minimumRoles": 3,
+    "minimumQueries": 2,
+    "effectsBeforeApproval": 0,
+    "materiallyDistinctPlanRatio": 1
+  },
+  "reader": {
+    "directAnswerRequired": true,
+    "humanCitationCoverage": 1,
+    "auditIdentifiersAllowed": 0,
+    "factualSentenceAdmissionCoverage": 1
+  },
+  "audit": {
+    "artifactDigestCoverage": 1,
+    "rejectedClaimResidueRequired": true,
+    "projectionAuthorityMatch": 1
+  },
+  "hardcoding": {
+    "missingGenericSurfaceTolerance": 0,
+    "evaluationFingerprintTolerance": 0,
+    "crossFixtureLeakageTolerance": 0
+  }
+}
