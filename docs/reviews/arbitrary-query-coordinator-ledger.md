@@ -99,3 +99,40 @@
   runtime/CLI normal path into these no-effect discovery and acquisition
   intents, then carry snapshots through exact spans and independent admission.
   The active runtime/CLI lane remains the only owner of that path.
+
+## 2026-07-17 — runtime composition integrated; contract decisions recorded
+
+- **Successor coordinator:** session
+  `agent:scout:subagent:e338ae2d-8b73-44a6-a2df-8fa188ade309` resumed the loop.
+  Managed flow `56206e6d-363b-486b-94bc-1f315f859d0d` remains `running`
+  (revision 6); TaskFlow runtime mutation is again unavailable on this session's
+  tool surface, so this ledger and the coordinator state file remain the durable
+  record.
+- **Runtime lane evidence:** session
+  `agent:scout:subagent:b42d93bd-d4e1-4088-8cb4-b68d759c2caf` completed at
+  `4ca0cf7`; its registry entries and subagents are dead and its tracked tree is
+  clean (only injected OpenClaw bootstrap files untracked). The committed diff is
+  confined to `packages/runtime` and `apps/cli` (the CLI lives under `apps/`,
+  matching the lane's intent). Serially integrated as `9426c3e`.
+- **Coordinator gates at `9426c3e`:** runtime tests **123/123**, CLI tests
+  **45/45**, repo typecheck, lint, `format:check`, and build all passed;
+  `verify:p8` ok and `verify:p9` ok (offline adapters only). No provider,
+  network, paid, or other effect authority was used.
+- **Decision — schema home:** `investigation.acquisition.v1` intent-set and
+  release schemas are promoted from `packages/runtime` to `packages/domain` as a
+  shared contract, because the governed-execution seam spans retrieval and
+  evidence packages that must not import runtime. Derivation and release
+  evaluation remain runtime composition logic. The move is coordinator-owned
+  cross-package contract scope per `AGENTS.md`.
+- **Decision — authority receipt:** the release gate continues to reuse
+  `P9LiveAuthorityReceipt`; it already binds plan digest, question scope,
+  validity window, effect kinds, and issuer, and a parallel investigation-scoped
+  receipt contract would add surface without a new invariant. Revisit only when
+  requirements diverge (for example per-intent budgets). The trusted-issuer
+  anchor stays caller-pinned: the CLI must take it from explicit configuration
+  and fail closed when absent; no code-level default issuer is permitted.
+- **Current predicate:** governed execution of released intents — a valid
+  scoped authority minted by an offline trusted-issuer fixture must drive
+  policy-pinned retrieval, snapshot preservation, exact spans, and independent
+  admission through the normal product path with strictly local, no-effect
+  adapters.
