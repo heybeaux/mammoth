@@ -74,8 +74,53 @@ const LIVE_PROPOSER_PROFILE_FAMILY = 'live-openai-compatible-proposer';
 const LIVE_EVALUATOR_PROFILE_VERSION = 'live-openai-compatible-evaluator/v1';
 const LIVE_EVALUATOR_PROFILE_FAMILY = 'live-openai-compatible-evaluator';
 const LIVE_USER_AGENT = 'mammoth-investigate-live/1.0';
+const PUBLIC_WEB_RETRIEVAL_AUTHORITY_ORIGIN = 'https://public-web.invalid';
 const LOW_INFORMATION_SPAN_PATTERN =
   /(?:^(?:skip to main content|an official website|official websites use|secure \.gov websites|menu|search|privacy policy|terms of use|cookies?|javascript|equal contribution|corresponding author|received:|accepted:|published:)|\b(?:open access|creative commons|cc by|copyright|©|competing interests|license|licence|received \d{4}|revised \d{4}|accepted \d{4}|collection date|published by|permission directly from the copyright holder|distributed under the terms|equal contribution)\b)/iu;
+const QUESTION_STOP_TERMS = new Set([
+  'about',
+  'after',
+  'against',
+  'also',
+  'answer',
+  'apply',
+  'based',
+  'before',
+  'being',
+  'best',
+  'beyond',
+  'build',
+  'building',
+  'could',
+  'during',
+  'evidence',
+  'from',
+  'help',
+  'important',
+  'increasingly',
+  'individuals',
+  'lie',
+  'most',
+  'operate',
+  'opportunities',
+  'question',
+  'reduce',
+  'should',
+  'single',
+  'systems',
+  'that',
+  'their',
+  'there',
+  'today',
+  'using',
+  'what',
+  'where',
+  'which',
+  'while',
+  'with',
+  'within',
+  'would',
+]);
 
 export class GovernedExecutionError extends Error {
   constructor(
@@ -92,6 +137,7 @@ export interface GovernedDiscoveryHint {
   readonly url: string;
   readonly sourceClass: string;
   readonly title?: string;
+  readonly description?: string;
 }
 
 /**
@@ -157,6 +203,7 @@ export interface GovernedAcquisitionExecution {
   readonly admissions: readonly P9ClaimAdmission[];
   readonly claims: readonly GovernedClaimRecord[];
   readonly modelWork: readonly P9ModelWorkRef[];
+  readonly liveReview?: GovernedLiveModelReview;
   readonly effectReceipts: readonly unknown[];
   readonly externalEffectsExecuted: boolean;
   readonly executionMode: 'offline_fixture' | 'governed_live';
@@ -208,6 +255,21 @@ function informativeWordCount(value: string): number {
   return value.match(/[A-Za-z][A-Za-z'-]{2,}/gu)?.length ?? 0;
 }
 
+function textTerms(value: string): readonly string[] {
+  return [
+    ...new Set(
+      [...value.matchAll(/[\p{L}\p{N}][\p{L}\p{N}-]{2,}/gu)]
+        .map((match) => match[0].toLocaleLowerCase('en-US'))
+        .filter(
+          (term) =>
+            term.length >= 4 &&
+            !QUESTION_STOP_TERMS.has(term) &&
+            !/^\d+$/u.test(term),
+        ),
+    ),
+  ];
+}
+
 function isLowInformationLiveSpan(quote: string): boolean {
   const normalized = quote.replace(/\s+/gu, ' ').trim();
   if (normalized.length < 48) return true;
@@ -218,39 +280,78 @@ function isLowInformationLiveSpan(quote: string): boolean {
 }
 
 function liveRelevanceTerms(question: string): readonly string[] {
-  return [
-    ...new Set(
-      [...question.matchAll(/[\p{L}\p{N}][\p{L}\p{N}-]{2,}/gu)]
-        .map((match) => match[0].toLocaleLowerCase('en-US'))
-        .filter(
-          (term) =>
-            term.length >= 4 &&
-            ![
-              'that',
-              'with',
-              'where',
-              'today',
-              'using',
-              'based',
-              'systems',
-              'beyond',
-              'argues',
-              'important',
-              'individuals',
-              'building',
-            ].includes(term),
-        ),
-    ),
-  ].slice(0, 12);
+  return textTerms(question).slice(0, 16);
+}
+
+function textRelevanceScore(value: string, terms: readonly string[]): number {
+  const normalized = value.toLocaleLowerCase('en-US');
+  return terms.reduce((score, term) => {
+    const variants = new Set([term]);
+    if (term.endsWith('s')) variants.add(term.slice(0, -1));
+    if (term.endsWith('ies')) variants.add(`${term.slice(0, -3)}y`);
+    return (
+      score +
+      ([...variants].some((variant) => normalized.includes(variant)) ? 1 : 0)
+    );
+  }, 0);
 }
 
 function isLiveSpanQuestionRelevant(
   quote: string,
   terms: readonly string[],
 ): boolean {
-  const normalized = quote.toLocaleLowerCase('en-US');
-  const hits = terms.filter((term) => normalized.includes(term));
-  return hits.length >= Math.min(2, terms.length);
+  if (terms.length === 0) return true;
+  return textRelevanceScore(quote, terms) >= Math.min(2, terms.length);
+}
+
+function liveHintRelevanceScore(input: {
+  readonly hint: DiscoveredSourceHint;
+  readonly query: string;
+  readonly question: string;
+}): number {
+  const terms = [
+    ...new Set([...textTerms(input.question), ...textTerms(input.query)]),
+  ];
+  const surface = [
+    input.hint.title ?? '',
+    input.hint.description ?? '',
+    input.hint.url.replace(/[^\p{L}\p{N}-]+/gu, ' '),
+  ].join(' ');
+  return textRelevanceScore(surface, terms);
+}
+
+function minimumHintRelevance(input: {
+  readonly query: string;
+  readonly question: string;
+}): number {
+  const terms = new Set([
+    ...textTerms(input.question),
+    ...textTerms(input.query),
+  ]);
+  return Math.max(2, Math.min(4, Math.ceil(terms.size / 6)));
+}
+
+function rankLiveSpans(
+  spans: readonly BoundedEvidenceSpan[],
+  terms: readonly string[],
+): readonly BoundedEvidenceSpan[] {
+  return [...spans].sort((left, right) => {
+    const relevance =
+      textRelevanceScore(right.quote, terms) -
+      textRelevanceScore(left.quote, terms);
+    if (relevance !== 0) return relevance;
+    return informativeWordCount(right.quote) - informativeWordCount(left.quote);
+  });
+}
+
+function isRetrievalOriginAuthorized(input: {
+  readonly origin: string;
+  readonly authorizedOrigins: ReadonlySet<string>;
+}): boolean {
+  return (
+    input.authorizedOrigins.has(input.origin) ||
+    input.authorizedOrigins.has(PUBLIC_WEB_RETRIEVAL_AUTHORITY_ORIGIN)
+  );
 }
 
 /**
@@ -1029,6 +1130,9 @@ export async function executeGovernedLiveAcquisition(
           url: hint.url,
           sourceClass: hint.sourceClass,
           ...(hint.title === undefined ? {} : { title: hint.title }),
+          ...(hint.description === undefined
+            ? {}
+            : { description: hint.description }),
         });
       }
       intentReceipts.push({
@@ -1041,6 +1145,37 @@ export async function executeGovernedLiveAcquisition(
       });
     }
 
+    const plannedQueryById = new Map(
+      discoveryIntents.map((intent) => [intent.intentId, intent.subject]),
+    );
+    const lowRelevanceHints: RejectedSourceHint[] = [];
+    const relevantHints = hints
+      .map((hint) => {
+        const query = plannedQueryById.get(hint.queryId) ?? '';
+        return {
+          hint,
+          score: liveHintRelevanceScore({
+            hint,
+            query,
+            question: authority.planScope.question,
+          }),
+          minimum: minimumHintRelevance({
+            query,
+            question: authority.planScope.question,
+          }),
+        };
+      })
+      .filter((entry) => {
+        if (entry.score >= entry.minimum) return true;
+        lowRelevanceHints.push({
+          hint: entry.hint,
+          reason: 'low_relevance_hint',
+        });
+        return false;
+      })
+      .sort((left, right) => right.score - left.score)
+      .map((entry) => entry.hint);
+
     const selection = selectPlannedAcquisitionCandidates({
       scope: {
         searchQueries: discoveryIntents.map((intent) => ({
@@ -1050,14 +1185,20 @@ export async function executeGovernedLiveAcquisition(
         })),
         sourceClassTargets,
       },
-      hints,
+      hints: relevantHints,
       selectedAt: input.now,
     });
     const unauthorizedRetrievalHints: RejectedSourceHint[] = [];
     const selectedCandidates = selection.candidates
       .filter((candidate) => {
         const origin = new URL(candidate.requestedUrl).origin;
-        if (authorizedRetrievalOrigins.has(origin)) return true;
+        if (
+          isRetrievalOriginAuthorized({
+            origin,
+            authorizedOrigins: authorizedRetrievalOrigins,
+          })
+        )
+          return true;
         unauthorizedRetrievalHints.push({
           hint: {
             queryId: candidate.candidateId,
@@ -1301,12 +1442,16 @@ export async function executeGovernedLiveAcquisition(
         const rawContentDigest = contentDigest(retrieved.bytes);
         const parsedBytes = new TextEncoder().encode(parsed.text);
         const parsedTextDigest = contentDigest(parsedBytes);
-        const spans = deriveBoundedEvidenceSpans({
-          body: parsed.text,
-          spanIdPrefix: `live:${candidate.candidateId}`,
-          isExcluded: isLowInformationLiveSpan,
-        }).filter((span) =>
-          isLiveSpanQuestionRelevant(span.quote, relevanceTerms),
+        const spans = rankLiveSpans(
+          deriveBoundedEvidenceSpans({
+            body: parsed.text,
+            spanIdPrefix: `live:${candidate.candidateId}`,
+            bounds: { maximumWindowCharacters: 160_000 },
+            isExcluded: isLowInformationLiveSpan,
+          }).filter((span) =>
+            isLiveSpanQuestionRelevant(span.quote, relevanceTerms),
+          ),
+          relevanceTerms,
         );
         recordAttempt(
           candidate,
@@ -1436,7 +1581,11 @@ export async function executeGovernedLiveAcquisition(
       intentReceipts,
       discoveredHints: hints.length,
       selectedCandidates,
-      rejectedHints: [...selection.rejected, ...unauthorizedRetrievalHints],
+      rejectedHints: [
+        ...lowRelevanceHints,
+        ...selection.rejected,
+        ...unauthorizedRetrievalHints,
+      ],
       snapshots,
       retrievalAttempts,
       coverage,
@@ -1445,6 +1594,7 @@ export async function executeGovernedLiveAcquisition(
       admissions,
       claims,
       modelWork,
+      liveReview: modelReview.value,
       effectReceipts: executor.effectReceipts,
       externalEffectsExecuted: true,
       executionMode: 'governed_live',
@@ -1626,21 +1776,31 @@ async function braveSearch(
     throw braveSearchHttpError(response.status, response.headers);
   }
   const parsed = JSON.parse(raw) as {
-    web?: { results?: { url?: string; title?: string }[] };
+    web?: {
+      results?: { url?: string; title?: string; description?: string }[];
+    };
   };
   const hints = (parsed.web?.results ?? [])
-    .filter((result): result is { url: string; title?: string } => {
-      if (!result.url) return false;
-      try {
-        const url = new URL(result.url);
-        return (
-          url.protocol === 'https:' &&
-          (!url.pathname.endsWith('.pdf') || url.hostname === 'arxiv.org')
-        );
-      } catch {
-        return false;
-      }
-    })
+    .filter(
+      (
+        result,
+      ): result is {
+        url: string;
+        title?: string;
+        description?: string;
+      } => {
+        if (!result.url) return false;
+        try {
+          const url = new URL(result.url);
+          return (
+            url.protocol === 'https:' &&
+            (!url.pathname.endsWith('.pdf') || url.hostname === 'arxiv.org')
+          );
+        } catch {
+          return false;
+        }
+      },
+    )
     .map((result) => {
       const url = new URL(result.url);
       const arxivPdf =
@@ -1653,6 +1813,9 @@ async function braveSearch(
           : result.url,
         sourceClass: 'public_web',
         ...(result.title === undefined ? {} : { title: result.title }),
+        ...(result.description === undefined
+          ? {}
+          : { description: result.description }),
       };
     });
   return {
@@ -1732,21 +1895,24 @@ async function tavilySearch(
   }
   const raw = await response.text();
   const parsed = JSON.parse(raw) as {
-    results?: { url?: string; title?: string }[];
+    results?: { url?: string; title?: string; content?: string }[];
   };
   const hints = (parsed.results ?? [])
-    .filter((result): result is { url: string; title?: string } => {
-      if (!result.url) return false;
-      try {
-        return new URL(result.url).protocol === 'https:';
-      } catch {
-        return false;
-      }
-    })
+    .filter(
+      (result): result is { url: string; title?: string; content?: string } => {
+        if (!result.url) return false;
+        try {
+          return new URL(result.url).protocol === 'https:';
+        } catch {
+          return false;
+        }
+      },
+    )
     .map((result) => ({
       url: result.url,
       sourceClass: 'public_web',
       ...(result.title === undefined ? {} : { title: result.title }),
+      ...(result.content === undefined ? {} : { description: result.content }),
     }));
   return {
     hints,
@@ -1815,7 +1981,7 @@ async function openAiCompatibleReview(input: {
         {
           role: 'system',
           content:
-            'You are an independent research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. Return compact JSON.',
+            'You are an independent research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. In summary, answer the user question directly in one to three sentences, name the most actionable options supported by the snippets, and state when the snippets leave an important part unresolved. Return compact JSON.',
         },
         {
           role: 'user',

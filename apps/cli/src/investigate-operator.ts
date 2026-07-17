@@ -20,6 +20,8 @@ import {
   OFFLINE_FIXTURE_ISSUER_ID,
 } from '@mammoth/runtime';
 
+const PUBLIC_WEB_RETRIEVAL_AUTHORITY_ORIGIN = 'https://public-web.invalid';
+
 export interface InvestigateCliIo {
   readonly stdout: (value: string) => void;
   readonly stderr: (value: string) => void;
@@ -640,7 +642,7 @@ function mintLoopLiveAuthorityReceipt(input: {
     authorizedRetrievalOrigins:
       input.authorizedRetrievalOrigins.length > 0
         ? [...new Set(input.authorizedRetrievalOrigins)]
-        : ['https://example.com'],
+        : [PUBLIC_WEB_RETRIEVAL_AUTHORITY_ORIGIN],
     authorizedBillingAccountIds: ['mammoth-core-loop-live'],
     actorId: input.actorId,
     authorizedAt: input.authorizedAt,

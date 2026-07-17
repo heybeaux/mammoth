@@ -313,3 +313,67 @@ test:harness` passed (`outcome-1.v1` 4 cases + governed-execution e2e);
   source-selection/reader-quality root cause without weakening evidence gates,
   then rerun three unrelated Brave-only holdouts and the exact world-model
   question from fresh directories and fresh journals.
+
+## 2026-07-17 — V7 live source-quality repair and fresh acceptance evidence
+
+- **Coordinator:** `mammoth-core-loop-coordinator-v7`, same owned worktree
+  `/private/tmp/mammoth-core-loop-v6`, branch
+  `fix/core-live-brave-rate-limit-v6`, started from exact commit `256dfb8`.
+  The failed `evals/live/mammoth-core-loop-v6/` outputs remain untracked audit
+  evidence and are not counted for acceptance.
+- **Repair:** generic live search hints now preserve provider descriptions,
+  score title/description/URL surfaces against question-derived and
+  plan-query-derived terms, reject low-relevance hints as typed residue, rank
+  source spans by question relevance across a larger bounded parse window, and
+  render a labelled source-bounded deduction from the independent live model
+  review instead of using the first admitted quote as the direct answer. The
+  public-web retrieval authority default is the explicit policy origin
+  `https://public-web.invalid`; retrieval still passes through HTTPS-only,
+  DNS-pinned, private-network-blocking, media-type, byte-cap, and
+  redirect-origin checks. No topic names, expected conclusions, or source URLs
+  were added to generic runtime branches.
+- **Focused gates:** runtime live/offline test
+  `pnpm --filter @mammoth/runtime test -- investigate-governed-execution.test.ts`
+  passed **17/17**; focused runtime live set
+  `pnpm --filter @mammoth/runtime test -- brave-rate-limit.test.ts p9-live-application.test.ts investigate-governed-execution.test.ts`
+  passed **71/71**; full runtime tests passed **150/150**; full CLI tests
+  passed **52/52** after building `@mammoth/temporal-adapter`; retrieval tests
+  passed **46/46**. `pnpm lint`, `pnpm format:check`, and full `pnpm typecheck`
+  passed.
+- **Acceptance/regression gates:** `pnpm --filter outcome-1-acceptance
+test:harness` passed (`outcome-1.v1` 4 cases plus governed-execution e2e);
+  `pnpm verify:p8` passed; `pnpm verify:p9` passed; full `pnpm test` passed
+  across the workspace; full `pnpm build` passed.
+- **Fresh Brave-only live runs:** using only `BRAVE_API_KEY` and
+  `OPENROUTER_API_KEY` sourced from `~/projects/tra/.env`, fresh immutable
+  directories and journals were created under
+  `evals/live/mammoth-core-loop-v7/`. Three unrelated holdouts completed:
+  `holdout-remote-clinic` (7 snapshots, 20 admitted claims),
+  `holdout-grid-battery` (3 snapshots, 6 admitted claims), and
+  `holdout-heritage-hvac` (6 snapshots, 15 admitted claims). The exact
+  world-model question completed at `world-model-local-v2` (4 snapshots,
+  9 admitted claims) with a reader-first source-bounded answer, sentence-local
+  citations, reader-visible reviewer limitations, admitted/rejected claim
+  residue, live effect receipts, durable budget journal copy, and audit
+  projection.
+- **Manual product review:** the holdout reports are structurally distinct and
+  source-derived. The world-model answer is bounded: it identifies JEPA-style
+  physical-world modelling and specific-use-case systems such as robotics and
+  asset generation as the best-supported opportunity area, while preserving the
+  limitation that interfaces/tools and local-GPU software maturity remain
+  unresolved. This counts only as Outcome 1 normal-path evidence, not as a claim
+  of broad Mammoth research superiority.
+- **Spend:** V7 settled spend across all fresh attempts, including the first
+  world-model run superseded by `world-model-local-v2`, was
+  **USD 0.20006906000000005**. Aggregate authorized spend is
+  **USD 0.70015137000000025** (v4 USD 0.14001626 + v6
+  USD 0.3600660500000002 + v7 USD 0.20006906000000005), leaving
+  **USD 14.29984862999999975** under the USD 15 ceiling.
+- **Independent review:** read-only reviewer
+  `019f7101-fe95-74e2-9e62-e9e57b90291f` is reviewing the diff and V7
+  artifacts for hidden topic logic, evidence-gate weakening, authority,
+  citation support, budget truth, and reader quality before PR/merge claims.
+- **Next action:** incorporate or repair independent review findings, commit and
+  push the branch, open/update PR, require exact-head CI, merge only if green,
+  then verify fresh-main CI. No tag, release, or deployment may occur on Friday
+  2026-07-17.

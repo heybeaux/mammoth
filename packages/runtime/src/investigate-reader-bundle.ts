@@ -48,12 +48,87 @@ function informativeWordCount(value: string): number {
   return value.match(/[A-Za-z][A-Za-z'-]{2,}/gu)?.length ?? 0;
 }
 
+const READER_SUMMARY_STOP_TERMS = new Set([
+  'about',
+  'after',
+  'against',
+  'based',
+  'because',
+  'before',
+  'between',
+  'could',
+  'during',
+  'evidence',
+  'from',
+  'into',
+  'only',
+  'should',
+  'source',
+  'sources',
+  'that',
+  'their',
+  'there',
+  'these',
+  'this',
+  'through',
+  'using',
+  'what',
+  'where',
+  'which',
+  'while',
+  'with',
+]);
+
+function contentTerms(value: string): readonly string[] {
+  return [
+    ...new Set(
+      [...value.matchAll(/[\p{L}\p{N}][\p{L}\p{N}-]{2,}/gu)]
+        .map((match) => match[0].toLocaleLowerCase('en-US'))
+        .filter(
+          (term) =>
+            term.length >= 4 &&
+            !READER_SUMMARY_STOP_TERMS.has(term) &&
+            !/^\d+$/u.test(term),
+        ),
+    ),
+  ];
+}
+
 function isReaderQualityFact(sentence: string): boolean {
   if (sentence.length < 48) return false;
   if (!/[.!?]$/u.test(sentence)) return false;
   if (informativeWordCount(sentence) < 8) return false;
   if (LOW_INFORMATION_READER_FACT_PATTERN.test(sentence)) return false;
   return true;
+}
+
+function supportedLiveSummary(
+  summary: string | undefined,
+  facts: readonly RenderableFact[],
+): string | null {
+  const normalized = singleLine(summary ?? '');
+  if (normalized.length < 48 || READER_FORBIDDEN_PATTERN.test(normalized)) {
+    return null;
+  }
+  const evidenceTerms = new Set(
+    facts.flatMap((fact) => contentTerms(fact.sentence)),
+  );
+  const summaryTerms = contentTerms(normalized);
+  if (summaryTerms.length === 0) return null;
+  const overlap = summaryTerms.filter((term) => evidenceTerms.has(term));
+  if (overlap.length < Math.min(3, summaryTerms.length)) return null;
+  return /[.!?]$/u.test(normalized) ? normalized : `${normalized}.`;
+}
+
+function readerVisibleReviewLines(
+  values: readonly string[] | undefined,
+): readonly string[] {
+  return (values ?? [])
+    .map(singleLine)
+    .filter((value) => value.length >= 24)
+    .filter((value) => !READER_FORBIDDEN_PATTERN.test(value))
+    .slice(0, 3)
+    .map((value) => (/[:.!?]$/u.test(value) ? value : `${value}.`));
 }
 
 export interface GovernedInvestigationBundleInput {
@@ -210,6 +285,13 @@ export function composeGovernedInvestigationBundle(
   }
 
   const synthesis = deriveSynthesis(plan, facts);
+  const liveSummary = supportedLiveSummary(
+    execution.liveReview?.summary,
+    facts,
+  );
+  const liveWeaknesses = readerVisibleReviewLines(
+    execution.liveReview?.weaknesses,
+  );
   const citationNumbersForClaim = (
     claimId: string,
   ): readonly number[] | undefined => {
@@ -222,12 +304,25 @@ export function composeGovernedInvestigationBundle(
   const title = READER_FORBIDDEN_PATTERN.test(plan.question)
     ? 'Investigation findings'
     : plan.question;
+  const answerCitations = [
+    ...new Set(facts.slice(0, 4).map((fact) => fact.citation)),
+  ]
+    .map((citation) => `[${String(citation)}]`)
+    .join(' ');
   const reportLines = [
     `# ${singleLine(title)}`,
     '',
     '## Direct answer',
     '',
-    `${direct.sentence} [${String(direct.citation)}]`,
+    liveSummary
+      ? `Source-bounded deduction: ${liveSummary} ${answerCitations}`
+      : `${direct.sentence} [${String(direct.citation)}]`,
+    '',
+    liveSummary
+      ? `Most direct admitted evidence: ${direct.sentence} [${String(
+          direct.citation,
+        )}]`
+      : '',
     '',
     '## Supporting evidence',
     '',
@@ -245,6 +340,13 @@ export function composeGovernedInvestigationBundle(
     execution.externalEffectsExecuted
       ? 'Network, provider, and model effects were reserved and settled before use; the audit projection preserves live effect receipts and the durable journal copy.'
       : 'No network, provider, or paid effect was executed at any point.',
+    ...(liveWeaknesses.length === 0
+      ? []
+      : [
+          '',
+          'Reviewer-noted limitations:',
+          ...liveWeaknesses.map((weakness) => `- ${weakness}`),
+        ]),
     '',
     ...renderSynthesisReaderLines(synthesis, { citationNumbersForClaim }),
   ];
@@ -277,6 +379,19 @@ export function composeGovernedInvestigationBundle(
       citation: fact.citation,
       url: fact.url,
     })),
+    deductions:
+      liveSummary === null
+        ? []
+        : [
+            {
+              sentence: liveSummary,
+              status: 'source-bounded deduction',
+              claimIds: facts.slice(0, 4).map((fact) => fact.claimId),
+              citations: [
+                ...new Set(facts.slice(0, 4).map((fact) => fact.citation)),
+              ],
+            },
+          ],
     citations: urls.map((url, index) => ({ number: index + 1, url })),
     composedAt: input.now,
   });

@@ -16,6 +16,7 @@ export interface DiscoveredSourceHint {
   readonly url: string;
   readonly sourceClass: string;
   readonly title?: string;
+  readonly description?: string;
 }
 
 export interface PlannedDiscoveryScope {
@@ -27,6 +28,7 @@ export type HintRejectionReason =
   | 'query_not_planned'
   | 'source_class_not_planned'
   | 'url_not_permitted'
+  | 'low_relevance_hint'
   | 'duplicate_source'
   | 'source_class_capacity_exhausted';
 

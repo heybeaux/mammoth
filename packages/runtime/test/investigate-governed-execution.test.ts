@@ -354,8 +354,15 @@ describe('governed acquisition execution', () => {
             JSON.stringify({
               results: [
                 {
+                  url: 'https://sources.example.test/unrelated',
+                  title: 'Consumer privacy compliance overview',
+                },
+                {
                   url: 'https://sources.example.test/clinic-sync',
-                  title: 'Clinic sync guide',
+                  title:
+                    'Remote clinic synchronization strategies for intermittent connectivity',
+                  content:
+                    'Local-first systems and conflict-free replicated data types for remote clinics.',
                 },
               ],
             }),
@@ -372,7 +379,7 @@ describe('governed acquisition execution', () => {
                   message: {
                     content: JSON.stringify({
                       summary:
-                        'The admitted evidence supports offline writes and conflict handling.',
+                        'Local-first systems keep writes available and conflict-free replicated data types merge concurrent updates.',
                       weaknesses: [
                         'Only one source was available in the fixture.',
                       ],
@@ -403,17 +410,19 @@ describe('governed acquisition execution', () => {
       modelId: 'test/model',
       fetchImpl,
       retrieve: (request) =>
-        Promise.resolve({
-          requestedUrl: request.url,
-          finalUrl: request.url,
-          redirectChain: [],
-          retrievedAt: NOW,
-          status: 200,
-          headers: { 'content-type': 'text/plain' },
-          mediaType: 'text/plain',
-          bytes: new TextEncoder().encode(sourceBody),
-          networkReceipts: [],
-        }),
+        request.url.endsWith('/unrelated')
+          ? Promise.reject(new Error('low-relevance result was retrieved'))
+          : Promise.resolve({
+              requestedUrl: request.url,
+              finalUrl: request.url,
+              redirectChain: [],
+              retrievedAt: NOW,
+              status: 200,
+              headers: { 'content-type': 'text/plain' },
+              mediaType: 'text/plain',
+              bytes: new TextEncoder().encode(sourceBody),
+              networkReceipts: [],
+            }),
       sourceClassTargets: [
         {
           sourceClass: 'public_web',
@@ -443,6 +452,11 @@ describe('governed acquisition execution', () => {
     expect(
       execution.modelWork.some((work) => work.workId.startsWith('live-')),
     ).toBe(true);
+    expect(
+      execution.rejectedHints.some(
+        (hint) => hint.reason === 'low_relevance_hint',
+      ),
+    ).toBe(true);
     const bundle = composeGovernedInvestigationBundle({
       plan,
       intentSet,
@@ -450,6 +464,9 @@ describe('governed acquisition execution', () => {
       execution,
       now: NOW,
     });
+    expect(bundle.files['reader/report.md']).toContain(
+      'Source-bounded deduction:',
+    );
     expect(bundle.files['execution-receipt.json']).toContain(
       '"externalEffectsExecuted": true',
     );
