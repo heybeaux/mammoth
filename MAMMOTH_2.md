@@ -2,7 +2,13 @@
 
 ## Status
 
-Status: **directional product authority for P9-P12**.
+Status: **superseded directional thesis**.
+
+As of 2026-07-16, [`CORE_THESIS.md`](CORE_THESIS.md) is the governing product
+authority and [`PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md) replaces the P9-P12
+release sequence. This document remains historical evidence of the post-P8
+direction. Its shared epistemic core and solver concepts remain useful where they
+agree with the approved thesis, but phase numbers no longer define the product.
 
 This document records the product destination approved after the P8 live
 exhibition and post-P8 adversarial assessment. Individual releases still require

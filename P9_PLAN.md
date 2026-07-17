@@ -2,8 +2,17 @@
 
 ## Status and authority
 
-Status: **entry acceptance contract. Implementation is blocked until this plan
-PR and a distinct T0 acceptance-baseline PR merge.**
+Status: **historical bounded-release contract; superseded as product authority.**
+
+The code and receipt for `v0.9.0-trustworthy-general-research` prove a bounded
+Colibri-shaped live exhibition plus reusable planning, evidence, budget, and
+verification contracts. They do **not** prove that the normal product path can
+execute an arbitrary live question. See [`CURRENT_PRODUCT_AUDIT.md`](CURRENT_PRODUCT_AUDIT.md).
+
+As of 2026-07-16, [`CORE_THESIS.md`](CORE_THESIS.md) governs Mammoth and
+[`PRODUCT_ROADMAP.md`](PRODUCT_ROADMAP.md) replaces phase-number progression.
+This plan remains immutable historical context for what P9 attempted and
+delivered.
 
 Release target: `v0.9.0-trustworthy-general-research`.
 
