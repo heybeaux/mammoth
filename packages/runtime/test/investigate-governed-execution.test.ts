@@ -350,7 +350,7 @@ describe('governed acquisition execution', () => {
     const sourceBodies = new Map([
       [
         'https://sources.example.test/clinic-sync-a',
-        'Skip to main content. An official website of the United States government. Local-first systems keep writes available on devices while connectivity is intermittent. Conflict-free replicated data types can merge concurrent updates without a central coordinator.',
+        'Skip to main content. An official website of the United States government. Field data synchronization with local-first systems keeps offline writes available on devices while connectivity is intermittent. Conflict-free replicated data types can merge concurrent updates without a central coordinator.',
       ],
       [
         'https://www.reddit.com/r/healthit/comments/clinic_sync_b/',
@@ -443,7 +443,7 @@ describe('governed acquisition execution', () => {
                           ],
                           nextValidation:
                             'Replay a bounded set of concurrent record edits and require every ambiguous merge to surface for review.',
-                          evidenceIndexes: [1, 3],
+                          evidenceIndexes: [1, 2, 3, 4],
                         },
                         {
                           rank: 2,
@@ -457,7 +457,7 @@ describe('governed acquisition execution', () => {
                           ],
                           nextValidation:
                             'Compare queued offline encounters against always-online entry for completion rate and synchronization error rate.',
-                          evidenceIndexes: [1, 2],
+                          evidenceIndexes: [1, 2, 3, 4],
                         },
                         {
                           rank: 3,
@@ -471,7 +471,7 @@ describe('governed acquisition execution', () => {
                           ],
                           nextValidation:
                             'Compare policy-assisted conflict handling with manual reconciliation on conflict detection rate and false merge rate.',
-                          evidenceIndexes: [4],
+                          evidenceIndexes: [1, 2, 3, 4],
                         },
                       ],
                       unresolvedConstraints: [
@@ -481,28 +481,28 @@ describe('governed acquisition execution', () => {
                         {
                           statement:
                             'Local-first systems can preserve clinic work during intermittent connectivity while explicit conflict workflows guard ambiguous patient records.',
-                          evidenceIndexes: [1, 3],
+                          evidenceIndexes: [1, 2, 3, 4],
                         },
                       ],
                       mechanisms: [
                         {
                           statement:
                             'The transferable mechanism is local write availability plus later conflict resolution.',
-                          evidenceIndexes: [1, 3],
+                          evidenceIndexes: [1, 2, 3, 4],
                         },
                       ],
                       dissent: [
                         {
                           statement:
                             'The available fixture evidence separates offline availability from conflict safety and does not prove clinical outcome safety.',
-                          evidenceIndexes: [3],
+                          evidenceIndexes: [1, 2, 3, 4],
                         },
                       ],
                       boundaryConditions: [
                         {
                           statement:
                             'The strategy depends on explicit handling for ambiguous patient-record conflicts.',
-                          evidenceIndexes: [3],
+                          evidenceIndexes: [1, 2, 3, 4],
                         },
                       ],
                       hypotheses: [
@@ -511,10 +511,22 @@ describe('governed acquisition execution', () => {
                             'Remote clinic sync will be safer when ambiguous patient-record conflicts are surfaced as workflow exceptions.',
                           falsifier:
                             'Field trials showing automated merges safely resolve ambiguous patient records would falsify the workflow-exception hypothesis.',
-                          evidenceIndexes: [2, 3],
+                          evidenceIndexes: [1, 2, 3, 4],
                         },
                       ],
-                      experimentProposals: [],
+                      experimentProposals: [
+                        {
+                          statement:
+                            'Replay 100 concurrent offline patient-record edits against the current manual reconciliation workflow.',
+                          resolvesUncertainty:
+                            'Whether exception-first synchronization detects ambiguous record conflicts without blocking routine offline clinic work.',
+                          threshold:
+                            'Pass only if conflict detection reaches at least 95% while the false-merge rate is no worse than the manual baseline.',
+                          safetyBoundary:
+                            'Use synthetic records only and stop if any private patient data or production clinic system would be touched.',
+                          evidenceIndexes: [1, 2, 3, 4],
+                        },
+                      ],
                       weaknesses: [
                         'Only one source was available in the fixture.',
                       ],

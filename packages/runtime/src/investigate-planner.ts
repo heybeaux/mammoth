@@ -211,7 +211,11 @@ export function deriveDecisionConstraints(question: string): readonly string[] {
       add(supportingPhrases, phrase);
     }
   }
-  return [...segmentPhrases, ...supportingPhrases].slice(0, 8);
+  return (
+    segmentPhrases.length >= 3
+      ? segmentPhrases
+      : [...segmentPhrases, ...supportingPhrases]
+  ).slice(0, 8);
 }
 
 function stableIndex(seed: string, offset: number, size: number): number {

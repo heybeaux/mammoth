@@ -34,6 +34,7 @@ const READER_QUESTION_STOP_TERMS = new Set([
   'after',
   'against',
   'also',
+  'argues',
   'answer',
   'based',
   'before',
@@ -110,6 +111,7 @@ function readerRelevanceScore(value: string, terms: readonly string[]): number {
     if (term.endsWith('s')) variants.add(term.slice(0, -1));
     if (term.endsWith('ies')) variants.add(`${term.slice(0, -3)}y`);
     if (term.endsWith('ate')) variants.add(`${term.slice(0, -3)}acy`);
+    if (term === 'scarce') variants.add('scarcity');
     return (
       score +
       ([...variants].some((variant) => normalized.includes(variant)) ? 1 : 0)
@@ -123,6 +125,7 @@ function termAppears(value: string, term: string): boolean {
   if (term.endsWith('s')) variants.add(term.slice(0, -1));
   if (term.endsWith('ies')) variants.add(`${term.slice(0, -3)}y`);
   if (term.endsWith('ate')) variants.add(`${term.slice(0, -3)}acy`);
+  if (term === 'scarce') variants.add('scarcity');
   return [...variants].some((variant) => normalized.includes(variant));
 }
 

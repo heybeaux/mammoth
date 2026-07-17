@@ -90,6 +90,8 @@ const QUESTION_STOP_TERMS = new Set([
   'being',
   'best',
   'beyond',
+  'argues',
+  'approaches',
   'build',
   'building',
   'could',
@@ -108,6 +110,9 @@ const QUESTION_STOP_TERMS = new Set([
   'reduce',
   'should',
   'single',
+  'strategies',
+  'strategy',
+  'options',
   'systems',
   'that',
   'their',
@@ -443,6 +448,12 @@ function hasAdverseConstraintLanguage(value: string): boolean {
   );
 }
 
+function hasQuantifiedDecisionThreshold(value: string): boolean {
+  return /(?:\b(?:at least|at most|no more than|no less than|greater than|less than|above|below|within)\b|[<>]=?)\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*(?:%|percent|milliseconds?|seconds?|minutes?|hours?|days?|bytes?|kb|mb|gb|tb|watts?|joules?|requests?|tokens?|frames?|samples?|runs?|trials?)/iu.test(
+    value,
+  );
+}
+
 function sourceClusterId(urlValue: string): string {
   try {
     const url = new URL(urlValue);
@@ -458,7 +469,8 @@ function sourceClusterId(urlValue: string): string {
       return `${host}/${parts[0] ?? ''}/${parts[1] ?? ''}`;
     }
     if (host === 'arxiv.org' && parts.length >= 2) {
-      return `${host}/${parts[0] ?? ''}/${parts[1] ?? ''}`;
+      const paperId = (parts[1] ?? '').replace(/v\d+$/u, '');
+      return `${host}/${paperId}`;
     }
     const hostParts = host.split('.');
     return hostParts.length >= 2 ? hostParts.slice(-2).join('.') : host;
@@ -512,21 +524,8 @@ function citedPortfolioItems(
   );
 }
 
-function concreteExperimentThreshold(
-  threshold: string,
-  validation: string,
-): string {
-  const trimmed = singleLine(threshold);
-  if (
-    trimmed.length >= 24 &&
-    hasComparatorLanguage(trimmed) &&
-    !/meets? the decision criterion|portfolio rank|supported enough/iu.test(
-      trimmed,
-    )
-  ) {
-    return trimmed;
-  }
-  return `Pass only if the validation beats a baseline or current process on a named outcome threshold and records any adverse constraint failure for: ${stripFinalPunctuation(validation)}.`;
+function concreteExperimentThreshold(threshold: string): string {
+  return singleLine(threshold);
 }
 
 function rankLiveSpans(
@@ -1973,16 +1972,30 @@ export async function executeGovernedLiveAcquisition(
           }
         }),
     );
+    const selectedReviewEvidenceClaims = diversifyClaimsBySourceCluster(
+      reviewEvidenceClaims,
+    )
+      .filter(
+        (claim, index, all) =>
+          all
+            .slice(0, index)
+            .filter(
+              (prior) =>
+                sourceClusterId(prior.requestedUrl) ===
+                sourceClusterId(claim.requestedUrl),
+            ).length < 4,
+      )
+      .slice(0, 32);
     assertDecisionGradeReview({
       review: modelReview.value,
-      admittedEvidenceCount: reviewEvidenceClaims.length,
+      admittedEvidenceCount: selectedReviewEvidenceClaims.length,
       decisionConstraints: deriveDecisionConstraints(intentSet.question),
       question: intentSet.question,
-      reviewClaims: reviewEvidenceClaims,
+      reviewClaims: selectedReviewEvidenceClaims,
     });
     const acceptanceReview = buildLiveAcceptanceReview({
       review: modelReview.value,
-      reviewClaims: reviewEvidenceClaims,
+      reviewClaims: selectedReviewEvidenceClaims,
       decisionConstraints: deriveDecisionConstraints(intentSet.question),
       question: intentSet.question,
       now: input.now,
@@ -2041,21 +2054,9 @@ export async function executeGovernedLiveAcquisition(
       modelWork,
       liveReview: modelReview.value,
       acceptanceReview,
-      reviewEvidenceProposalIds: diversifyClaimsBySourceCluster(
-        reviewEvidenceClaims,
-      )
-        .filter(
-          (claim, index, all) =>
-            all
-              .slice(0, index)
-              .filter(
-                (prior) =>
-                  sourceClusterId(prior.requestedUrl) ===
-                  sourceClusterId(claim.requestedUrl),
-              ).length < 4,
-        )
-        .slice(0, 32)
-        .map((claim) => claim.proposalId),
+      reviewEvidenceProposalIds: selectedReviewEvidenceClaims.map(
+        (claim) => claim.proposalId,
+      ),
       effectReceipts: executor.effectReceipts,
       externalEffectsExecuted: true,
       executionMode: 'governed_live',
@@ -2515,7 +2516,7 @@ async function openAiCompatibleReview(input: {
         {
           role: 'system',
           content:
-            'You are an independent decision-research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. Return compact JSON. Build a ranked portfolio of concrete decisions or opportunities, ordered by evidence strength and practical feasibility. Every portfolio item must name a specific build, intervention, opportunity class, or decision; explain why it ranks there; state evidence-backed constraints; propose the cheapest decisive next validation; and cite one or more supplied evidenceIndex values. Do not create a portfolio item when the evidence supports only a broad theme. For broad opportunity, strategy, approach, option, or how-should questions, return at least three distinct portfolio items when the evidence supports them; otherwise put the missing breadth in unresolvedConstraints. Distinct items must differ in user workflow, architecture, or decision lever, not merely be substeps of the same project. Avoid multiple items that are only variants of the same named project or intervention. Address every supplied decisionConstraint explicitly: either use its wording in an evidence-backed portfolio item or repeat it in unresolvedConstraints when the evidence does not resolve it. Every answer bullet, mechanism, dissent item, boundary condition, hypothesis, and experiment must cite supplied evidenceIndex values. Address the user question in the same form it was asked, including any locality, privacy, hardware, budget, risk, safety, or deployment constraints that are supported by evidence. Do not infer hardware feasibility, cost, privacy, locality, safety, or performance unless the snippets support it; when evidence is missing, say so in unresolvedConstraints. Mechanisms should identify transferable causal mechanisms and where transfer breaks. Dissent should name a real evidence gap, counterexample, tradeoff, or boundary; do not emit generic "more validation needed" dissent. Experiments must name a concrete task, baseline/comparator, metric, decision threshold, and safety boundary when evidence permits. Prefer direct project documentation, implementation details, measured benchmarks, resource constraints, deployment evidence, and primary-source limitations over commentary.',
+            'You are an independent decision-research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. Return compact JSON. Build a ranked portfolio of concrete decisions or opportunities, ordered by evidence strength and practical feasibility. Every portfolio item must name a specific build, intervention, opportunity class, or decision; explain why it ranks there; state evidence-backed constraints; propose the cheapest decisive next validation; and cite one or more supplied evidenceIndex values. Do not create a portfolio item when the evidence supports only a broad theme. For broad opportunity, strategy, approach, option, or how-should questions, return at least three distinct portfolio items when the evidence supports them; otherwise put the missing breadth in unresolvedConstraints. Distinct items must differ in user workflow, architecture, or decision lever, not merely be substeps of the same project. Avoid multiple items that are only variants of the same named project or intervention. Address every supplied decisionConstraint explicitly: either use its wording in an evidence-backed portfolio item or repeat it in unresolvedConstraints when the evidence does not resolve it. Every answer bullet, mechanism, dissent item, boundary condition, hypothesis, and experiment must cite supplied evidenceIndex values. Address the user question in the same form it was asked, including any locality, privacy, hardware, budget, risk, safety, or deployment constraints that are supported by evidence. Do not infer hardware feasibility, cost, privacy, locality, safety, or performance unless the cited snippets explicitly support it; when evidence is missing, say so in unresolvedConstraints. Mechanisms should identify transferable causal mechanisms and where transfer breaks. Dissent should name a real evidence gap, counterexample, tradeoff, or boundary; do not emit generic "more validation needed" dissent. Experiments must name a concrete task, baseline/comparator, metric, numeric decision threshold, and safety boundary when evidence permits. Prefer direct project documentation, implementation details, measured benchmarks, resource constraints, deployment evidence, and primary-source limitations over commentary.',
         },
         {
           role: 'user',
@@ -2688,10 +2689,7 @@ function completeLiveReview(
           )
           .map((item) => ({
             ...item,
-            threshold: concreteExperimentThreshold(
-              item.threshold,
-              item.statement,
-            ),
+            threshold: concreteExperimentThreshold(item.threshold),
           }))
       : citedPortfolio
           .filter(
@@ -2703,7 +2701,7 @@ function completeLiveReview(
           .map((item) => ({
             statement: item.nextValidation,
             resolvesUncertainty: `Whether ${item.title.trim()} produces the intended outcome under the cited constraints.`,
-            threshold: concreteExperimentThreshold('', item.nextValidation),
+            threshold: concreteExperimentThreshold(''),
             safetyBoundary:
               'Design-only proposal: do not touch private data, production systems, paid providers, deployments, or real-world operations without separate scoped authority.',
             evidenceIndexes: item.evidenceIndexes,
@@ -2798,6 +2796,60 @@ function assertDecisionGradeReview(input: {
       'decision_portfolio_rank_gap',
       'live synthesis portfolio ranks must be contiguous and deterministic',
     );
+  }
+  const decisionTerms = [
+    ...new Set(
+      input.decisionConstraints.flatMap((constraint) => textTerms(constraint)),
+    ),
+  ];
+  const evidenceBoundAssertions: {
+    readonly label: string;
+    readonly text: string;
+    readonly evidenceIndexes: readonly number[];
+  }[] = [
+    ...portfolio.map((item) => ({
+      label: `portfolio item ${String(item.rank)}`,
+      text: [item.title, item.statement, item.rationale].join(' '),
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+    ...(input.review.answerBullets ?? []).map((item, index) => ({
+      label: `answer bullet ${String(index + 1)}`,
+      text: item.statement,
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+    ...(input.review.mechanisms ?? []).map((item, index) => ({
+      label: `mechanism ${String(index + 1)}`,
+      text: item.statement,
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+    ...(input.review.boundaryConditions ?? []).map((item, index) => ({
+      label: `boundary condition ${String(index + 1)}`,
+      text: item.statement,
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+    ...(input.review.hypotheses ?? []).map((item, index) => ({
+      label: `hypothesis ${String(index + 1)}`,
+      text: item.statement,
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+  ];
+  for (const assertion of evidenceBoundAssertions) {
+    const assertedDecisionTerms = decisionTerms.filter(
+      (term) => textRelevanceScore(assertion.text, [term]) > 0,
+    );
+    if (assertedDecisionTerms.length === 0) continue;
+    const citedEvidenceText = assertion.evidenceIndexes
+      .map((index) => input.reviewClaims[index - 1]?.statement ?? '')
+      .join(' ');
+    const unsupportedTerms = assertedDecisionTerms.filter(
+      (term) => textRelevanceScore(citedEvidenceText, [term]) === 0,
+    );
+    if (unsupportedTerms.length > 0) {
+      refuse(
+        'decision_constraint_not_evidence_bound',
+        `${assertion.label} asserts decision constraints absent from its cited evidence: ${unsupportedTerms.join(', ')}`,
+      );
+    }
   }
   if (isBroadDecisionQuestion(input.question)) {
     const clusters = distinctSourceClustersForClaims(input.reviewClaims);
@@ -2950,6 +3002,7 @@ function assertDecisionGradeReview(input: {
         threshold,
       ) ||
       !hasComparatorLanguage(threshold) ||
+      !hasQuantifiedDecisionThreshold(threshold) ||
       !hasMetricLanguage(experimentText) ||
       !hasAdverseConstraintLanguage(experimentText) ||
       experiment.safetyBoundary.trim().length < 24 ||
@@ -3038,11 +3091,12 @@ function buildLiveAcceptanceReview(input: {
           ].join(' ');
           return (
             hasComparatorLanguage(experiment.threshold) &&
+            hasQuantifiedDecisionThreshold(experiment.threshold) &&
             hasMetricLanguage(text) &&
             hasAdverseConstraintLanguage(text)
           );
         }),
-      `${String(experiments.length)} experiment proposal(s) with comparator, metric, threshold, and adverse-constraint language`,
+      `${String(experiments.length)} experiment proposal(s) with comparator, metric, numeric threshold, and adverse-constraint language`,
     ),
   ];
   const allCriteria = [...criteria, ...decisionConstraintCriteria];
