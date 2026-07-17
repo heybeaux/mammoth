@@ -136,3 +136,45 @@
   policy-pinned retrieval, snapshot preservation, exact spans, and independent
   admission through the normal product path with strictly local, no-effect
   adapters.
+
+## 2026-07-17 — Governed execution lane integrated (coordinator)
+
+- **Lane:** `feat/core-query-governed-execution` at
+  `/private/tmp/mammoth-core-governed-execution`, based on `b0c9c72`. The
+  builder agent terminated mid-lane (provider-side API refusal after the
+  implementation was substantially complete); the coordinator completed
+  verification, fixed one lint violation in `investigate-reader-bundle.ts`
+  (destructuring guard replacing a non-null assertion), independently reviewed
+  every source and test file, wrote the handoff doc, and committed the lane as
+  `efa4bd8`. Serially integrated as `f4bac11` (cherry-pick verified as an empty
+  diff against `efa4bd8`).
+- **What landed:** offline fixture authority issuer
+  (`offline-fixture-issuer/v1`, `.invalid` origins, never trusted by default);
+  fail-closed governed executor (`verifyExecutionAuthority` re-checks release
+  decision, digest bindings, pinned issuer, authority↔release receipt binding,
+  validity window, effect kinds before any adapter call; three-phase execution
+  with typed rejection residue and falsification probes; refuses
+  `no_admissible_evidence`); operator-declared offline source catalog with
+  strictly no-effect adapters; reader/audit bundle composition (verbatim
+  admitted evidence only, forbidden-pattern reader gate, digest-chained
+  `execution-receipt.json`); CLI `mammoth investigate --execute` path requiring
+  explicit `--approve`, `--offline-sources`, and `--trusted-issuer`.
+- **Acceptance:** `evals/outcome-1-acceptance/test/governed-execution-e2e.ts`
+  (wired into `test:harness`) drives an arbitrary question through the public
+  CLI into a readable cited report verified by the frozen outcome-1
+  reader/audit bundle verifier, and proves unpinned/wrong-issuer refusals
+  execute nothing. Runtime tests include refused-release/expired/not-yet-valid/
+  tampered-intent-set/swapped-authority negatives with adapter call counters
+  asserting zero effects on refusal.
+- **Coordinator gates at `f4bac11`:** full-repo `pnpm test` passed (all
+  packages, including runtime 139/139 and CLI 52/52), repo typecheck, lint,
+  `format:check`, and build all passed; `pnpm --filter outcome-1-acceptance
+  test:harness` passed (`outcome-1.v1` 4 cases + governed-execution e2e);
+  `verify:p8` ok and `verify:p9` ok. No provider, network, paid, or other
+  effect authority was used at any point.
+- **Completion contract status:** an arbitrary difficult question now flows
+  through the normal product path (preview → recorded approval → immutable
+  plan → derived intents → issuer-pinned release → governed offline execution)
+  into a comprehensive, readable, decision-grade, auditable answer with
+  offline/no-effect proof. Proceeding to PR against `main` (merge only after
+  exact-head CI green; no tag/release today — Friday).
