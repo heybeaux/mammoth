@@ -414,17 +414,28 @@ function hasComparatorLanguage(value: string): boolean {
 
 function evidenceReadableConstraint(value: string, fallback: string): string {
   const trimmed = singleLine(value);
-  if (informativeWordCount(trimmed) >= 3 && textTerms(trimmed).length >= 1) {
+  const isSentenceLike =
+    /\b(?:must|requires?|depends?|limited|under|during|without|within|only|when|where|before|after|because|if|unless|validate|evidence|budget|safety|risk|privacy|local|offline)\b/iu.test(
+      trimmed,
+    ) || /[.!?]$/u.test(trimmed);
+  if (
+    isSentenceLike &&
+    informativeWordCount(trimmed) >= 3 &&
+    textTerms(trimmed).length >= 1
+  ) {
     return trimmed;
   }
   const fallbackText = singleLine(fallback);
-  return `Cited evidence leaves this operating condition unresolved: ${
-    trimmed || fallbackText
-  }`;
+  const condition = trimmed || fallbackText;
+  return `Question condition requiring local validation: ${condition}.`;
 }
 
 function singleLine(value: string): string {
   return value.replace(/\s+/gu, ' ').trim();
+}
+
+function stripFinalPunctuation(value: string): string {
+  return singleLine(value).replace(/[.!?]+$/u, '');
 }
 
 function citedPortfolioItems(
@@ -2430,7 +2441,7 @@ function completeLiveReview(
           )
           .slice(0, 3)
           .map((item) => ({
-            statement: `The cited evidence supports ${item.title.trim()} only inside this operating limit: ${item.constraints[0]?.trim() ?? item.nextValidation.trim()}.`,
+            statement: `The cited evidence supports ${item.title.trim()} only where this condition is satisfied: ${item.constraints[0]?.trim() ?? item.nextValidation.trim()}`,
             evidenceIndexes: item.evidenceIndexes,
           }));
   const boundaryConditions =
@@ -2450,7 +2461,7 @@ function completeLiveReview(
           )
           .slice(0, 3)
           .map((item) => ({
-            statement: `Before choosing ${item.title.trim()}, validate ${item.constraints[0]?.trim() ?? item.nextValidation.trim()} against the cited operating evidence.`,
+            statement: `Before choosing ${item.title.trim()}, validate whether the cited evidence actually satisfies this condition: ${item.constraints[0]?.trim() ?? item.nextValidation.trim()}`,
             evidenceIndexes: item.evidenceIndexes,
           }));
   const hypotheses =
@@ -2475,7 +2486,7 @@ function completeLiveReview(
           )
           .slice(0, 3)
           .map((item) => ({
-            statement: `If ${item.statement.trim()}, then ${item.nextValidation.trim()}`,
+            statement: `If ${stripFinalPunctuation(item.statement)}, then ${stripFinalPunctuation(item.nextValidation)}`,
             falsifier: `The validation fails to observe the expected effect, shows no advantage over the baseline, or exposes a material constraint failure.`,
             evidenceIndexes: item.evidenceIndexes,
           }));
@@ -2506,7 +2517,7 @@ function completeLiveReview(
           .map((item) => ({
             statement: item.nextValidation,
             resolvesUncertainty: `Whether ${item.title.trim()} produces the intended outcome under the cited constraints.`,
-            threshold: `Pass only if ${item.nextValidation.trim()} records a baseline or comparator, a named outcome threshold, and any adverse constraint failure.`,
+            threshold: `Pass only if the validation beats a baseline or current process on a named outcome threshold and records any adverse constraint failure for: ${stripFinalPunctuation(item.nextValidation)}.`,
             safetyBoundary:
               'Design-only proposal: do not touch private data, production systems, paid providers, deployments, or real-world operations without separate scoped authority.',
             evidenceIndexes: item.evidenceIndexes,
