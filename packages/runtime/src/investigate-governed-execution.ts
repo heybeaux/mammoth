@@ -646,15 +646,17 @@ function diversifyCandidatesBySourceCluster(
   maxCandidates: number,
 ): readonly SelectedRetrievalCandidate[] {
   const queues = new Map<string, SelectedRetrievalCandidate[]>();
+  const clusterOrder: string[] = [];
   for (const candidate of candidates) {
     const cluster = sourceClusterId(candidate.requestedUrl);
+    if (!queues.has(cluster)) clusterOrder.push(cluster);
     queues.set(cluster, [...(queues.get(cluster) ?? []), candidate]);
   }
   const ordered: SelectedRetrievalCandidate[] = [];
   let progressed = true;
   while (progressed && ordered.length < maxCandidates) {
     progressed = false;
-    for (const cluster of [...queues.keys()].sort()) {
+    for (const cluster of clusterOrder) {
       const queue = queues.get(cluster) ?? [];
       const [next, ...rest] = queue;
       if (!next) continue;
@@ -671,15 +673,17 @@ function diversifyClaimsBySourceCluster(
   claims: readonly GovernedClaimRecord[],
 ): readonly GovernedClaimRecord[] {
   const queues = new Map<string, GovernedClaimRecord[]>();
+  const clusterOrder: string[] = [];
   for (const claim of claims) {
     const cluster = sourceClusterId(claim.requestedUrl);
+    if (!queues.has(cluster)) clusterOrder.push(cluster);
     queues.set(cluster, [...(queues.get(cluster) ?? []), claim]);
   }
   const ordered: GovernedClaimRecord[] = [];
   let progressed = true;
   while (progressed) {
     progressed = false;
-    for (const cluster of [...queues.keys()].sort()) {
+    for (const cluster of clusterOrder) {
       const queue = queues.get(cluster) ?? [];
       const [next, ...rest] = queue;
       if (!next) continue;
