@@ -90,7 +90,7 @@ export async function verifyOutcome1Preview(
   }
   if (
     typeof asRecord(problem?.interpretation)?.objective !== 'string' ||
-    stringArray(problem.assumptions).length === 0 ||
+    stringArray(problem?.assumptions).length === 0 ||
     stringArray(asRecord(problem?.interpretation)?.falsifiers).length === 0
   ) {
     failures.push('problem_contract_not_reviewable');

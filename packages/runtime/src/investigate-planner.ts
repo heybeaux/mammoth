@@ -109,8 +109,8 @@ function normalizedQuestion(question: string): string {
 function focusTerms(question: string): readonly string[] {
   const observed = [...question.matchAll(/[\p{L}\p{N}][\p{L}\p{N}-]{2,}/gu)]
     .map((match, index) => ({
-      term: match[0]?.toLocaleLowerCase('en-US') ?? '',
-      acronym: /^[A-Z0-9]{2,}$/u.test(match[0] ?? ''),
+      term: match[0].toLocaleLowerCase('en-US'),
+      acronym: /^[A-Z0-9]{2,}$/u.test(match[0]),
       index,
     }))
     .filter(({ term }) => term.length > 0 && !STOP_WORDS.has(term));
