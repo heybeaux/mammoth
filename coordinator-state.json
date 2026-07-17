@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "1.0.0",
+  "updatedAt": "2026-07-17T20:14:31Z",
+  "owner": "mammoth-core-loop-coordinator-v10",
+  "branch": "fix/core-live-brave-rate-limit-v6",
+  "head": "e783302d305a35e14eb8727ff37fd061d7528621",
+  "pr": "https://github.com/heybeaux/mammoth/pull/146",
+  "status": "blocked",
+  "blockedReason": "Predicates 9/10 remain substantively incomplete after fresh governed live runs and independent review. The normal path can complete structurally, but current live reports still fail substantive acceptance on opportunity breadth, holdout core-constraint resolution, cross-domain mechanisms, bounded experiments, and non-template dissent.",
+  "provedPredicates": [1, 2, 3, 4, 5, 6, 7, 8],
+  "unprovedPredicates": [9, 10, 11, 12],
+  "latestRuns": {
+    "v37": {
+      "path": "evals/live/mammoth-core-loop-v37",
+      "result": "all four exit 0; independent review FAIL"
+    },
+    "v38": {
+      "path": "evals/live/mammoth-core-loop-v38",
+      "result": "all four failed closed after stronger synthesis attempt"
+    },
+    "v39": {
+      "path": "evals/live/mammoth-core-loop-v39",
+      "result": "remote-clinic and world-model exit 0; grid-battery and heritage-HVAC failed closed"
+    }
+  },
+  "spendUsdThisContinuationV34ToV39": 2.440757,
+  "latestLocalVerification": [
+    "pnpm --filter @mammoth/runtime typecheck",
+    "pnpm --filter @mammoth/runtime test -- investigate-governed-execution",
+    "pnpm format:check"
+  ],
+  "latestCi": {
+    "head": "e783302d305a35e14eb8727ff37fd061d7528621",
+    "run": "29610194351",
+    "status": "in_progress",
+    "completedSuccess": ["static", "tests", "build", "p8-p9"],
+    "inProgress": ["foundation", "p2-p4", "p5-p7"]
+  },
+  "releaseStatus": "No tag, release, deployment, merge, or ready-for-review transition performed on Friday 2026-07-17."
+}

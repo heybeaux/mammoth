@@ -702,3 +702,42 @@ investigate-governed-execution.test.ts investigate-preview.test.ts` passed
 investigate-governed-execution.test.ts investigate-preview.test.ts` passed
   locally. Predicates 9/10 remain incomplete pending fresh live runs and
   independent review.
+
+## 2026-07-17 — V34-V39 continuation blocked; no acceptance claim
+
+- **Starting point:** v10 resumed at `20df0c92a171d3d33d94117c2e06378eec5b7c1e`
+  on branch `fix/core-live-brave-rate-limit-v6` with PR #146 still draft.
+  V32 artifacts were audited first; all four V32 runs had failed closed after
+  live retrieval/model review, so no predicate claim was inherited.
+- **Repairs committed and pushed:** `fee34e2` completed cited live review
+  limits, `b778a59` clarified fallback wording, `fcb6217` preserved readable
+  decision constraints, `5cb22e9` cleaned attribution/placeholder phrases,
+  `c46ce1a` strengthened live opportunity synthesis and generic search
+  breadth, and `e783302` normalized live experiment thresholds plus raised the
+  governed per-source retrieval byte cap.
+- **Fresh/probe live evidence:** V34 and V35 completed all four runs but were
+  self-rejected as product-thin. V36 failed the exact world-model run on an
+  uncovered decision constraint. V37 completed all four runs but independent
+  reviewer `019f71aa-f0ef-7090-86ed-09b8983c0e0e` returned **FAIL**: the
+  world-model answer collapsed around LeWM/JEPA, holdouts left core constraints
+  unresolved, mechanisms/experiments/dissent remained too templated, and
+  `live-review.json` was not a true pass/fail acceptance review. V38 failed
+  closed after the stronger synthesis attempt. V39 improved world-model and
+  remote-clinic reports, but grid-battery and heritage-HVAC failed closed on
+  insufficient distinct broad portfolios.
+- **Spend:** Fresh v34-v39 aggregate settled spend recorded by loop journals is
+  **USD 2.440757**. This is continuation-local accounting; historical v8-v33
+  probe journals remain preserved evidence and should not be reinterpreted as a
+  fresh approval grant. No Tavily credential was read, sourced, or used.
+- **Verification:** Focused runtime/CLI tests and typecheck passed during
+  repairs. At handoff, exact-head CI run `29610194351` for
+  `e783302d305a35e14eb8727ff37fd061d7528621` had static/tests/build/p8-p9
+  green and foundation/p2-p4/p5-p7 still in progress. PR #146 remains draft;
+  no merge, tag, release, or deploy was performed.
+- **Status:** Predicates 1-8 remain proved. Predicates 9/10 are **not proved**;
+  predicates 11/12 therefore remain blocked. The next repair should address
+  substantive synthesis architecture, not another blind paid rerun: candidate
+  likely needs a real independent acceptance-review artifact, stronger
+  source-diversity/admission policy for broad questions, non-template
+  experiment generation with concrete metrics, and a way to preserve real
+  contradiction/dissent rather than template limitations.
