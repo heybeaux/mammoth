@@ -1,4 +1,5 @@
 export * from './runtime.js';
+export * from './investigate-acquisition.js';
 export * from './investigate-application.js';
 export * from './investigate-report.js';
 export * from './investigate-planner.js';
