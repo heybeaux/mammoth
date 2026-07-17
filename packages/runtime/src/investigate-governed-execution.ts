@@ -2409,6 +2409,15 @@ async function openAiCompatibleReview(input: {
 function completeLiveReview(
   review: GovernedLiveModelReview,
 ): GovernedLiveModelReview {
+  const unresolvedConstraints = (review.unresolvedConstraints ?? [])
+    .map(singleLine)
+    .filter(
+      (constraint) =>
+        constraint.length > 0 &&
+        !/^(?:none|n\/a|not applicable|no unresolved constraints?)\.?$/iu.test(
+          constraint,
+        ),
+    );
   const portfolio = (review.portfolio ?? []).map((item) => ({
     ...item,
     constraints:
@@ -2524,7 +2533,7 @@ function completeLiveReview(
           }));
   const weaknessSeeds = [
     ...review.weaknesses,
-    ...(review.unresolvedConstraints ?? []).map(
+    ...unresolvedConstraints.map(
       (constraint) =>
         `Unresolved decision constraint remains: ${constraint.trim()}`,
     ),
@@ -2545,6 +2554,7 @@ function completeLiveReview(
   return {
     ...review,
     portfolio,
+    unresolvedConstraints,
     dissent,
     boundaryConditions,
     hypotheses,

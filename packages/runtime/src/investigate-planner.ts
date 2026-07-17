@@ -172,6 +172,8 @@ export function deriveDecisionConstraints(question: string): readonly string[] {
         /^(?:how|what|which|where|when|why|should|could|would|can|do|does|did|the|a|an|with)\s+/iu,
         '',
       )
+      .replace(/\b(?:argues?|claims?|says?|suggests?)\s+that\b/giu, ' ')
+      .replace(/\b(?:are|is|was|were)\s+important\s+beyond\b/giu, ' beyond ')
       .replace(
         /^(?:biggest\s+)?(?:opportunities|strategies|approaches|options)\s+(?:lie\s+)?(?:today\s+)?(?:for\s+)?/iu,
         '',
