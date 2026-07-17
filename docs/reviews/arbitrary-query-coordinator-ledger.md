@@ -477,7 +477,7 @@ investigate-governed-execution.test.ts investigate-preview.test.ts` passed
   letting early framing terms dominate every query. This is question-derived
   and does not add any world-model topic branch.
 - **Focused verification:** `pnpm --filter @mammoth/runtime test --
-  investigate-preview.test.ts investigate-governed-execution.test.ts` passed
+investigate-preview.test.ts investigate-governed-execution.test.ts` passed
   with the new planner coverage test. The exact world-model generated query
   set now includes `open-source private local single consumer gpu` in
   implementation and hardware searches, plus `single consumer gpu` in the

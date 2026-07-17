@@ -433,6 +433,9 @@ describe('governed acquisition execution', () => {
                       ],
                       unresolvedConstraints: [
                         'No admitted field trial establishes clinical outcome safety.',
+                        'Intermittent connectivity remains an operating constraint.',
+                        'Data synchronization strategies require deployment validation.',
+                        'Strategies that help remote clinics require field evidence.',
                       ],
                       answerBullets: [
                         {

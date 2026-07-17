@@ -152,7 +152,7 @@ function orderedFocusTerms(question: string): readonly string[] {
   return terms;
 }
 
-function constraintPhrases(question: string): readonly string[] {
+export function deriveDecisionConstraints(question: string): readonly string[] {
   const ordered = orderedFocusTerms(question);
   const segmentPhrases: string[] = [];
   const supportingPhrases: string[] = [];
@@ -253,7 +253,7 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
   const secondary = terms.slice(5, 16).join(' ') || terms.slice(0, 3).join(' ');
   const implementationFocus =
     orderedFocusTerms(question).slice(0, 16).join(' ') || primary;
-  const constraints = constraintPhrases(question);
+  const constraints = deriveDecisionConstraints(question);
   const directConstraintFocus = constraints[0] ?? implementationFocus;
   const resourceConstraintFocus = constraints[1] ?? secondary;
   const deliveryConstraintFocus = constraints[2] ?? implementationFocus;

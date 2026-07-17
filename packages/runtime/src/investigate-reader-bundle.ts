@@ -359,9 +359,16 @@ export function composeGovernedInvestigationBundle(
     return numbers.length > 0 ? numbers : undefined;
   };
   const citationNumbersForEvidenceIndex = (index: number): readonly number[] =>
-    facts
-      .filter((fact) => fact.reviewEvidenceIndex === index)
-      .map((fact) => fact.citation);
+    execution.reviewEvidenceProposalIds
+      ? facts
+          .filter(
+            (fact) =>
+              fact.claimId === execution.reviewEvidenceProposalIds?.[index - 1],
+          )
+          .map((fact) => fact.citation)
+      : facts
+          .filter((fact) => fact.reviewEvidenceIndex === index)
+          .map((fact) => fact.citation);
   const rawReviewAnswerBullets = citedReviewStatements(
     execution.liveReview?.answerBullets,
     citationNumbersForEvidenceIndex,
@@ -608,20 +615,31 @@ export function composeGovernedInvestigationBundle(
       : [
           '## Ranked decision portfolio',
           '',
-          ...reviewPortfolio.flatMap((item) => [
-            `### ${String(item.rank)}. ${singleLine(item.title)}`,
-            '',
-            `${item.sentence} ${citationSuffix(item.citations)}`,
-            '',
-            `- Why it ranks here: ${singleLine(item.rationale)} ${citationSuffix(
-              item.citations,
-            )}`,
-            ...item.constraints.map(
-              (constraint) => `- Constraint: ${singleLine(constraint)}`,
-            ),
-            `- Next validation: ${singleLine(item.nextValidation)}`,
-            '',
-          ]),
+          ...reviewPortfolio.flatMap((item) => {
+            const rationale = readerVisibleDeduction(item.rationale);
+            const nextValidation = readerVisibleDeduction(item.nextValidation);
+            return [
+              `### ${String(item.rank)}. ${singleLine(item.title)}`,
+              '',
+              `${item.sentence} ${citationSuffix(item.citations)}`,
+              '',
+              ...(rationale
+                ? [
+                    `- Why it ranks here: ${rationale} ${citationSuffix(
+                      item.citations,
+                    )}`,
+                  ]
+                : []),
+              ...item.constraints.flatMap((constraint) => {
+                const visible = readerVisibleDeduction(constraint);
+                return visible ? [`- Constraint: ${visible}`] : [];
+              }),
+              ...(nextValidation
+                ? [`- Next validation: ${nextValidation}`]
+                : []),
+              '',
+            ];
+          }),
         ]),
     ...(unresolvedConstraints.length === 0
       ? []

@@ -56,6 +56,7 @@ import {
   parseBraveRateLimitHeaders,
 } from './brave-rate-limit.js';
 import { P9LiveEffectExecutor } from './p9-live-executor.js';
+import { deriveDecisionConstraints } from './investigate-planner.js';
 
 const REQUIRED_EFFECT_KINDS = ['search', 'retrieval', 'parser'] as const;
 const LIVE_REQUIRED_EFFECT_KINDS = [
@@ -204,6 +205,7 @@ export interface GovernedAcquisitionExecution {
   readonly claims: readonly GovernedClaimRecord[];
   readonly modelWork: readonly P9ModelWorkRef[];
   readonly liveReview?: GovernedLiveModelReview;
+  readonly reviewEvidenceProposalIds?: readonly string[];
   readonly effectReceipts: readonly unknown[];
   readonly externalEffectsExecuted: boolean;
   readonly executionMode: 'offline_fixture' | 'governed_live';
@@ -1664,6 +1666,25 @@ export async function executeGovernedLiveAcquisition(
         durationMs: 120_000,
       }),
       transport: async () => {
+        const qualityByUrl = new Map(
+          hints.map((hint) => [
+            canonicalizeAcquisitionUrl(hint.url).href,
+            liveSourceQualityScore(hint),
+          ]),
+        );
+        const reviewClaims = claims
+          .filter(
+            (claim) =>
+              claim.decision === 'admitted' &&
+              (qualityByUrl.get(claim.requestedUrl) ?? 0) >= 2,
+          )
+          .slice(0, 32);
+        if (reviewClaims.length === 0) {
+          refuse(
+            'no_decision_grade_evidence',
+            'live synthesis requires admitted direct, primary, official, repository, or measured evidence',
+          );
+        }
         const outcome = await openAiCompatibleReview({
           baseUrl: input.modelBaseUrl,
           apiKeyEnvVar: input.modelApiKeyEnvVar,
@@ -1672,9 +1693,10 @@ export async function executeGovernedLiveAcquisition(
           ...(input.fetchImpl === undefined
             ? {}
             : { fetchImpl: input.fetchImpl }),
-          claims: claims
-            .filter((claim) => claim.decision === 'admitted')
-            .slice(0, 32),
+          decisionConstraints: deriveDecisionConstraints(
+            intentSet.question,
+          ).slice(0, 4),
+          claims: reviewClaims,
         });
         return {
           value: outcome.review,
@@ -1687,8 +1709,23 @@ export async function executeGovernedLiveAcquisition(
     assertDecisionGradeReview({
       review: modelReview.value,
       admittedEvidenceCount: claims.filter(
-        (claim) => claim.decision === 'admitted',
+        (claim) =>
+          claim.decision === 'admitted' &&
+          hints.some((hint) => {
+            try {
+              return (
+                canonicalizeAcquisitionUrl(hint.url).href ===
+                  claim.requestedUrl && liveSourceQualityScore(hint) >= 2
+              );
+            } catch {
+              return false;
+            }
+          }),
       ).length,
+      decisionConstraints: deriveDecisionConstraints(intentSet.question).slice(
+        0,
+        4,
+      ),
     });
     const reviewSeed = canonicalDigest(modelReview.value).slice(7, 23);
     modelWork.push(
@@ -1730,6 +1767,23 @@ export async function executeGovernedLiveAcquisition(
       claims,
       modelWork,
       liveReview: modelReview.value,
+      reviewEvidenceProposalIds: claims
+        .filter(
+          (claim) =>
+            claim.decision === 'admitted' &&
+            hints.some((hint) => {
+              try {
+                return (
+                  canonicalizeAcquisitionUrl(hint.url).href ===
+                    claim.requestedUrl && liveSourceQualityScore(hint) >= 2
+                );
+              } catch {
+                return false;
+              }
+            }),
+        )
+        .slice(0, 32)
+        .map((claim) => claim.proposalId),
       effectReceipts: executor.effectReceipts,
       externalEffectsExecuted: true,
       executionMode: 'governed_live',
@@ -1988,6 +2042,7 @@ async function openAiCompatibleReview(input: {
   readonly apiKeyEnvVar: string;
   readonly modelId: string;
   readonly question: string;
+  readonly decisionConstraints: readonly string[];
   readonly fetchImpl?: typeof fetch;
   readonly claims: readonly GovernedClaimRecord[];
 }): Promise<{
@@ -2187,12 +2242,13 @@ async function openAiCompatibleReview(input: {
         {
           role: 'system',
           content:
-            'You are an independent decision-research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. Return compact JSON. Build a ranked portfolio of concrete decisions or opportunities, ordered by evidence strength and practical feasibility. Every portfolio item must name a specific build, intervention, or decision; explain why it ranks there; state evidence-backed constraints; propose the cheapest decisive next validation; and cite one or more supplied evidenceIndex values. Do not create a portfolio item when the evidence supports only a broad theme. List every material question constraint that the evidence did not resolve in unresolvedConstraints. Every answer bullet, mechanism, dissent item, boundary condition, hypothesis, and experiment must cite supplied evidenceIndex values. Address the user question in the same form it was asked. Do not infer hardware feasibility, cost, privacy, locality, safety, or performance unless the snippets support it. Mechanisms should identify transferable causal mechanisms and where transfer breaks. Experiments must name a concrete task, baseline/comparator, decision threshold, and safety boundary when evidence permits. Prefer direct project documentation, implementation details, measured benchmarks, resource constraints, deployment evidence, and primary-source limitations over commentary.',
+            'You are an independent decision-research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. Return compact JSON. Build a ranked portfolio of concrete decisions or opportunities, ordered by evidence strength and practical feasibility. Every portfolio item must name a specific build, intervention, or decision; explain why it ranks there; state evidence-backed constraints; propose the cheapest decisive next validation; and cite one or more supplied evidenceIndex values. Do not create a portfolio item when the evidence supports only a broad theme. Address every supplied decisionConstraint explicitly: either use its wording in an evidence-backed portfolio item or repeat it in unresolvedConstraints when the evidence does not resolve it. Every answer bullet, mechanism, dissent item, boundary condition, hypothesis, and experiment must cite supplied evidenceIndex values. Address the user question in the same form it was asked. Do not infer hardware feasibility, cost, privacy, locality, safety, or performance unless the snippets support it. Mechanisms should identify transferable causal mechanisms and where transfer breaks. Experiments must name a concrete task, baseline/comparator, decision threshold, and safety boundary when evidence permits. Prefer direct project documentation, implementation details, measured benchmarks, resource constraints, deployment evidence, and primary-source limitations over commentary.',
         },
         {
           role: 'user',
           content: JSON.stringify({
             question: input.question,
+            decisionConstraints: input.decisionConstraints,
             keyQuestionTerms: liveRelevanceTerms(input.question),
             admittedEvidence: input.claims.map((claim, index) => ({
               evidenceIndex: index + 1,
@@ -2248,6 +2304,7 @@ async function openAiCompatibleReview(input: {
 function assertDecisionGradeReview(input: {
   readonly review: GovernedLiveModelReview;
   readonly admittedEvidenceCount: number;
+  readonly decisionConstraints: readonly string[];
 }): void {
   const portfolio = input.review.portfolio ?? [];
   if (portfolio.length === 0) {
@@ -2287,6 +2344,28 @@ function assertDecisionGradeReview(input: {
     refuse(
       'decision_portfolio_rank_gap',
       'live synthesis portfolio ranks must be contiguous and deterministic',
+    );
+  }
+  const coverageText = [
+    ...portfolio.flatMap((item) => [
+      item.title,
+      item.statement,
+      item.rationale,
+      ...item.constraints,
+    ]),
+    ...(input.review.unresolvedConstraints ?? []),
+  ].join(' ');
+  const uncovered = input.decisionConstraints.filter((constraint) => {
+    const terms = textTerms(constraint);
+    if (terms.length === 0) return false;
+    return (
+      textRelevanceScore(coverageText, terms) < Math.ceil(terms.length / 2)
+    );
+  });
+  if (uncovered.length > 0) {
+    refuse(
+      'decision_constraints_unresolved',
+      `live synthesis omitted generated decision constraints: ${uncovered.join('; ')}`,
     );
   }
 }
