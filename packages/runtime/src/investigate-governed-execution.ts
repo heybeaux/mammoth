@@ -275,10 +275,18 @@ export interface GovernedLiveAcceptanceReview {
   readonly overall: 'pass' | 'fail';
   readonly criteria: readonly GovernedLiveAcceptanceCriterion[];
   readonly decisionConstraints: readonly GovernedLiveAcceptanceCriterion[];
+  readonly evidenceGaps: readonly GovernedLiveEvidenceGap[];
   readonly sourceClusters: readonly {
     readonly clusterId: string;
     readonly evidenceCount: number;
   }[];
+}
+
+export interface GovernedLiveEvidenceGap {
+  readonly assertionLabel: string;
+  readonly statement: string;
+  readonly unsupportedTerms: readonly string[];
+  readonly evidenceIndexes: readonly number[];
 }
 
 export interface GovernedLiveAcceptanceCriterion {
@@ -1997,26 +2005,13 @@ export async function executeGovernedLiveAcquisition(
       question: intentSet.question,
       reviewClaims: selectedReviewEvidenceClaims,
     });
-    const acceptanceReview = buildLiveAcceptanceReview({
+    const acceptanceReview = evaluateLiveAcceptanceReview({
       review: modelReview.value,
       reviewClaims: selectedReviewEvidenceClaims,
       decisionConstraints: deriveDecisionConstraints(intentSet.question),
       question: intentSet.question,
       now: input.now,
     });
-    if (acceptanceReview.overall !== 'pass') {
-      const failed = [
-        ...acceptanceReview.criteria,
-        ...acceptanceReview.decisionConstraints,
-      ]
-        .filter((item) => !item.passed)
-        .map((item) => item.criterionId)
-        .join(', ');
-      refuse(
-        'independent_acceptance_review_failed',
-        `live acceptance review failed one or more explicit pass/fail criteria: ${failed}`,
-      );
-    }
     const reviewSeed = canonicalDigest(modelReview.value).slice(7, 23);
     modelWork.push(
       liveWorkRef({
@@ -2801,229 +2796,10 @@ function assertDecisionGradeReview(input: {
       'live synthesis portfolio ranks must be contiguous and deterministic',
     );
   }
-  const decisionTerms = [
-    ...new Set(
-      input.decisionConstraints.flatMap((constraint) => textTerms(constraint)),
-    ),
-  ];
-  const evidenceBoundAssertions: {
-    readonly label: string;
-    readonly text: string;
-    readonly evidenceIndexes: readonly number[];
-  }[] = [
-    ...portfolio.map((item) => ({
-      label: `portfolio item ${String(item.rank)}`,
-      text: [item.title, item.statement, item.rationale].join(' '),
-      evidenceIndexes: item.evidenceIndexes,
-    })),
-    ...(input.review.answerBullets ?? []).map((item, index) => ({
-      label: `answer bullet ${String(index + 1)}`,
-      text: item.statement,
-      evidenceIndexes: item.evidenceIndexes,
-    })),
-    ...(input.review.mechanisms ?? []).map((item, index) => ({
-      label: `mechanism ${String(index + 1)}`,
-      text: item.statement,
-      evidenceIndexes: item.evidenceIndexes,
-    })),
-    ...(input.review.boundaryConditions ?? []).map((item, index) => ({
-      label: `boundary condition ${String(index + 1)}`,
-      text: item.statement,
-      evidenceIndexes: item.evidenceIndexes,
-    })),
-    ...(input.review.hypotheses ?? []).map((item, index) => ({
-      label: `hypothesis ${String(index + 1)}`,
-      text: item.statement,
-      evidenceIndexes: item.evidenceIndexes,
-    })),
-  ];
-  for (const assertion of evidenceBoundAssertions) {
-    const assertedDecisionTerms = decisionTerms.filter(
-      (term) => textRelevanceScore(assertion.text, [term]) > 0,
-    );
-    if (assertedDecisionTerms.length === 0) continue;
-    const citedEvidenceText = assertion.evidenceIndexes
-      .map((index) => input.reviewClaims[index - 1]?.statement ?? '')
-      .join(' ');
-    const unsupportedTerms = assertedDecisionTerms.filter(
-      (term) => textRelevanceScore(citedEvidenceText, [term]) === 0,
-    );
-    if (unsupportedTerms.length > 0) {
-      refuse(
-        'decision_constraint_not_evidence_bound',
-        `${assertion.label} asserts decision constraints absent from its cited evidence: ${unsupportedTerms.join(', ')}`,
-      );
-    }
-  }
-  if (isBroadDecisionQuestion(input.question)) {
-    const clusters = distinctSourceClustersForClaims(input.reviewClaims);
-    if (clusters.length < 3) {
-      refuse(
-        'insufficient_source_cluster_diversity',
-        'broad decision questions require admitted decision-grade evidence from at least three independent source clusters',
-      );
-    }
-    if (portfolio.length < 3) {
-      refuse(
-        'decision_portfolio_too_narrow',
-        'broad decision questions require at least three distinct evidence-bound portfolio items or must fail closed',
-      );
-    }
-    const signatures = portfolio.map(portfolioItemSignature);
-    for (let left = 0; left < signatures.length; left += 1) {
-      for (let right = left + 1; right < signatures.length; right += 1) {
-        const leftSignature = signatures[left] ?? [];
-        const rightSignature = signatures[right] ?? [];
-        if (
-          leftSignature.length > 0 &&
-          rightSignature.length > 0 &&
-          jaccardOverlap(leftSignature, rightSignature) > 0.72
-        ) {
-          refuse(
-            'decision_portfolio_not_distinct',
-            'broad decision questions require distinct portfolio items rather than repeated variants of the same option',
-          );
-        }
-      }
-    }
-  }
-  const coverageText = [
-    ...portfolio.flatMap((item) => [
-      item.title,
-      item.statement,
-      item.rationale,
-      ...item.constraints,
-    ]),
-    ...(input.review.unresolvedConstraints ?? []),
-  ].join(' ');
-  const uncovered = input.decisionConstraints.filter((constraint) => {
-    const terms = textTerms(constraint);
-    if (terms.length === 0) return false;
-    return (
-      textRelevanceScore(coverageText, terms) < Math.ceil(terms.length / 2)
-    );
-  });
-  if (uncovered.length > 0) {
-    refuse(
-      'decision_constraints_unresolved',
-      `live synthesis omitted generated decision constraints: ${uncovered.join('; ')}`,
-    );
-  }
-  const unresolvedText = (input.review.unresolvedConstraints ?? []).join(' ');
-  const unresolvedDecisionConstraints = input.decisionConstraints.filter(
-    (constraint) => {
-      const terms = textTerms(constraint);
-      if (terms.length === 0) return false;
-      const portfolioResolved =
-        textRelevanceScore(
-          portfolio
-            .flatMap((item) => [
-              item.title,
-              item.statement,
-              item.rationale,
-              ...item.constraints,
-              item.nextValidation,
-            ])
-            .join(' '),
-          terms,
-        ) >= Math.ceil(terms.length / 2);
-      return (
-        !portfolioResolved &&
-        textRelevanceScore(unresolvedText, terms) >= Math.ceil(terms.length / 2)
-      );
-    },
-  );
-  if (unresolvedDecisionConstraints.length > 0) {
-    refuse(
-      'decision_constraints_explicitly_unresolved',
-      `live synthesis left generated decision constraints unresolved: ${unresolvedDecisionConstraints.join('; ')}`,
-    );
-  }
-  if ((input.review.experimentProposals ?? []).length === 0) {
-    refuse(
-      'missing_bounded_experiments',
-      'live synthesis requires at least one cited bounded experiment proposal',
-    );
-  }
-  if (
-    (input.review.dissent ?? []).length === 0 ||
-    input.review.weaknesses.some(
-      (weakness) => informativeWordCount(weakness) < 6,
-    ) ||
-    input.review.weaknesses.length === 0
-  ) {
-    refuse(
-      'missing_live_limitations',
-      'live synthesis requires visible dissent and substantive weaknesses',
-    );
-  }
-  const citedSections = [
-    {
-      code: 'missing_boundary_conditions',
-      label: 'boundary condition',
-      values: input.review.boundaryConditions ?? [],
-    },
-    {
-      code: 'missing_hypotheses',
-      label: 'falsifiable hypothesis',
-      values: input.review.hypotheses ?? [],
-    },
-  ] as const;
-  for (const section of citedSections) {
-    if (
-      section.values.length === 0 ||
-      section.values.some(
-        (item) =>
-          item.statement.trim().length < 24 ||
-          item.evidenceIndexes.length === 0 ||
-          item.evidenceIndexes.some(
-            (index) =>
-              !Number.isInteger(index) ||
-              index < 1 ||
-              index > input.admittedEvidenceCount,
-          ),
-      )
-    ) {
-      refuse(
-        section.code,
-        `live synthesis requires at least one cited ${section.label}`,
-      );
-    }
-  }
-  for (const experiment of input.review.experimentProposals ?? []) {
-    const threshold = experiment.threshold.trim();
-    const experimentText = [
-      experiment.statement,
-      experiment.resolvesUncertainty,
-      experiment.threshold,
-      experiment.safetyBoundary,
-    ].join(' ');
-    if (
-      experiment.statement.trim().length < 24 ||
-      experiment.resolvesUncertainty.trim().length < 24 ||
-      threshold.length < 24 ||
-      /meets? the decision criterion|portfolio rank|supported enough/iu.test(
-        threshold,
-      ) ||
-      !hasComparatorLanguage(threshold) ||
-      !hasQuantifiedDecisionThreshold(threshold) ||
-      !hasMetricLanguage(experimentText) ||
-      !hasAdverseConstraintLanguage(experimentText) ||
-      experiment.safetyBoundary.trim().length < 24 ||
-      experiment.evidenceIndexes.length === 0 ||
-      experiment.evidenceIndexes.some(
-        (index) =>
-          !Number.isInteger(index) ||
-          index < 1 ||
-          index > input.admittedEvidenceCount,
-      )
-    ) {
-      refuse(
-        'invalid_bounded_experiment',
-        'live synthesis requires concrete cited experiments with metrics, comparators, thresholds, and adverse-constraint checks',
-      );
-    }
-  }
+  // Evidence strength, breadth, unresolved constraints, dissent, and experiment
+  // quality are publication metadata, not bundle-integrity conditions. They are
+  // evaluated below by evaluateLiveAcceptanceReview and rendered as explicit gaps.
+  // Only malformed/unbound portfolio data remains a hard refusal here.
 }
 
 function criterion(
@@ -3034,7 +2810,78 @@ function criterion(
   return { criterionId, passed, evidence };
 }
 
-function buildLiveAcceptanceReview(input: {
+function collectLiveEvidenceGaps(input: {
+  readonly review: GovernedLiveModelReview;
+  readonly reviewClaims: readonly GovernedClaimRecord[];
+  readonly decisionConstraints: readonly string[];
+}): readonly GovernedLiveEvidenceGap[] {
+  const decisionTerms = [
+    ...new Set(
+      input.decisionConstraints.flatMap((constraint) => textTerms(constraint)),
+    ),
+  ];
+  const assertions: {
+    readonly assertionLabel: string;
+    readonly statement: string;
+    readonly text: string;
+    readonly evidenceIndexes: readonly number[];
+  }[] = [
+    ...(input.review.portfolio ?? []).map((item) => ({
+      assertionLabel: `portfolio item ${String(item.rank)}`,
+      statement: item.statement,
+      text: [item.title, item.statement, item.rationale].join(' '),
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+    ...(input.review.answerBullets ?? []).map((item, index) => ({
+      assertionLabel: `answer bullet ${String(index + 1)}`,
+      statement: item.statement,
+      text: item.statement,
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+    ...(input.review.mechanisms ?? []).map((item, index) => ({
+      assertionLabel: `mechanism ${String(index + 1)}`,
+      statement: item.statement,
+      text: item.statement,
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+    ...(input.review.boundaryConditions ?? []).map((item, index) => ({
+      assertionLabel: `boundary condition ${String(index + 1)}`,
+      statement: item.statement,
+      text: item.statement,
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+    ...(input.review.hypotheses ?? []).map((item, index) => ({
+      assertionLabel: `hypothesis ${String(index + 1)}`,
+      statement: item.statement,
+      text: item.statement,
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+  ];
+  return assertions.flatMap((assertion) => {
+    const assertedDecisionTerms = decisionTerms.filter(
+      (term) => textRelevanceScore(assertion.text, [term]) > 0,
+    );
+    if (assertedDecisionTerms.length === 0) return [];
+    const citedEvidenceText = assertion.evidenceIndexes
+      .map((index) => input.reviewClaims[index - 1]?.statement ?? '')
+      .join(' ');
+    const unsupportedTerms = assertedDecisionTerms.filter(
+      (term) => textRelevanceScore(citedEvidenceText, [term]) === 0,
+    );
+    return unsupportedTerms.length === 0
+      ? []
+      : [
+          {
+            assertionLabel: assertion.assertionLabel,
+            statement: assertion.statement,
+            unsupportedTerms,
+            evidenceIndexes: assertion.evidenceIndexes,
+          },
+        ];
+  });
+}
+
+export function evaluateLiveAcceptanceReview(input: {
   readonly review: GovernedLiveModelReview;
   readonly reviewClaims: readonly GovernedClaimRecord[];
   readonly decisionConstraints: readonly string[];
@@ -3043,6 +2890,7 @@ function buildLiveAcceptanceReview(input: {
 }): GovernedLiveAcceptanceReview {
   const clusters = distinctSourceClustersForClaims(input.reviewClaims);
   const portfolio = input.review.portfolio ?? [];
+  const evidenceGaps = collectLiveEvidenceGaps(input);
   const portfolioText = portfolio
     .flatMap((item) => [
       item.title,
@@ -3052,12 +2900,18 @@ function buildLiveAcceptanceReview(input: {
       ...item.constraints,
     ])
     .join(' ');
+  const unresolvedText = (input.review.unresolvedConstraints ?? []).join(' ');
   const decisionConstraintCriteria = input.decisionConstraints.map(
     (constraint, index) => {
       const terms = textTerms(constraint);
       const portfolioResolved =
         textRelevanceScore(portfolioText, terms) >= Math.ceil(terms.length / 2);
-      const resolved = terms.length === 0 || portfolioResolved;
+      const explicitlyUnresolved =
+        terms.length > 0 &&
+        textRelevanceScore(unresolvedText, terms) >=
+          Math.ceil(terms.length / 2);
+      const resolved =
+        terms.length === 0 || (portfolioResolved && !explicitlyUnresolved);
       return criterion(
         `decision-constraint-${String(index + 1)}`,
         resolved,
@@ -3066,6 +2920,24 @@ function buildLiveAcceptanceReview(input: {
     },
   );
   const experiments = input.review.experimentProposals ?? [];
+  const validEvidenceIndexes = (indexes: readonly number[]) =>
+    indexes.length > 0 &&
+    indexes.every(
+      (index) =>
+        Number.isInteger(index) &&
+        index >= 1 &&
+        index <= input.reviewClaims.length,
+    );
+  const signatures = portfolio.map(portfolioItemSignature);
+  const portfolioDistinct = signatures.every((leftSignature, left) =>
+    signatures.every(
+      (rightSignature, right) =>
+        left >= right ||
+        leftSignature.length === 0 ||
+        rightSignature.length === 0 ||
+        jaccardOverlap(leftSignature, rightSignature) <= 0.72,
+    ),
+  );
   const criteria = [
     criterion(
       'source-cluster-diversity',
@@ -3078,10 +2950,52 @@ function buildLiveAcceptanceReview(input: {
       `${String(portfolio.length)} ranked portfolio item(s)`,
     ),
     criterion(
+      'portfolio-distinctness',
+      portfolioDistinct,
+      portfolioDistinct
+        ? 'ranked portfolio items are substantively distinct'
+        : 'one or more ranked items repeat the same option or decision lever',
+    ),
+    criterion(
+      'evidence-binding',
+      evidenceGaps.length === 0,
+      evidenceGaps.length === 0
+        ? 'all decision-sensitive assertions are directly supported by their cited evidence'
+        : `${String(evidenceGaps.length)} assertion(s) contain explicitly recorded evidence gaps`,
+    ),
+    criterion(
       'dissent-and-boundaries',
       (input.review.dissent ?? []).length > 0 &&
-        (input.review.boundaryConditions ?? []).length > 0,
+        (input.review.dissent ?? []).every(
+          (item) =>
+            item.statement.trim().length >= 24 &&
+            validEvidenceIndexes(item.evidenceIndexes),
+        ) &&
+        (input.review.boundaryConditions ?? []).length > 0 &&
+        (input.review.boundaryConditions ?? []).every(
+          (item) =>
+            item.statement.trim().length >= 24 &&
+            validEvidenceIndexes(item.evidenceIndexes),
+        ),
       `${String((input.review.dissent ?? []).length)} dissent item(s), ${String((input.review.boundaryConditions ?? []).length)} boundary item(s)`,
+    ),
+    criterion(
+      'substantive-limitations',
+      input.review.weaknesses.length > 0 &&
+        input.review.weaknesses.every(
+          (weakness) => informativeWordCount(weakness) >= 6,
+        ),
+      `${String(input.review.weaknesses.length)} reviewer-noted limitation(s)`,
+    ),
+    criterion(
+      'cited-hypotheses',
+      (input.review.hypotheses ?? []).length > 0 &&
+        (input.review.hypotheses ?? []).every(
+          (item) =>
+            item.statement.trim().length >= 24 &&
+            validEvidenceIndexes(item.evidenceIndexes),
+        ),
+      `${String((input.review.hypotheses ?? []).length)} cited hypothesis item(s)`,
     ),
     criterion(
       'bounded-experiments',
@@ -3094,10 +3008,15 @@ function buildLiveAcceptanceReview(input: {
             experiment.safetyBoundary,
           ].join(' ');
           return (
+            experiment.statement.trim().length >= 24 &&
+            experiment.resolvesUncertainty.trim().length >= 24 &&
+            experiment.threshold.trim().length >= 24 &&
+            experiment.safetyBoundary.trim().length >= 24 &&
             hasComparatorLanguage(experiment.threshold) &&
             hasQuantifiedDecisionThreshold(experiment.threshold) &&
             hasMetricLanguage(text) &&
-            hasAdverseConstraintLanguage(text)
+            hasAdverseConstraintLanguage(text) &&
+            validEvidenceIndexes(experiment.evidenceIndexes)
           );
         }),
       `${String(experiments.length)} experiment proposal(s) with comparator, metric, numeric threshold, and adverse-constraint language`,
@@ -3110,6 +3029,7 @@ function buildLiveAcceptanceReview(input: {
     overall: allCriteria.every((item) => item.passed) ? 'pass' : 'fail',
     criteria,
     decisionConstraints: decisionConstraintCriteria,
+    evidenceGaps,
     sourceClusters: clusters.map((cluster) => ({
       clusterId: cluster,
       evidenceCount: input.reviewClaims.filter(

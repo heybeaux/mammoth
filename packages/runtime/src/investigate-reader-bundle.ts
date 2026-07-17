@@ -386,6 +386,26 @@ export function composeGovernedInvestigationBundle(
       : facts
           .filter((fact) => fact.reviewEvidenceIndex === index)
           .map((fact) => fact.citation);
+  const evidenceGapForStatement = (statement: string) =>
+    execution.acceptanceReview?.evidenceGaps.find(
+      (gap) => singleLine(gap.statement) === singleLine(statement),
+    );
+  const evidenceGapLines = (execution.acceptanceReview?.evidenceGaps ?? []).map(
+    (gap) => {
+      const citations = [
+        ...new Set(
+          gap.evidenceIndexes.flatMap((index) =>
+            citationNumbersForEvidenceIndex(index),
+          ),
+        ),
+      ].sort((left, right) => left - right);
+      return `- **Suggestive, not established:** ${singleLine(
+        gap.statement,
+      )} ${citationSuffix(citations)} The cited evidence supports adjacent facts but does not directly establish: ${gap.unsupportedTerms.join(
+        ', ',
+      )}.`;
+    },
+  );
   const rawReviewAnswerBullets = citedReviewStatements(
     execution.liveReview?.answerBullets,
     citationNumbersForEvidenceIndex,
@@ -617,14 +637,26 @@ export function composeGovernedInvestigationBundle(
   const reportLines = [
     `# ${singleLine(title)}`,
     '',
+    execution.acceptanceReview === undefined
+      ? '> **Research status: evidence-bound.** This offline report preserves admitted evidence and its limitations.'
+      : execution.acceptanceReview.overall === 'fail'
+        ? '> **Research status: partial.** The report contains useful admitted evidence, but one or more decision-quality checks remain unresolved. Weak inferences are labelled below instead of being discarded.'
+        : '> **Research status: accepted.** The report passed the configured decision-quality checks.',
+    '',
     '## Direct answer',
     '',
-    ...reviewAnswerBullets.map(
-      (item) =>
-        `- Deduction from admitted evidence: ${item.sentence} ${citationSuffix(
-          item.citations,
-        )}`,
-    ),
+    ...reviewAnswerBullets.map((item) => {
+      const gap = evidenceGapForStatement(item.statement);
+      return gap
+        ? `- **Suggestive inference:** ${item.sentence} ${citationSuffix(
+            item.citations,
+          )} Direct evidence is missing for: ${gap.unsupportedTerms.join(
+            ', ',
+          )}.`
+        : `- Deduction from admitted evidence: ${item.sentence} ${citationSuffix(
+            item.citations,
+          )}`;
+    }),
     ...directAnswerLimitations.map(
       (item) =>
         `- Limitation from admitted evidence: ${item.sentence} ${citationSuffix(
@@ -656,10 +688,17 @@ export function composeGovernedInvestigationBundle(
           ...reviewPortfolio.flatMap((item) => {
             const rationale = readerVisibleDeduction(item.rationale);
             const nextValidation = readerVisibleDeduction(item.nextValidation);
+            const gap = evidenceGapForStatement(item.statement);
             return [
               `### ${String(item.rank)}. ${singleLine(item.title)}`,
               '',
-              `${item.sentence} ${citationSuffix(item.citations)}`,
+              gap
+                ? `**Suggestive, not established:** ${item.sentence} ${citationSuffix(
+                    item.citations,
+                  )} Missing direct support for: ${gap.unsupportedTerms.join(
+                    ', ',
+                  )}.`
+                : `${item.sentence} ${citationSuffix(item.citations)}`,
               '',
               ...(rationale
                 ? [
@@ -687,6 +726,9 @@ export function composeGovernedInvestigationBundle(
           ...unresolvedConstraints.map((constraint) => `- ${constraint}`),
           '',
         ]),
+    ...(evidenceGapLines.length === 0
+      ? []
+      : ['## Evidence gaps', '', ...evidenceGapLines, '']),
     '## Supporting evidence',
     '',
     ...supportingFacts.map(

@@ -18,6 +18,7 @@ import {
   buildInvestigateLivePriceCatalog,
   deriveAcquisitionIntents,
   evaluateAcquisitionRelease,
+  evaluateLiveAcceptanceReview,
   executeGovernedAcquisition,
   executeGovernedLiveAcquisition,
   GovernedExecutionError,
@@ -650,6 +651,87 @@ describe('governed acquisition execution', () => {
     expect(bundle.files['audit/live-effect-receipts.jsonl']).toContain(
       'effect-receipt:',
     );
+    const firstPortfolioItem = execution.liveReview?.portfolio?.[0];
+    const acceptanceReview = execution.acceptanceReview;
+    if (!firstPortfolioItem || !acceptanceReview) {
+      throw new Error('live fixture did not produce review artifacts');
+    }
+    const partialBundle = composeGovernedInvestigationBundle({
+      plan,
+      intentSet,
+      release,
+      now: NOW,
+      execution: {
+        ...execution,
+        acceptanceReview: {
+          ...acceptanceReview,
+          overall: 'fail',
+          evidenceGaps: [
+            {
+              assertionLabel: 'portfolio item 1',
+              statement: firstPortfolioItem.statement,
+              unsupportedTerms: ['consumer'],
+              evidenceIndexes: firstPortfolioItem.evidenceIndexes,
+            },
+          ],
+        },
+      },
+    });
+    expect(partialBundle.files['reader/report.md']).toContain(
+      '**Research status: partial.**',
+    );
+    expect(partialBundle.files['reader/report.md']).toContain(
+      '## Evidence gaps',
+    );
+    expect(partialBundle.files['reader/report.md']).toContain(
+      '**Suggestive, not established:**',
+    );
+  });
+
+  it('records a weak consumer-hardware inference as a partial evidence gap instead of throwing away the report', () => {
+    const review = evaluateLiveAcceptanceReview({
+      question:
+        'Which local world-model opportunities fit on a single consumer GPU?',
+      decisionConstraints: ['single consumer GPU'],
+      now: NOW,
+      reviewClaims: [
+        {
+          proposalId: 'claim:single-gpu',
+          statement: 'The model runs on a single GPU.',
+          candidateId: 'candidate:single-gpu',
+          requestedUrl: 'https://example.test/model-card',
+          sourceClass: 'public_web',
+          decision: 'admitted',
+          reasonCodes: [],
+        },
+      ],
+      review: {
+        summary: 'One implementation reports single-GPU operation.',
+        portfolio: [
+          {
+            rank: 1,
+            title: 'Consumer GPU deployment',
+            statement:
+              'Use this implementation as a consumer-GPU world-model baseline.',
+            rationale:
+              'The implementation documents operation on one GPU, but does not name a consumer card.',
+            constraints: ['Consumer-card VRAM and latency remain unverified.'],
+            nextValidation:
+              'Measure peak VRAM and latency on a named consumer card before relying on this option.',
+            evidenceIndexes: [1],
+          },
+        ],
+        weaknesses: ['The cited source does not identify the GPU class.'],
+        suggestedSearches: ['named consumer GPU world model benchmark'],
+      },
+    });
+
+    expect(review.overall).toBe('fail');
+    const gap = review.evidenceGaps.find(
+      (item) => item.assertionLabel === 'portfolio item 1',
+    );
+    expect(gap?.unsupportedTerms).toContain('consumer');
+    expect(gap?.evidenceIndexes).toEqual([1]);
   });
 
   it('is deterministic for a fixed clock and catalog', () => {
