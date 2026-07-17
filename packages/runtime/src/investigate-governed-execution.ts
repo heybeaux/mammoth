@@ -395,6 +395,12 @@ function liveSourceQualityScore(hint: DiscoveredSourceHint): number {
       score += 2;
     }
     if (
+      /\b(?:reddit|wikipedia|quora|medium|substack)\b/u.test(host) ||
+      /\b(?:news|magazine|article|opinion|blog)\b/u.test(host)
+    ) {
+      score -= 4;
+    }
+    if (
       /\b(?:docs?|documentation|papers?|publications?|reports?|research|benchmarks?|repository|repo|manual|reference|readme|requirements)\b/u.test(
         path,
       )
@@ -424,6 +430,18 @@ function liveSourceQualityScore(hint: DiscoveredSourceHint): number {
     score -= 3;
   }
   return score;
+}
+
+function isDecisionGradeLiveSource(hint: DiscoveredSourceHint): boolean {
+  try {
+    const host = new URL(hint.url).hostname.toLocaleLowerCase('en-US');
+    if (/\b(?:reddit|wikipedia|quora|medium|substack)\b/u.test(host)) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  return liveSourceQualityScore(hint) >= 2;
 }
 
 function requiresDirectDecisionEvidence(query: string): boolean {
@@ -1286,7 +1304,7 @@ export async function executeGovernedLiveAcquisition(
         const query = plannedQueryById.get(entry.hint.queryId) ?? '';
         const directEnough =
           !requiresDirectDecisionEvidence(query) ||
-          liveSourceQualityScore(entry.hint) >= 2;
+          isDecisionGradeLiveSource(entry.hint);
         if (entry.score >= entry.minimum && directEnough) return true;
         lowRelevanceHints.push({
           hint: entry.hint,
@@ -1666,17 +1684,20 @@ export async function executeGovernedLiveAcquisition(
         durationMs: 120_000,
       }),
       transport: async () => {
-        const qualityByUrl = new Map(
-          hints.map((hint) => [
-            canonicalizeAcquisitionUrl(hint.url).href,
-            liveSourceQualityScore(hint),
-          ]),
-        );
         const reviewClaims = claims
           .filter(
             (claim) =>
               claim.decision === 'admitted' &&
-              (qualityByUrl.get(claim.requestedUrl) ?? 0) >= 2,
+              hints.some((hint) => {
+                try {
+                  return (
+                    canonicalizeAcquisitionUrl(hint.url).href ===
+                      claim.requestedUrl && isDecisionGradeLiveSource(hint)
+                  );
+                } catch {
+                  return false;
+                }
+              }),
           )
           .slice(0, 32);
         if (reviewClaims.length === 0) {
@@ -1715,7 +1736,7 @@ export async function executeGovernedLiveAcquisition(
             try {
               return (
                 canonicalizeAcquisitionUrl(hint.url).href ===
-                  claim.requestedUrl && liveSourceQualityScore(hint) >= 2
+                  claim.requestedUrl && isDecisionGradeLiveSource(hint)
               );
             } catch {
               return false;
@@ -1775,7 +1796,7 @@ export async function executeGovernedLiveAcquisition(
               try {
                 return (
                   canonicalizeAcquisitionUrl(hint.url).href ===
-                    claim.requestedUrl && liveSourceQualityScore(hint) >= 2
+                    claim.requestedUrl && isDecisionGradeLiveSource(hint)
                 );
               } catch {
                 return false;
@@ -2366,6 +2387,12 @@ function assertDecisionGradeReview(input: {
     refuse(
       'decision_constraints_unresolved',
       `live synthesis omitted generated decision constraints: ${uncovered.join('; ')}`,
+    );
+  }
+  if ((input.review.experimentProposals ?? []).length === 0) {
+    refuse(
+      'missing_bounded_experiments',
+      'live synthesis requires at least one cited bounded experiment proposal',
     );
   }
 }

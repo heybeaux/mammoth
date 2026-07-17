@@ -349,7 +349,7 @@ describe('governed acquisition execution', () => {
         'Skip to main content. An official website of the United States government. Local-first systems keep writes available on devices while connectivity is intermittent. Conflict-free replicated data types can merge concurrent updates without a central coordinator.',
       ],
       [
-        'https://sources.example.test/clinic-sync-b',
+        'https://www.reddit.com/r/healthit/comments/clinic_sync_b/',
         'Local-first replication guidance describes remote clinic offline synchronization during intermittent connectivity but does not address conflicting patient records.',
       ],
       [
@@ -379,7 +379,7 @@ describe('governed acquisition execution', () => {
                     'Implementation reference for local-first systems and conflict-free replicated data types.',
                 },
                 {
-                  url: 'https://sources.example.test/clinic-sync-b',
+                  url: 'https://www.reddit.com/r/healthit/comments/clinic_sync_b/',
                   title: 'Blog: remote clinic offline replication explained',
                   description:
                     'Commentary about local-first replication for remote clinics.',
@@ -577,7 +577,7 @@ describe('governed acquisition execution', () => {
       'https://sources.example.test/clinic-conflict',
     );
     expect(retrievedUrls).not.toContain(
-      'https://sources.example.test/clinic-sync-b',
+      'https://www.reddit.com/r/healthit/comments/clinic_sync_b/',
     );
     const bundle = composeGovernedInvestigationBundle({
       plan,

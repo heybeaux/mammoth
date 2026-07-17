@@ -490,3 +490,36 @@ investigate-preview.test.ts investigate-governed-execution.test.ts` passed
   selection must favor direct implementation/benchmark/project evidence over
   commentary, and synthesis must produce a ranked decision-grade opportunity
   portfolio or fail closed when admitted evidence cannot support one.
+
+## 2026-07-17 — V24/V25 failed evidence; decision-grade source repair
+
+- **GitHub checkpoint:** commit `eb747c2` pushed to draft PR #146 after focused
+  runtime tests plus `pnpm format:check && pnpm lint && pnpm typecheck` passed.
+- **Fresh/probe live evidence:** V24 completed the three unrelated holdouts and
+  exact world-model question through the governed live public path; V25 added a
+  remote-clinic probe. These artifacts are preserved under
+  `evals/live/mammoth-core-loop-v24/` and `evals/live/mammoth-core-loop-v25/`
+  but do **not** count as predicate acceptance.
+- **Why V24 fails:** the exact world-model report still left
+  private/local/consumer constraints unresolved and ranked broad digital-twin
+  and weather items alongside single-GPU local implementation work. The holdout
+  reports also left central constraints unresolved, and some model-authored
+  rationale still reflected weak commentary/community evidence rather than
+  direct decision evidence.
+- **Spend:** V24/V25 extended the aggregate loop journal from the previously
+  recorded **USD 2.611214070003** to **USD 2.981478360004**, leaving
+  **USD 12.018521639996** under the USD 15 ceiling. Only Brave Search and
+  OpenRouter were configured; Tavily was not read, sourced, or used.
+- **Repair:** generic search planning now places constraint-led official,
+  repository, benchmark/resource, deployment/hardware, and counterexample
+  searches before broad framing searches. Live source selection now rejects
+  common community/encyclopedia/commentary hosts as decision-grade evidence and
+  requires at least one cited bounded experiment proposal before live synthesis
+  can pass. Reader cleanup now strips singular `evidenceIndex` syntax as well
+  as plural variants.
+- **Focused verification:** `pnpm --filter @mammoth/runtime test --
+investigate-governed-execution.test.ts investigate-preview.test.ts`,
+  `pnpm --filter @mammoth/runtime typecheck`, and
+  `pnpm format:check && pnpm lint && pnpm typecheck` passed locally before the
+  repair checkpoint. Predicates 9/10 remain incomplete pending fresh live runs
+  and independent review.

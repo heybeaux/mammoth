@@ -95,6 +95,10 @@ describe('local investigation preview', () => {
       'Where should individuals building open-source private local world-model systems on a single consumer GPU focus first?',
     ).plan.searchQueries.map((query) => query.toLocaleLowerCase('en-US'));
 
+    expect(plan[0]).toContain('open-source private local');
+    expect(plan[0]).toContain('official project documentation');
+    expect(plan[1]).toContain('repository readme implementation');
+    expect(plan[1]).toContain('single consumer gpu');
     expect(
       plan.some(
         (query) =>

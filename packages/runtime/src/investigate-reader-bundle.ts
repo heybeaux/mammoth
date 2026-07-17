@@ -152,6 +152,7 @@ function readerVisibleDeduction(value: string | undefined): string | null {
     .replace(/\s*\(\s*evidenceindexes?\s*:?\s*\[?[\d,\s]+\]?\s*\)/giu, '')
     .replace(/\s*evidence\s*indexes?\s*:?\s*\[?[\d,\s]+\]?/giu, '')
     .replace(/\s*evidenceindexes?\s*:?\s*\[?[\d,\s]+\]?/giu, '')
+    .replace(/\s*evidenceindex\s*:?\s*\[?[\d,\s]+\]?/giu, '')
     .trim();
   if (sentence.length < 32) return null;
   if (READER_FORBIDDEN_PATTERN.test(sentence)) return null;
