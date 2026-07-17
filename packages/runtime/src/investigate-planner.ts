@@ -227,6 +227,21 @@ function compactQuery(value: string, maxTerms = 18): string {
   return terms.join(' ');
 }
 
+function phraseOccurrenceCount(value: string, phrase: string): number {
+  const normalizedValue = value.toLocaleLowerCase('en-US');
+  const normalizedPhrase = phrase.toLocaleLowerCase('en-US').trim();
+  if (!normalizedPhrase) return 0;
+  let count = 0;
+  let offset = 0;
+  while (offset < normalizedValue.length) {
+    const found = normalizedValue.indexOf(normalizedPhrase, offset);
+    if (found < 0) break;
+    count += 1;
+    offset = found + normalizedPhrase.length;
+  }
+  return count;
+}
+
 function selectOptionalRoles(
   question: string,
   focus: string,
@@ -282,6 +297,15 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
   const resourceConstraintFocus = constraints[1] ?? secondary;
   const deliveryConstraintFocus = constraints[2] ?? implementationFocus;
   const boundaryConstraintFocus = constraints[3] ?? secondary;
+  const lateConstraintFocus = constraints[4] ?? boundaryConstraintFocus;
+  const subjectConstraintFocus = constraints.reduce(
+    (best, candidate) =>
+      phraseOccurrenceCount(question, candidate) >
+      phraseOccurrenceCount(question, best)
+        ? candidate
+        : best,
+    directConstraintFocus,
+  );
   const directSearch = searchStem(question);
   const sourceTopic = orderedFocusTerms(question).slice(0, 6).join(' ');
   const implementationQuery = compactQuery(
@@ -383,15 +407,15 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
       ],
       searchQueries: [
         `${constraintQuery || implementationQuery || sourceTopic || primary} official project documentation`,
-        `${implementationQuery || constraintQuery || sourceTopic || primary} repository readme implementation`,
-        `${implementationQuery || constraintQuery || sourceTopic || primary} github repository readme implementation`,
-        `${implementationQuery || sourceTopic || primary} practical applications use cases local deployment`,
-        `${implementationQuery || sourceTopic || primary} privacy local deployment architecture`,
+        `${subjectConstraintFocus} ${deliveryConstraintFocus} ${resourceConstraintFocus} repository readme implementation`,
+        `${subjectConstraintFocus} ${lateConstraintFocus} github repository readme implementation`,
+        `${subjectConstraintFocus} ${deliveryConstraintFocus} practical applications use cases local deployment`,
+        `${subjectConstraintFocus} ${deliveryConstraintFocus} privacy local deployment architecture`,
         `${resourceConstraintFocus || secondary} fixed compute budget benchmark comparison`,
         `${implementationQuery || constraintQuery || sourceTopic || primary} approaches alternatives comparison`,
         `${constraintQuery || implementationQuery || sourceTopic || primary} open source implementation comparison`,
-        `${implementationQuery || constraintQuery || sourceTopic || primary} measured benchmark resource requirements`,
-        `${constraintQuery || implementationQuery || sourceTopic || primary} deployment hardware requirements`,
+        `${subjectConstraintFocus} ${lateConstraintFocus} measured benchmark resource requirements`,
+        `${subjectConstraintFocus} ${lateConstraintFocus} deployment hardware requirements`,
         `${boundaryQuery || implementationQuery || sourceTopic || primary} limitations counterexamples failure cases`,
         `${sourceTopic || directSearch} official project documentation`,
         `${sourceTopic || primary} ${directConstraintFocus} primary source technical report`,

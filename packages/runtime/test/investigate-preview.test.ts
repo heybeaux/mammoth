@@ -124,14 +124,29 @@ describe('local investigation preview', () => {
   });
 
   it('keeps comma-separated delivery constraints in the governed review contract', () => {
-    const constraints = deriveDecisionConstraints(
-      'Yann LeCun argues that world models are important beyond the limitations of LLMs. With compute increasingly scarce, where do the biggest opportunities lie today for individuals building open-source, private, local systems based on world models using a single consumer GPU?',
-    )
+    const question =
+      'Yann LeCun argues that world models are important beyond the limitations of LLMs. With compute increasingly scarce, where do the biggest opportunities lie today for individuals building open-source, private, local systems based on world models using a single consumer GPU?';
+    const constraints = deriveDecisionConstraints(question)
       .join('\n')
       .toLocaleLowerCase('en-US');
 
     expect(constraints).toContain('open-source private local');
     expect(constraints).toContain('single consumer gpu');
+
+    const queries = planInvestigation(question).plan.searchQueries;
+    expect(
+      queries.some(
+        (query) =>
+          query.includes('world models') &&
+          query.includes(
+            'individuals building open-source private local systems',
+          ) &&
+          query.includes('repository readme implementation'),
+      ),
+    ).toBe(true);
+    expect(queries).toContain(
+      'world models single consumer GPU measured benchmark resource requirements',
+    );
   });
 
   it('projects one digest-bound preview into the required machine and reader artifacts', () => {
