@@ -771,3 +771,42 @@ investigate-governed-execution.test.ts investigate-preview.test.ts` passed
   `pnpm --filter @mammoth/runtime test -- investigate-governed-execution.test.ts
 investigate-preview.test.ts`, and `pnpm format:check` passed locally. No
   provider, search, paid, or Tavily effect was used in this repair checkpoint.
+
+## 2026-07-17 — V11 fresh live probes blocked; no acceptance claim
+
+- **Pushed repair commits:** `5cd9c8b` added source-cluster diversity, explicit
+  live `audit/acceptance-review.json`, stricter experiment checks, and
+  fail-closed decision-constraint gates. `c558ea3` reduced false unresolved
+  constraint failures when the portfolio actually covers a generated constraint.
+- **Local verification:** runtime typecheck, focused runtime live/preview tests,
+  focused CLI investigate tests, `pnpm lint`, and `pnpm format:check` passed.
+  Exact-head PR #146 CI for `c558ea3` run `29611685579` is green across
+  static/tests/build/foundation/p2-p4/p5-p7/p8-p9 plus CodeRabbit.
+- **Spend recomputation before live effects:** v34-v39 authoritative journals
+  settled **USD 2.440757400001**. V42 failed all four runs after model review
+  and added **USD 0.68021224** in per-run settled charges. V43 added **USD
+  0.6802017100000001** across three successful runs and one failed-closed
+  remote-clinic run. V44 substitute holdout added **USD 0.1700492**. Effective
+  continuation spend is **USD 3.971220550001**, leaving **USD
+  11.028779449999** under the USD 15 ceiling. All effects used only the
+  authorized Brave/OpenRouter credentials from `~/projects/tra/.env`; no Tavily
+  credential was read, sourced, tested, copied, or used.
+- **Fresh/probe evidence:** v42 preserved four failed-closed runs under
+  `evals/live/mammoth-core-loop-v42/`. V43 completed `holdout-grid-battery`,
+  `holdout-heritage-hvac`, and `world-model-local`, while
+  `holdout-remote-clinic` failed closed on insufficient broad portfolio.
+  V44 attempted a substitute rural-school air-quality holdout and failed closed
+  on an unresolved wildfire-smoke-exposure constraint. These are probe/non-
+  acceptance artifacts, not predicate evidence.
+- **Independent review:** read-only reviewer
+  `019f71cf-5060-7661-93f7-22e1585add4e` returned **overall FAIL** for v43.
+  It found that the internal acceptance artifact can report pass while the
+  reader still exposes unresolved decision constraints and template-like
+  experiment thresholds. World-model in particular leaves the open-source
+  constraint unresolved and does not fully answer the private/local/single-GPU
+  opportunity decision.
+- **Status:** predicates 9/10 remain **not proved**; predicates 11/12 are
+  blocked. PR #146 remains draft. No merge, tag, release, or deploy was
+  performed on Friday 2026-07-17. The next repair should make reader projection
+  and machine acceptance share the same real decision-constraint/experiment
+  quality contract before any further live spend.
