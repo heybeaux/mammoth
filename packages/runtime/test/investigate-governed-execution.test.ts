@@ -180,7 +180,7 @@ function liveAuthority(input: {
     },
     authorizedEffectKinds: ['search', 'retrieval', 'parser', 'model'] as const,
     authorizedDestinationOrigins: [
-      'https://api.tavily.com',
+      'https://api.search.brave.com',
       'https://openrouter.ai',
     ],
     authorizedRetrievalOrigins: ['https://sources.example.test'],
@@ -326,10 +326,10 @@ describe('governed acquisition execution', () => {
   });
 
   it('executes the governed live path through search, retrieval, parser, and model reservations', async () => {
-    process.env.TEST_TAVILY_KEY = 'tvly-test';
+    process.env.TEST_BRAVE_KEY = 'brave-test';
     process.env.TEST_MODEL_KEY = 'sk-test';
     const plan = boundPlan(
-      'Which field data synchronization strategies help remote clinics operate during intermittent connectivity?',
+      'Which field data synchronization strategies help remote clinics operate offline during intermittent connectivity while resolving conflicting patient records?',
     );
     const journalPath = join(
       await mkdtemp(join(tmpdir(), 'mammoth-live-test-')),
@@ -343,28 +343,63 @@ describe('governed acquisition execution', () => {
       trustedIssuerId: 'mammoth-core-loop-live-authority/v1',
       now: NOW,
     });
-    const sourceBody =
-      'Skip to main content. An official website of the United States government. Local-first systems keep writes available on devices while connectivity is intermittent. Conflict-free replicated data types can merge concurrent updates without a central coordinator. Remote clinic deployments need explicit conflict resolution workflows for ambiguous patient records.';
+    const sourceBodies = new Map([
+      [
+        'https://sources.example.test/clinic-sync-a',
+        'Skip to main content. An official website of the United States government. Local-first systems keep writes available on devices while connectivity is intermittent. Conflict-free replicated data types can merge concurrent updates without a central coordinator.',
+      ],
+      [
+        'https://sources.example.test/clinic-sync-b',
+        'Local-first replication guidance describes remote clinic offline synchronization during intermittent connectivity but does not address conflicting patient records.',
+      ],
+      [
+        'https://sources.example.test/clinic-conflict',
+        'Remote clinic deployments need explicit conflict resolution workflows for ambiguous patient records. Offline systems should surface patient-record conflicts for review instead of silently merging every concurrent update.',
+      ],
+    ]);
+    const retrievedUrls: string[] = [];
+    let searchCalls = 0;
     const fetchImpl: typeof fetch = (url) => {
       const href =
         typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
-      if (href === 'https://api.tavily.com/search') {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              results: [
+      if (href.startsWith('https://api.search.brave.com/res/v1/web/search')) {
+        searchCalls += 1;
+        const results =
+          searchCalls === 1
+            ? [
                 {
                   url: 'https://sources.example.test/unrelated',
                   title: 'Consumer privacy compliance overview',
                 },
                 {
-                  url: 'https://sources.example.test/clinic-sync',
+                  url: 'https://sources.example.test/clinic-sync-a',
                   title:
-                    'Remote clinic synchronization strategies for intermittent connectivity',
-                  content:
-                    'Local-first systems and conflict-free replicated data types for remote clinics.',
+                    'Official project documentation: remote clinic offline synchronization',
+                  description:
+                    'Implementation reference for local-first systems and conflict-free replicated data types.',
                 },
-              ],
+                {
+                  url: 'https://sources.example.test/clinic-sync-b',
+                  title: 'Blog: remote clinic offline replication explained',
+                  description:
+                    'Commentary about local-first replication for remote clinics.',
+                },
+              ]
+            : [
+                {
+                  url: 'https://sources.example.test/clinic-conflict',
+                  title:
+                    'Technical report: conflicting patient records resolution workflows',
+                  description:
+                    'Primary-source implementation evidence for explicit conflict resolution workflows.',
+                },
+              ];
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              web: {
+                results,
+              },
             }),
             { status: 200, headers: { 'content-type': 'application/json' } },
           ),
@@ -380,6 +415,75 @@ describe('governed acquisition execution', () => {
                     content: JSON.stringify({
                       summary:
                         'Local-first systems keep writes available and conflict-free replicated data types merge concurrent updates.',
+                      portfolio: [
+                        {
+                          rank: 1,
+                          title: 'Exception-first offline synchronization',
+                          statement:
+                            'Adopt local writes with explicit review for ambiguous patient-record conflicts.',
+                          rationale:
+                            'The admitted evidence supports both offline availability and a fail-safe path for ambiguous records.',
+                          constraints: [
+                            'Ambiguous patient-record conflicts require a documented human review path.',
+                          ],
+                          nextValidation:
+                            'Replay a bounded set of concurrent record edits and require every ambiguous merge to surface for review.',
+                          evidenceIndexes: [1, 3],
+                        },
+                      ],
+                      unresolvedConstraints: [
+                        'No admitted field trial establishes clinical outcome safety.',
+                      ],
+                      answerBullets: [
+                        {
+                          statement:
+                            'Local-first systems can preserve clinic work during intermittent connectivity while explicit conflict workflows guard ambiguous patient records.',
+                          evidenceIndexes: [1, 3],
+                        },
+                      ],
+                      mechanisms: [
+                        {
+                          statement:
+                            'The transferable mechanism is local write availability plus later conflict resolution.',
+                          evidenceIndexes: [1, 3],
+                        },
+                      ],
+                      dissent: [
+                        {
+                          statement:
+                            'The available fixture evidence does not prove the strategy in a deployed remote clinic.',
+                          evidenceIndexes: [3],
+                        },
+                      ],
+                      boundaryConditions: [
+                        {
+                          statement:
+                            'The strategy depends on explicit handling for ambiguous patient-record conflicts.',
+                          evidenceIndexes: [3],
+                        },
+                      ],
+                      hypotheses: [
+                        {
+                          statement:
+                            'Remote clinic sync will be safer when ambiguous patient-record conflicts are surfaced as workflow exceptions.',
+                          falsifier:
+                            'Field trials showing automated merges safely resolve ambiguous patient records would falsify the workflow-exception hypothesis.',
+                          evidenceIndexes: [2, 3],
+                        },
+                      ],
+                      experimentProposals: [
+                        {
+                          statement:
+                            'Run a no-effect design review comparing offline writes, merge behavior, and explicit patient-record conflict handling.',
+                          resolvesUncertainty:
+                            'Whether the proposed synchronization strategy preserves both availability and patient-record safety.',
+                          threshold:
+                            'The design passes only if every ambiguous patient-record conflict has a documented review path.',
+                          safetyBoundary:
+                            'No patient data is touched and any real deployment requires separate authority.',
+                          evidenceIndexes: [1, 3],
+                        },
+                      ],
                       weaknesses: [
                         'Only one source was available in the fixture.',
                       ],
@@ -403,26 +507,31 @@ describe('governed acquisition execution', () => {
       trustedIssuerId: 'mammoth-core-loop-live-authority/v1',
       now: NOW,
       budgetJournalPath: journalPath,
-      searchProvider: 'tavily',
-      searchApiKeyEnvVar: 'TEST_TAVILY_KEY',
+      searchApiKeyEnvVar: 'TEST_BRAVE_KEY',
       modelApiKeyEnvVar: 'TEST_MODEL_KEY',
       modelBaseUrl: 'https://openrouter.ai/api/v1',
       modelId: 'test/model',
       fetchImpl,
-      retrieve: (request) =>
-        request.url.endsWith('/unrelated')
-          ? Promise.reject(new Error('low-relevance result was retrieved'))
-          : Promise.resolve({
-              requestedUrl: request.url,
-              finalUrl: request.url,
-              redirectChain: [],
-              retrievedAt: NOW,
-              status: 200,
-              headers: { 'content-type': 'text/plain' },
-              mediaType: 'text/plain',
-              bytes: new TextEncoder().encode(sourceBody),
-              networkReceipts: [],
-            }),
+      retrieve: (request) => {
+        const body = sourceBodies.get(request.url);
+        if (!body) {
+          return Promise.reject(
+            new Error(`unexpected retrieval: ${request.url}`),
+          );
+        }
+        retrievedUrls.push(request.url);
+        return Promise.resolve({
+          requestedUrl: request.url,
+          finalUrl: request.url,
+          redirectChain: [],
+          retrievedAt: NOW,
+          status: 200,
+          headers: { 'content-type': 'text/plain' },
+          mediaType: 'text/plain',
+          bytes: new TextEncoder().encode(body),
+          networkReceipts: [],
+        });
+      },
       sourceClassTargets: [
         {
           sourceClass: 'public_web',
@@ -430,8 +539,9 @@ describe('governed acquisition execution', () => {
           mandatory: true,
         },
       ],
-      maxCandidates: 1,
+      maxCandidates: 2,
       maxClaimsPerSnapshot: 2,
+      minimumSearchIntervalMs: 0,
     });
     expect(execution.executionMode).toBe('governed_live');
     expect(execution.externalEffectsExecuted).toBe(true);
@@ -457,6 +567,15 @@ describe('governed acquisition execution', () => {
         (hint) => hint.reason === 'low_relevance_hint',
       ),
     ).toBe(true);
+    expect(retrievedUrls).toContain(
+      'https://sources.example.test/clinic-sync-a',
+    );
+    expect(retrievedUrls).toContain(
+      'https://sources.example.test/clinic-conflict',
+    );
+    expect(retrievedUrls).not.toContain(
+      'https://sources.example.test/clinic-sync-b',
+    );
     const bundle = composeGovernedInvestigationBundle({
       plan,
       intentSet,
@@ -464,9 +583,14 @@ describe('governed acquisition execution', () => {
       execution,
       now: NOW,
     });
+    expect(bundle.files['reader/report.md']).toContain('## Direct answer');
     expect(bundle.files['reader/report.md']).toContain(
-      'Source-bounded deduction:',
+      '## Ranked decision portfolio',
     );
+    expect(bundle.files['reader/report.md']).toContain(
+      '## Unresolved constraints',
+    );
+    expect(bundle.files['reader/report.md']).not.toMatch(/evidence\s*index/iu);
     expect(bundle.files['execution-receipt.json']).toContain(
       '"externalEffectsExecuted": true',
     );

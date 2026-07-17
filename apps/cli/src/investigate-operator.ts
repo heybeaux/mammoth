@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { canonicalDigest, P9LiveAuthorityReceiptSchema } from '@mammoth/domain';
 import {
@@ -21,6 +21,7 @@ import {
 } from '@mammoth/runtime';
 
 const PUBLIC_WEB_RETRIEVAL_AUTHORITY_ORIGIN = 'https://public-web.invalid';
+const LOOP_LIVE_BUDGET_CEILING_USD = 15;
 
 export interface InvestigateCliIo {
   readonly stdout: (value: string) => void;
@@ -232,7 +233,7 @@ async function executeGovernedOfflineRun(
   let actorOption: string | undefined;
   let live = false;
   let budgetJournalOption: string | undefined;
-  let searchProviderOption: 'brave' | 'tavily' = 'brave';
+  let loopBudgetJournalOption: string | undefined;
   let searchEnvOption = 'MAMMOTH_SEARCH_BRAVE_API_KEY';
   let modelEnvOption = 'OPENROUTER_API_KEY';
   let modelBaseUrlOption = 'https://openrouter.ai/api/v1';
@@ -288,25 +289,31 @@ async function executeGovernedOfflineRun(
         throw new Error('--budget-journal requires a path');
       }
       budgetJournalOption = value;
+    } else if (option === '--loop-budget-journal') {
+      if (loopBudgetJournalOption !== undefined) {
+        throw new Error('duplicate --loop-budget-journal');
+      }
+      if (!value || value.startsWith('-')) {
+        throw new Error('--loop-budget-journal requires a path');
+      }
+      loopBudgetJournalOption = value;
     } else if (option === '--brave-env') {
       if (!value || value.startsWith('-')) {
         throw new Error('--brave-env requires an environment variable name');
       }
       searchEnvOption = value;
     } else if (option === '--search-provider') {
-      if (value !== 'brave' && value !== 'tavily') {
-        throw new Error('--search-provider must be brave or tavily');
-      }
-      searchProviderOption = value;
-      if (
-        value === 'tavily' &&
-        searchEnvOption === 'MAMMOTH_SEARCH_BRAVE_API_KEY'
-      ) {
-        searchEnvOption = 'TAVILY_API_KEY';
+      if (value !== 'brave') {
+        throw new Error(
+          '--search-provider only accepts brave in this governed loop',
+        );
       }
     } else if (option === '--search-env') {
       if (!value || value.startsWith('-')) {
         throw new Error('--search-env requires an environment variable name');
+      }
+      if (/tavily/iu.test(value)) {
+        throw new Error('Tavily credentials are not authorized for this loop');
       }
       searchEnvOption = value;
     } else if (option === '--model-env') {
@@ -349,6 +356,11 @@ async function executeGovernedOfflineRun(
       'governed live execution requires --budget-journal PATH for the durable spend journal',
     );
   }
+  if (live && !loopBudgetJournalOption) {
+    throw new Error(
+      'governed live execution requires --loop-budget-journal PATH for the aggregate live spend journal',
+    );
+  }
   const now = dependencies.now?.() ?? new Date().toISOString();
   const actorId = actorOption ?? 'operator:local';
 
@@ -377,6 +389,16 @@ async function executeGovernedOfflineRun(
     budgetJournalOption === undefined
       ? undefined
       : resolve(cwd, budgetJournalOption);
+  const loopBudgetJournalPath =
+    loopBudgetJournalOption === undefined
+      ? undefined
+      : resolve(cwd, loopBudgetJournalOption);
+  const loopBudgetState = live
+    ? await openLoopBudgetJournal(loopBudgetJournalPath ?? '', now)
+    : undefined;
+  if (live && loopBudgetState && loopBudgetState.remainingUsd <= 0) {
+    throw new Error('aggregate live budget exhausted before governed effect');
+  }
   const effectAuthority = live
     ? mintLoopLiveAuthorityReceipt({
         plan,
@@ -384,6 +406,7 @@ async function executeGovernedOfflineRun(
         actorId,
         authorizedAt: now,
         budgetJournalPath: budgetJournalPath ?? '',
+        budgetLimitUsd: loopBudgetState?.remainingUsd ?? 0,
         modelBaseUrl: modelBaseUrlOption,
         authorizedRetrievalOrigins,
       })
@@ -454,6 +477,18 @@ async function executeGovernedOfflineRun(
     return 0;
   }
 
+  if (live && loopBudgetJournalPath && loopBudgetState) {
+    await appendLoopBudgetRecord(loopBudgetJournalPath, {
+      kind: 'run_started',
+      runId: effectAuthority.executionId,
+      planDigest: plan.planDigest,
+      authorityReceiptDigest: effectAuthority.receiptDigest,
+      runLimitUsd: effectAuthority.budgetLimit.currencyUsd,
+      priorSpentUsd: loopBudgetState.spentUsd,
+      remainingBeforeUsd: loopBudgetState.remainingUsd,
+      at: now,
+    });
+  }
   const execution = live
     ? await executeGovernedLiveAcquisition({
         intentSet,
@@ -462,7 +497,6 @@ async function executeGovernedOfflineRun(
         trustedIssuerId: trustedIssuerOption,
         now,
         budgetJournalPath: budgetJournalPath ?? '',
-        searchProvider: searchProviderOption,
         searchApiKeyEnvVar: searchEnvOption,
         modelApiKeyEnvVar: modelEnvOption,
         modelBaseUrl: modelBaseUrlOption,
@@ -481,6 +515,20 @@ async function executeGovernedOfflineRun(
         ),
         now,
       });
+  if (live && loopBudgetJournalPath) {
+    const actualUsd = liveEffectSpendUsd(execution.effectReceipts);
+    const prior = await readLoopBudgetJournal(loopBudgetJournalPath);
+    await appendLoopBudgetRecord(loopBudgetJournalPath, {
+      kind: 'run_settled',
+      runId: effectAuthority.executionId,
+      planDigest: plan.planDigest,
+      actualUsd,
+      remainingAfterUsd: roundUsd(
+        LOOP_LIVE_BUDGET_CEILING_USD - prior.spentUsd - actualUsd,
+      ),
+      at: now,
+    });
+  }
   const bundle = composeGovernedInvestigationBundle({
     plan,
     intentSet,
@@ -542,6 +590,7 @@ function mintLoopLiveAuthorityReceipt(input: {
   readonly actorId: string;
   readonly authorizedAt: string;
   readonly budgetJournalPath: string;
+  readonly budgetLimitUsd: number;
   readonly modelBaseUrl: string;
   readonly authorizedRetrievalOrigins: readonly string[];
 }) {
@@ -554,7 +603,7 @@ function mintLoopLiveAuthorityReceipt(input: {
     consumptionNonce,
   }).slice(7, 23)}`;
   const budgetLimit = {
-    currencyUsd: 15,
+    currencyUsd: input.budgetLimitUsd,
     requests: 10_000,
     inputTokens: 2_000_000,
     outputTokens: 500_000,
@@ -572,6 +621,7 @@ function mintLoopLiveAuthorityReceipt(input: {
     kind: 'p9-consumption-store/v1',
     id: input.budgetJournalPath,
   });
+  const budgetAllocation = allocateBudgetUsd(input.budgetLimitUsd);
   const planScope = {
     proposalId: `proposal:${input.plan.planId}`,
     proposalDigest: input.plan.sourcePreviewDigest,
@@ -585,10 +635,10 @@ function mintLoopLiveAuthorityReceipt(input: {
       kind: 'investigate-live-general-web-pack/v1',
     }),
     budgetAllocation: {
-      currencyUsd: 15,
-      searchUsd: 4,
-      retrievalParsingUsd: 1,
-      modelsUsd: 10,
+      currencyUsd: input.budgetLimitUsd,
+      searchUsd: budgetAllocation.searchUsd,
+      retrievalParsingUsd: budgetAllocation.retrievalParsingUsd,
+      modelsUsd: budgetAllocation.modelsUsd,
     },
   };
   const identity = {
@@ -634,11 +684,7 @@ function mintLoopLiveAuthorityReceipt(input: {
     evaluatorProfileId: 'openai-compatible-review-live',
     budgetLimit,
     authorizedEffectKinds: ['search', 'retrieval', 'parser', 'model'] as const,
-    authorizedDestinationOrigins: [
-      'https://api.search.brave.com',
-      'https://api.tavily.com',
-      modelOrigin,
-    ],
+    authorizedDestinationOrigins: ['https://api.search.brave.com', modelOrigin],
     authorizedRetrievalOrigins:
       input.authorizedRetrievalOrigins.length > 0
         ? [...new Set(input.authorizedRetrievalOrigins)]
@@ -681,5 +727,187 @@ function slug(value: string): string {
 }
 
 function investigateUsage(): string {
-  return 'usage: mammoth investigate "QUESTION OR THEORY" [--output PATH]\n       mammoth investigate --plan PLAN.json [--authority RECEIPT.json] [--trusted-issuer ISSUER_ID] [--output PATH]\n       mammoth investigate --execute "QUESTION OR THEORY" --offline-sources CATALOG.json --approve [--trusted-issuer ISSUER_ID] [--actor OPERATOR_ID] [--output PATH]\n       mammoth investigate --execute "QUESTION OR THEORY" --live --approve --trusted-issuer mammoth-core-loop-live-authority/v1 --budget-journal PATH [--search-provider brave|tavily] [--authorized-retrieval-origin ORIGIN] [--model MODEL] [--output PATH]';
+  return 'usage: mammoth investigate "QUESTION OR THEORY" [--output PATH]\n       mammoth investigate --plan PLAN.json [--authority RECEIPT.json] [--trusted-issuer ISSUER_ID] [--output PATH]\n       mammoth investigate --execute "QUESTION OR THEORY" --offline-sources CATALOG.json --approve [--trusted-issuer ISSUER_ID] [--actor OPERATOR_ID] [--output PATH]\n       mammoth investigate --execute "QUESTION OR THEORY" --live --approve --trusted-issuer mammoth-core-loop-live-authority/v1 --budget-journal PATH --loop-budget-journal PATH [--search-provider brave] [--authorized-retrieval-origin ORIGIN] [--model MODEL] [--output PATH]';
+}
+
+type LoopBudgetEntry =
+  | {
+      readonly kind: 'genesis';
+      readonly ceilingUsd: number;
+      readonly at: string;
+    }
+  | {
+      readonly kind: 'run_started';
+      readonly runId: string;
+      readonly planDigest: string;
+      readonly authorityReceiptDigest: string;
+      readonly runLimitUsd: number;
+      readonly priorSpentUsd: number;
+      readonly remainingBeforeUsd: number;
+      readonly at: string;
+    }
+  | {
+      readonly kind: 'run_settled';
+      readonly runId: string;
+      readonly planDigest: string;
+      readonly actualUsd: number;
+      readonly remainingAfterUsd: number;
+      readonly at: string;
+    };
+
+interface LoopBudgetRecord {
+  readonly schemaVersion: '1.0.0';
+  readonly contractFamily: 'investigate-live-loop-budget/v1';
+  readonly sequence: number;
+  readonly prevDigest: string | null;
+  readonly entry: LoopBudgetEntry;
+  readonly recordDigest: string;
+}
+
+interface LoopBudgetState {
+  readonly records: readonly LoopBudgetRecord[];
+  readonly spentUsd: number;
+  readonly remainingUsd: number;
+}
+
+function roundUsd(value: number): number {
+  return Math.round(value * 1_000_000_000_000) / 1_000_000_000_000;
+}
+
+function allocateBudgetUsd(limitUsd: number): {
+  readonly searchUsd: number;
+  readonly retrievalParsingUsd: number;
+  readonly modelsUsd: number;
+} {
+  const units = Math.floor(limitUsd * 1_000_000);
+  const searchUnits = Math.floor(units * 0.25);
+  const retrievalUnits = Math.floor(units * 0.1);
+  const modelUnits = Math.max(0, units - searchUnits - retrievalUnits);
+  return {
+    searchUsd: searchUnits / 1_000_000,
+    retrievalParsingUsd: retrievalUnits / 1_000_000,
+    modelsUsd: modelUnits / 1_000_000,
+  };
+}
+
+async function openLoopBudgetJournal(
+  path: string,
+  now: string,
+): Promise<LoopBudgetState> {
+  await mkdir(dirname(path), { recursive: true });
+  const existing = await readLoopBudgetJournal(path);
+  if (existing.records.length > 0) return existing;
+  await appendLoopBudgetRecord(path, {
+    kind: 'genesis',
+    ceilingUsd: LOOP_LIVE_BUDGET_CEILING_USD,
+    at: now,
+  });
+  return readLoopBudgetJournal(path);
+}
+
+async function readLoopBudgetJournal(path: string): Promise<LoopBudgetState> {
+  let raw = '';
+  try {
+    raw = await readFile(path, 'utf8');
+  } catch {
+    return {
+      records: [],
+      spentUsd: 0,
+      remainingUsd: LOOP_LIVE_BUDGET_CEILING_USD,
+    };
+  }
+  const lines = raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  let prevDigest: string | null = null;
+  const records: LoopBudgetRecord[] = [];
+  let spentUsd = 0;
+  for (const [index, line] of lines.entries()) {
+    const parsed = JSON.parse(line) as {
+      readonly schemaVersion?: unknown;
+      readonly contractFamily?: unknown;
+      readonly sequence?: unknown;
+      readonly prevDigest?: unknown;
+      readonly entry?: unknown;
+      readonly recordDigest?: unknown;
+    };
+    const { recordDigest, ...identity } = parsed;
+    if (
+      parsed.schemaVersion !== '1.0.0' ||
+      parsed.contractFamily !== 'investigate-live-loop-budget/v1' ||
+      parsed.sequence !== index ||
+      parsed.prevDigest !== prevDigest ||
+      recordDigest !== canonicalDigest(identity)
+    ) {
+      throw new Error(
+        `aggregate live budget journal hash chain breaks at line ${String(
+          index,
+        )}`,
+      );
+    }
+    const record = parsed as LoopBudgetRecord;
+    if (index === 0) {
+      if (
+        record.entry.kind !== 'genesis' ||
+        record.entry.ceilingUsd !== LOOP_LIVE_BUDGET_CEILING_USD
+      ) {
+        throw new Error(
+          'aggregate live budget journal must begin with the authorized USD 15 genesis',
+        );
+      }
+    }
+    if (record.entry.kind === 'run_settled') {
+      spentUsd = roundUsd(spentUsd + record.entry.actualUsd);
+    }
+    prevDigest = record.recordDigest;
+    records.push(record);
+  }
+  const remainingUsd = roundUsd(LOOP_LIVE_BUDGET_CEILING_USD - spentUsd);
+  if (remainingUsd < 0) {
+    throw new Error('aggregate live budget journal exceeds its USD 15 ceiling');
+  }
+  return { records, spentUsd, remainingUsd };
+}
+
+async function appendLoopBudgetRecord(
+  path: string,
+  entry: LoopBudgetEntry,
+): Promise<void> {
+  const state = await readLoopBudgetJournal(path);
+  if (entry.kind === 'run_started' && entry.remainingBeforeUsd <= 0) {
+    throw new Error('aggregate live budget exhausted before governed effect');
+  }
+  if (
+    entry.kind === 'run_settled' &&
+    state.spentUsd + entry.actualUsd > LOOP_LIVE_BUDGET_CEILING_USD
+  ) {
+    throw new Error('aggregate live budget settlement exceeds USD 15 ceiling');
+  }
+  const identity = {
+    schemaVersion: '1.0.0' as const,
+    contractFamily: 'investigate-live-loop-budget/v1' as const,
+    sequence: state.records.length,
+    prevDigest: state.records.at(-1)?.recordDigest ?? null,
+    entry,
+  };
+  await appendFile(
+    path,
+    `${JSON.stringify({
+      ...identity,
+      recordDigest: canonicalDigest(identity),
+    })}\n`,
+    'utf8',
+  );
+}
+
+function liveEffectSpendUsd(receipts: readonly unknown[]): number {
+  return roundUsd(
+    receipts.reduce<number>((sum, receipt) => {
+      const charged = (receipt as { charged?: { currencyUsd?: unknown } })
+        .charged;
+      const value = Number(charged?.currencyUsd ?? 0);
+      return sum + (Number.isFinite(value) ? value : 0);
+    }, 0),
+  );
 }

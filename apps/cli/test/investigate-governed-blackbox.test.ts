@@ -254,6 +254,48 @@ describe('mammoth investigate --execute black box', () => {
       ]),
     ).rejects.toMatchObject({ code: 1 });
   });
+
+  it('requires an aggregate loop budget journal for governed live execution', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mammoth-live-no-loop-'));
+    await expect(
+      runInvestigate([
+        'investigate',
+        '--execute',
+        QUESTION,
+        '--live',
+        '--approve',
+        '--trusted-issuer',
+        'mammoth-core-loop-live-authority/v1',
+        '--budget-journal',
+        join(root, 'run-budget.jsonl'),
+        '--output',
+        join(root, 'run'),
+      ]),
+    ).rejects.toMatchObject({ code: 1 });
+  });
+
+  it('rejects Tavily selection before governed live execution can start', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mammoth-live-tavily-'));
+    await expect(
+      runInvestigate([
+        'investigate',
+        '--execute',
+        QUESTION,
+        '--live',
+        '--approve',
+        '--trusted-issuer',
+        'mammoth-core-loop-live-authority/v1',
+        '--budget-journal',
+        join(root, 'run-budget.jsonl'),
+        '--loop-budget-journal',
+        join(root, 'loop-budget.jsonl'),
+        '--search-provider',
+        'tavily',
+        '--output',
+        join(root, 'run'),
+      ]),
+    ).rejects.toMatchObject({ code: 1 });
+  });
 });
 
 describe('mammoth investigate --plan trusted-issuer pinning', () => {

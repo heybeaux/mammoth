@@ -223,8 +223,42 @@ export interface GovernedAcquisitionExecutionInput {
 
 export interface GovernedLiveModelReview {
   readonly summary: string;
+  readonly portfolio?: readonly GovernedLiveReviewPortfolioItem[];
+  readonly unresolvedConstraints?: readonly string[];
+  readonly answerBullets?: readonly GovernedLiveReviewCitedStatement[];
+  readonly mechanisms?: readonly GovernedLiveReviewCitedStatement[];
+  readonly dissent?: readonly GovernedLiveReviewCitedStatement[];
+  readonly boundaryConditions?: readonly GovernedLiveReviewCitedStatement[];
+  readonly hypotheses?: readonly GovernedLiveReviewHypothesis[];
+  readonly experimentProposals?: readonly GovernedLiveReviewExperiment[];
   readonly weaknesses: readonly string[];
   readonly suggestedSearches: readonly string[];
+}
+
+export interface GovernedLiveReviewPortfolioItem
+  extends GovernedLiveReviewCitedStatement {
+  readonly rank: number;
+  readonly title: string;
+  readonly rationale: string;
+  readonly constraints: readonly string[];
+  readonly nextValidation: string;
+}
+
+export interface GovernedLiveReviewCitedStatement {
+  readonly statement: string;
+  readonly evidenceIndexes: readonly number[];
+}
+
+export interface GovernedLiveReviewHypothesis
+  extends GovernedLiveReviewCitedStatement {
+  readonly falsifier: string;
+}
+
+export interface GovernedLiveReviewExperiment
+  extends GovernedLiveReviewCitedStatement {
+  readonly resolvesUncertainty: string;
+  readonly threshold: string;
+  readonly safetyBoundary: string;
 }
 
 export interface GovernedLiveAcquisitionExecutionInput {
@@ -234,7 +268,6 @@ export interface GovernedLiveAcquisitionExecutionInput {
   readonly trustedIssuerId: string | undefined;
   readonly now: string;
   readonly budgetJournalPath: string;
-  readonly searchProvider?: 'brave' | 'tavily';
   readonly searchApiKeyEnvVar: string;
   readonly modelApiKeyEnvVar: string;
   readonly modelBaseUrl: string;
@@ -280,7 +313,7 @@ function isLowInformationLiveSpan(quote: string): boolean {
 }
 
 function liveRelevanceTerms(question: string): readonly string[] {
-  return textTerms(question).slice(0, 16);
+  return textTerms(question).slice(0, 32);
 }
 
 function textRelevanceScore(value: string, terms: readonly string[]): number {
@@ -309,26 +342,29 @@ function liveHintRelevanceScore(input: {
   readonly query: string;
   readonly question: string;
 }): number {
-  const terms = [
-    ...new Set([...textTerms(input.question), ...textTerms(input.query)]),
-  ];
+  const questionTerms = textTerms(input.question);
+  const queryTerms = textTerms(input.query);
   const surface = [
     input.hint.title ?? '',
     input.hint.description ?? '',
     input.hint.url.replace(/[^\p{L}\p{N}-]+/gu, ' '),
   ].join(' ');
-  return textRelevanceScore(surface, terms);
+  return (
+    textRelevanceScore(surface, questionTerms) * 2 +
+    textRelevanceScore(surface, queryTerms) +
+    liveSourceQualityScore(input.hint)
+  );
 }
 
 function minimumHintRelevance(input: {
   readonly query: string;
   readonly question: string;
 }): number {
-  const terms = new Set([
-    ...textTerms(input.question),
-    ...textTerms(input.query),
-  ]);
-  return Math.max(2, Math.min(4, Math.ceil(terms.size / 6)));
+  const questionTerms = textTerms(input.question);
+  const queryTerms = textTerms(input.query);
+  const questionMinimum = Math.min(6, Math.ceil(questionTerms.length / 5));
+  const queryMinimum = Math.min(4, Math.ceil(queryTerms.length / 6));
+  return Math.max(3, questionMinimum + queryMinimum);
 }
 
 function rankLiveSpans(
@@ -342,6 +378,88 @@ function rankLiveSpans(
     if (relevance !== 0) return relevance;
     return informativeWordCount(right.quote) - informativeWordCount(left.quote);
   });
+}
+
+function liveSourceQualityScore(hint: DiscoveredSourceHint): number {
+  let score = 0;
+  try {
+    const url = new URL(hint.url);
+    const host = url.hostname.toLocaleLowerCase('en-US');
+    const path = url.pathname.toLocaleLowerCase('en-US');
+    if (/\.(?:edu|gov)$/u.test(host)) score += 3;
+    if (/^(?:docs?|developer|developers|research)\./u.test(host)) score += 2;
+    if (/\b(?:github|gitlab|sourcehut|codeberg)\b/u.test(host)) score += 3;
+    if (/\b(?:arxiv|doi|pubmed|ncbi|semanticscholar)\b/u.test(host)) {
+      score += 2;
+    }
+    if (
+      /\b(?:docs?|documentation|papers?|publications?|reports?|research|benchmarks?|repository|repo|manual|reference|readme|requirements)\b/u.test(
+        path,
+      )
+    ) {
+      score += 1;
+    }
+    if (/\b(?:login|signup|tag|category|search|privacy|terms)\b/u.test(path)) {
+      score -= 2;
+    }
+  } catch {
+    score -= 2;
+  }
+  const surface =
+    `${hint.title ?? ''} ${hint.description ?? ''}`.toLocaleLowerCase('en-US');
+  if (
+    /\b(?:official (?:project|documentation)|benchmark|evaluation|repository|readme|implementation|source code|model card|field trial|guidance|technical report|paper|study|hardware requirements|memory requirements)\b/u.test(
+      surface,
+    )
+  ) {
+    score += 2;
+  }
+  if (
+    /\b(?:blog|opinion|explained|wake-up call|what you need to know|news roundup|sponsored)\b/u.test(
+      surface,
+    )
+  ) {
+    score -= 3;
+  }
+  return score;
+}
+
+function requiresDirectDecisionEvidence(query: string): boolean {
+  return /\b(?:official|documentation|primary source|technical report|benchmark|requirements|repository|readme|implementation|evaluation)\b/iu.test(
+    query,
+  );
+}
+
+function interleaveRelevantHintsByQuery(
+  entries: readonly {
+    readonly hint: DiscoveredSourceHint;
+    readonly score: number;
+  }[],
+  queryIds: readonly string[],
+): readonly DiscoveredSourceHint[] {
+  const queues = new Map<string, typeof entries>();
+  for (const queryId of queryIds) {
+    queues.set(
+      queryId,
+      entries
+        .filter((entry) => entry.hint.queryId === queryId)
+        .sort((left, right) => right.score - left.score),
+    );
+  }
+  const ordered: DiscoveredSourceHint[] = [];
+  let progressed = true;
+  while (progressed) {
+    progressed = false;
+    for (const queryId of queryIds) {
+      const queue = queues.get(queryId) ?? [];
+      const [next, ...rest] = queue;
+      if (!next) continue;
+      ordered.push(next.hint);
+      queues.set(queryId, rest);
+      progressed = true;
+    }
+  }
+  return ordered;
 }
 
 function isRetrievalOriginAuthorized(input: {
@@ -1027,7 +1145,7 @@ export async function executeGovernedLiveAcquisition(
       'claims per snapshot must be a positive integer',
     );
   }
-  const maxCandidates = input.maxCandidates ?? 8;
+  const maxCandidates = input.maxCandidates ?? 16;
   if (!Number.isInteger(maxCandidates) || maxCandidates < 1) {
     refuse('invalid_candidate_bound', 'live candidate bound must be positive');
   }
@@ -1039,10 +1157,7 @@ export async function executeGovernedLiveAcquisition(
   const authorizedRetrievalOrigins = new Set(
     authority.authorizedRetrievalOrigins.map((value) => new URL(value).origin),
   );
-  const searchOrigin =
-    (input.searchProvider ?? 'brave') === 'tavily'
-      ? 'https://api.tavily.com'
-      : 'https://api.search.brave.com';
+  const searchOrigin = 'https://api.search.brave.com';
   if (!authorizedDestinationOrigins.has(searchOrigin)) {
     refuse(
       'search_destination_origin_unauthorized',
@@ -1089,10 +1204,7 @@ export async function executeGovernedLiveAcquisition(
     for (const intent of discoveryIntents) {
       const result = await executor.execute<readonly GovernedDiscoveryHint[]>({
         id: `live-search:${intent.intentId}`,
-        catalogEntryId:
-          (input.searchProvider ?? 'brave') === 'tavily'
-            ? 'tavily-search'
-            : 'brave-search',
+        catalogEntryId: 'brave-search',
         ceiling: ceiling({
           bytes: 2_000_000,
           durationMs: 30_000,
@@ -1104,14 +1216,10 @@ export async function executeGovernedLiveAcquisition(
           if (delayMs > 0) {
             await new Promise((resolve) => setTimeout(resolve, delayMs));
           }
-          nextSearchAt =
-            Date.now() +
-            (input.minimumSearchIntervalMs ??
-              ((input.searchProvider ?? 'brave') === 'brave' ? 2_000 : 0));
+          nextSearchAt = Date.now() + (input.minimumSearchIntervalMs ?? 2_000);
           const outcome = await liveSearch({
             query: intent.subject,
             apiKeyEnvVar: input.searchApiKeyEnvVar,
-            provider: input.searchProvider ?? 'brave',
             ...(input.fetchImpl === undefined
               ? {}
               : { fetchImpl: input.fetchImpl }),
@@ -1125,10 +1233,17 @@ export async function executeGovernedLiveAcquisition(
       });
       if (result.status === 'failed') throw asError(result.error);
       for (const hint of result.value) {
+        const querySubject = intent.subject.toLocaleLowerCase('en-US');
+        const sourceClass =
+          /\b(?:limitations?|counterexamples?|failure|failures|risks?|contradictions?|replication)\b/u.test(
+            querySubject,
+          )
+            ? 'counterevidence'
+            : hint.sourceClass;
         hints.push({
           queryId: intent.intentId,
           url: hint.url,
-          sourceClass: hint.sourceClass,
+          sourceClass,
           ...(hint.title === undefined ? {} : { title: hint.title }),
           ...(hint.description === undefined
             ? {}
@@ -1149,7 +1264,7 @@ export async function executeGovernedLiveAcquisition(
       discoveryIntents.map((intent) => [intent.intentId, intent.subject]),
     );
     const lowRelevanceHints: RejectedSourceHint[] = [];
-    const relevantHints = hints
+    const relevantHintEntries = hints
       .map((hint) => {
         const query = plannedQueryById.get(hint.queryId) ?? '';
         return {
@@ -1166,15 +1281,22 @@ export async function executeGovernedLiveAcquisition(
         };
       })
       .filter((entry) => {
-        if (entry.score >= entry.minimum) return true;
+        const query = plannedQueryById.get(entry.hint.queryId) ?? '';
+        const directEnough =
+          !requiresDirectDecisionEvidence(query) ||
+          liveSourceQualityScore(entry.hint) >= 2;
+        if (entry.score >= entry.minimum && directEnough) return true;
         lowRelevanceHints.push({
           hint: entry.hint,
           reason: 'low_relevance_hint',
         });
         return false;
       })
-      .sort((left, right) => right.score - left.score)
-      .map((entry) => entry.hint);
+      .sort((left, right) => right.score - left.score);
+    const relevantHints = interleaveRelevantHintsByQuery(
+      relevantHintEntries,
+      discoveryIntents.map((intent) => intent.intentId),
+    );
 
     const selection = selectPlannedAcquisitionCandidates({
       scope: {
@@ -1442,6 +1564,11 @@ export async function executeGovernedLiveAcquisition(
         const rawContentDigest = contentDigest(retrieved.bytes);
         const parsedBytes = new TextEncoder().encode(parsed.text);
         const parsedTextDigest = contentDigest(parsedBytes);
+        const candidateSearchTerms = textTerms(
+          plannedQueryById.get(
+            candidateQuery.get(candidate.candidateId) ?? '',
+          ) ?? '',
+        );
         const spans = rankLiveSpans(
           deriveBoundedEvidenceSpans({
             body: parsed.text,
@@ -1449,9 +1576,11 @@ export async function executeGovernedLiveAcquisition(
             bounds: { maximumWindowCharacters: 160_000 },
             isExcluded: isLowInformationLiveSpan,
           }).filter((span) =>
-            isLiveSpanQuestionRelevant(span.quote, relevanceTerms),
+            isLiveSpanQuestionRelevant(span.quote, [
+              ...new Set([...relevanceTerms, ...candidateSearchTerms]),
+            ]),
           ),
-          relevanceTerms,
+          [...new Set([...relevanceTerms, ...candidateSearchTerms])],
         );
         recordAttempt(
           candidate,
@@ -1529,7 +1658,7 @@ export async function executeGovernedLiveAcquisition(
       id: 'live-model:independent-review',
       catalogEntryId: 'openai-compatible-model',
       ceiling: ceiling({
-        inputTokens: 12_000,
+        inputTokens: 20_000,
         outputTokens: 1_200,
         bytes: 500_000,
         durationMs: 120_000,
@@ -1545,7 +1674,7 @@ export async function executeGovernedLiveAcquisition(
             : { fetchImpl: input.fetchImpl }),
           claims: claims
             .filter((claim) => claim.decision === 'admitted')
-            .slice(0, 18),
+            .slice(0, 32),
         });
         return {
           value: outcome.review,
@@ -1555,6 +1684,12 @@ export async function executeGovernedLiveAcquisition(
       },
     });
     if (modelReview.status === 'failed') throw asError(modelReview.error);
+    assertDecisionGradeReview({
+      review: modelReview.value,
+      admittedEvidenceCount: claims.filter(
+        (claim) => claim.decision === 'admitted',
+      ).length,
+    });
     const reviewSeed = canonicalDigest(modelReview.value).slice(7, 23);
     modelWork.push(
       liveWorkRef({
@@ -1659,17 +1794,6 @@ export function buildInvestigateLivePriceCatalog() {
         costPerByteUsd: 0,
       },
       {
-        id: 'tavily-search',
-        provider: 'tavily-search/v1',
-        effectKind: 'search' as const,
-        parserClass: null,
-        flatCostUsd: 0,
-        costPerRequestUsd: 0.01,
-        costPerInputTokenUsd: 0,
-        costPerOutputTokenUsd: 0,
-        costPerByteUsd: 0,
-      },
-      {
         id: 'public-retrieval',
         provider: 'mammoth-public-network/v1',
         effectKind: 'retrieval' as const,
@@ -1710,7 +1834,6 @@ export function buildInvestigateLivePriceCatalog() {
 async function liveSearch(input: {
   readonly query: string;
   readonly apiKeyEnvVar: string;
-  readonly provider: 'brave' | 'tavily';
   readonly fetchImpl?: typeof fetch;
 }): Promise<{
   readonly hints: readonly GovernedDiscoveryHint[];
@@ -1718,12 +1841,8 @@ async function liveSearch(input: {
 }> {
   const apiKey = process.env[input.apiKeyEnvVar]?.trim();
   if (!apiKey) {
-    throw new Error(
-      `${input.provider} credential ${input.apiKeyEnvVar} is empty`,
-    );
+    throw new Error(`brave credential ${input.apiKeyEnvVar} is empty`);
   }
-  if (input.provider === 'tavily')
-    return tavilySearch(input.query, apiKey, input.fetchImpl ?? fetch);
   return braveSearch(input.query, apiKey, input.fetchImpl ?? fetch);
 }
 
@@ -1737,7 +1856,7 @@ async function braveSearch(
 }> {
   const url = new URL('https://api.search.brave.com/res/v1/web/search');
   url.searchParams.set('q', query);
-  url.searchParams.set('count', '5');
+  url.searchParams.set('count', '10');
   const startedAt = Date.now();
   let attempts = 0;
   let observedBytes = 0;
@@ -1864,66 +1983,6 @@ function braveSearchHttpError(status: number, headers: Headers): Error {
   );
 }
 
-async function tavilySearch(
-  query: string,
-  apiKey: string,
-  fetchImpl: typeof fetch,
-): Promise<{
-  readonly hints: readonly GovernedDiscoveryHint[];
-  readonly usage: ReturnType<typeof usageOf>;
-}> {
-  const startedAt = Date.now();
-  const response = await fetchImpl('https://api.tavily.com/search', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
-    redirect: 'error',
-    signal: AbortSignal.timeout(20_000),
-    body: JSON.stringify({
-      query,
-      max_results: 5,
-      include_answer: false,
-      include_raw_content: false,
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(
-      `Tavily search failed with HTTP ${String(response.status)}`,
-    );
-  }
-  const raw = await response.text();
-  const parsed = JSON.parse(raw) as {
-    results?: { url?: string; title?: string; content?: string }[];
-  };
-  const hints = (parsed.results ?? [])
-    .filter(
-      (result): result is { url: string; title?: string; content?: string } => {
-        if (!result.url) return false;
-        try {
-          return new URL(result.url).protocol === 'https:';
-        } catch {
-          return false;
-        }
-      },
-    )
-    .map((result) => ({
-      url: result.url,
-      sourceClass: 'public_web',
-      ...(result.title === undefined ? {} : { title: result.title }),
-      ...(result.content === undefined ? {} : { description: result.content }),
-    }));
-  return {
-    hints,
-    usage: usageOf({
-      requests: 1,
-      bytes: Buffer.byteLength(raw, 'utf8'),
-      durationMs: Math.max(0, Date.now() - startedAt),
-    }),
-  };
-}
-
 async function openAiCompatibleReview(input: {
   readonly baseUrl: string;
   readonly apiKeyEnvVar: string;
@@ -1970,10 +2029,157 @@ async function openAiCompatibleReview(input: {
             additionalProperties: false,
             properties: {
               summary: { type: 'string' },
+              portfolio: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    rank: { type: 'integer', minimum: 1 },
+                    title: { type: 'string' },
+                    statement: { type: 'string' },
+                    rationale: { type: 'string' },
+                    constraints: {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
+                    nextValidation: { type: 'string' },
+                    evidenceIndexes: {
+                      type: 'array',
+                      items: { type: 'integer', minimum: 1 },
+                    },
+                  },
+                  required: [
+                    'rank',
+                    'title',
+                    'statement',
+                    'rationale',
+                    'constraints',
+                    'nextValidation',
+                    'evidenceIndexes',
+                  ],
+                },
+              },
+              unresolvedConstraints: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+              answerBullets: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    statement: { type: 'string' },
+                    evidenceIndexes: {
+                      type: 'array',
+                      items: { type: 'integer', minimum: 1 },
+                    },
+                  },
+                  required: ['statement', 'evidenceIndexes'],
+                },
+              },
+              mechanisms: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    statement: { type: 'string' },
+                    evidenceIndexes: {
+                      type: 'array',
+                      items: { type: 'integer', minimum: 1 },
+                    },
+                  },
+                  required: ['statement', 'evidenceIndexes'],
+                },
+              },
+              dissent: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    statement: { type: 'string' },
+                    evidenceIndexes: {
+                      type: 'array',
+                      items: { type: 'integer', minimum: 1 },
+                    },
+                  },
+                  required: ['statement', 'evidenceIndexes'],
+                },
+              },
+              boundaryConditions: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    statement: { type: 'string' },
+                    evidenceIndexes: {
+                      type: 'array',
+                      items: { type: 'integer', minimum: 1 },
+                    },
+                  },
+                  required: ['statement', 'evidenceIndexes'],
+                },
+              },
+              hypotheses: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    statement: { type: 'string' },
+                    falsifier: { type: 'string' },
+                    evidenceIndexes: {
+                      type: 'array',
+                      items: { type: 'integer', minimum: 1 },
+                    },
+                  },
+                  required: ['statement', 'falsifier', 'evidenceIndexes'],
+                },
+              },
+              experimentProposals: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    statement: { type: 'string' },
+                    resolvesUncertainty: { type: 'string' },
+                    threshold: { type: 'string' },
+                    safetyBoundary: { type: 'string' },
+                    evidenceIndexes: {
+                      type: 'array',
+                      items: { type: 'integer', minimum: 1 },
+                    },
+                  },
+                  required: [
+                    'statement',
+                    'resolvesUncertainty',
+                    'threshold',
+                    'safetyBoundary',
+                    'evidenceIndexes',
+                  ],
+                },
+              },
               weaknesses: { type: 'array', items: { type: 'string' } },
               suggestedSearches: { type: 'array', items: { type: 'string' } },
             },
-            required: ['summary', 'weaknesses', 'suggestedSearches'],
+            required: [
+              'summary',
+              'portfolio',
+              'unresolvedConstraints',
+              'answerBullets',
+              'mechanisms',
+              'dissent',
+              'boundaryConditions',
+              'hypotheses',
+              'experimentProposals',
+              'weaknesses',
+              'suggestedSearches',
+            ],
           },
         },
       },
@@ -1981,13 +2187,15 @@ async function openAiCompatibleReview(input: {
         {
           role: 'system',
           content:
-            'You are an independent research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. In summary, answer the user question directly in one to three sentences, name the most actionable options supported by the snippets, and state when the snippets leave an important part unresolved. Return compact JSON.',
+            'You are an independent decision-research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. Return compact JSON. Build a ranked portfolio of concrete decisions or opportunities, ordered by evidence strength and practical feasibility. Every portfolio item must name a specific build, intervention, or decision; explain why it ranks there; state evidence-backed constraints; propose the cheapest decisive next validation; and cite one or more supplied evidenceIndex values. Do not create a portfolio item when the evidence supports only a broad theme. List every material question constraint that the evidence did not resolve in unresolvedConstraints. Every answer bullet, mechanism, dissent item, boundary condition, hypothesis, and experiment must cite supplied evidenceIndex values. Address the user question in the same form it was asked. Do not infer hardware feasibility, cost, privacy, locality, safety, or performance unless the snippets support it. Mechanisms should identify transferable causal mechanisms and where transfer breaks. Experiments must name a concrete task, baseline/comparator, decision threshold, and safety boundary when evidence permits. Prefer direct project documentation, implementation details, measured benchmarks, resource constraints, deployment evidence, and primary-source limitations over commentary.',
         },
         {
           role: 'user',
           content: JSON.stringify({
             question: input.question,
-            admittedEvidence: input.claims.map((claim) => ({
+            keyQuestionTerms: liveRelevanceTerms(input.question),
+            admittedEvidence: input.claims.map((claim, index) => ({
+              evidenceIndex: index + 1,
               statement: claim.statement,
               sourceClass: claim.sourceClass,
               url: claim.requestedUrl,
@@ -2010,6 +2218,14 @@ async function openAiCompatibleReview(input: {
   const review = JSON.parse(content) as GovernedLiveModelReview;
   if (
     !review.summary ||
+    !Array.isArray(review.portfolio) ||
+    !Array.isArray(review.unresolvedConstraints) ||
+    !Array.isArray(review.answerBullets) ||
+    !Array.isArray(review.mechanisms) ||
+    !Array.isArray(review.dissent) ||
+    !Array.isArray(review.boundaryConditions) ||
+    !Array.isArray(review.hypotheses) ||
+    !Array.isArray(review.experimentProposals) ||
     !Array.isArray(review.weaknesses) ||
     !Array.isArray(review.suggestedSearches)
   ) {
@@ -2027,6 +2243,52 @@ async function openAiCompatibleReview(input: {
         })
       : null,
   };
+}
+
+function assertDecisionGradeReview(input: {
+  readonly review: GovernedLiveModelReview;
+  readonly admittedEvidenceCount: number;
+}): void {
+  const portfolio = input.review.portfolio ?? [];
+  if (portfolio.length === 0) {
+    refuse(
+      'decision_portfolio_missing',
+      'live synthesis produced no evidence-bound decision portfolio',
+    );
+  }
+  const ranks = new Set<number>();
+  for (const item of portfolio) {
+    if (
+      !Number.isInteger(item.rank) ||
+      item.rank < 1 ||
+      ranks.has(item.rank) ||
+      item.title.trim().length < 4 ||
+      item.statement.trim().length < 24 ||
+      item.rationale.trim().length < 24 ||
+      item.nextValidation.trim().length < 24 ||
+      item.constraints.length === 0 ||
+      item.evidenceIndexes.length === 0 ||
+      item.evidenceIndexes.some(
+        (index) =>
+          !Number.isInteger(index) ||
+          index < 1 ||
+          index > input.admittedEvidenceCount,
+      )
+    ) {
+      refuse(
+        'decision_portfolio_invalid',
+        'live synthesis produced an invalid or unbound decision portfolio item',
+      );
+    }
+    ranks.add(item.rank);
+  }
+  const ordered = [...portfolio].sort((left, right) => left.rank - right.rank);
+  if (ordered.some((item, index) => item.rank !== index + 1)) {
+    refuse(
+      'decision_portfolio_rank_gap',
+      'live synthesis portfolio ranks must be contiguous and deterministic',
+    );
+  }
 }
 
 function asError(error: unknown): Error {

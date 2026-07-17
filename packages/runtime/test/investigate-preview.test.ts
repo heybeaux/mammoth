@@ -55,6 +55,41 @@ describe('local investigation preview', () => {
     ).toBe(questions.length);
   });
 
+  it('preserves explicit constraint phrases in generic search plans', () => {
+    const cases = [
+      {
+        question:
+          'Which field data synchronization strategies help remote clinics operate offline during intermittent connectivity while resolving conflicting patient records?',
+        expected: [
+          'remote clinics operate offline',
+          'conflicting patient records',
+        ],
+      },
+      {
+        question:
+          'Where should individuals building open-source private local world-model systems on a single consumer GPU focus first?',
+        expected: ['open-source private local', 'single consumer gpu'],
+      },
+      {
+        question:
+          'How should small heritage buildings cut winter heating costs without damaging archival collections under a limited maintenance budget?',
+        expected: [
+          'heritage buildings cut winter',
+          'limited maintenance budget',
+        ],
+      },
+    ] as const;
+
+    for (const item of cases) {
+      const planText = planInvestigation(item.question)
+        .plan.searchQueries.join('\n')
+        .toLocaleLowerCase('en-US');
+      for (const phrase of item.expected) {
+        expect(planText).toContain(phrase);
+      }
+    }
+  });
+
   it('projects one digest-bound preview into the required machine and reader artifacts', () => {
     const result = createInvestigationPreview(questions[1]);
     expect(Object.keys(result.artifacts)).toEqual([

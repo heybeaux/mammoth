@@ -377,3 +377,96 @@ test:harness` passed (`outcome-1.v1` 4 cases plus governed-execution e2e);
   push the branch, open/update PR, require exact-head CI, merge only if green,
   then verify fresh-main CI. No tag, release, or deployment may occur on Friday
   2026-07-17.
+
+## 2026-07-17 — V7 continuation: independent review blocked acceptance
+
+- **Correction:** the V7/V12-V19 live outputs are preserved audit evidence but
+  do **not** count as predicate 9/10 acceptance. Independent read-only review
+  `019f711b-8613-7163-b609-010f0460bd70` blocked V12 because the world-model
+  report did not answer the single-consumer-GPU/open-source/private/local
+  constraint, the reader overclaimed that model-authored deductions were
+  verbatim admitted quotes, dissent and transfer boundaries were weak, and
+  experiments/source relevance were insufficient.
+- **Repairs attempted after the blocker:** the normal path now rejects Tavily
+  provider/credential selection, requires a fresh aggregate
+  `--loop-budget-journal`, chains aggregate budget records under the USD 15
+  ceiling, allocates per-run budget from remaining aggregate capacity, uses
+  Brave only for live search, increases generic implementation-query breadth,
+  preserves more question terms, raises live candidate breadth, classifies
+  limitation/failure searches as `counterevidence`, renders model-authored
+  answers as labelled source-bounded deductions, adds dissent and boundary
+  sections, fixes the method text, and surfaces unresolved question constraints
+  instead of hiding them in audit.
+- **Verification during continuation:** focused runtime/CLI tests passed after
+  each repair. Before the independent blocker, full runtime tests passed
+  **150/150**, full CLI tests passed **54/54**, Outcome 1 acceptance harness
+  passed, `verify:p8` passed, `verify:p9` passed, `pnpm lint`,
+  `pnpm format:check`, full `pnpm typecheck`, full `pnpm test`, and full
+  `pnpm build` passed. These are code-health results only; they do not prove
+  product acceptance.
+- **Fresh/probe live evidence:** V9, V11, V12, V13, V17 full runs and V14-V16,
+  V18, V19 probes completed under governed Brave/OpenRouter authority. The best
+  later reports fail honestly by exposing unresolved constraints, but still do
+  not produce a useful enough world-model answer through the normal public path.
+  In particular, the path still misses or underuses practical open-source,
+  private/local, single-consumer-GPU implementation evidence, and the
+  remote-clinic holdout still lacks strong offline/conflict-resolution evidence.
+- **Spend:** later governed attempts after the earlier V7 receipt settled
+  **USD 1.2807873200030002**. Total authorized loop spend recorded here is
+  **USD 1.9809386900030005**, leaving **USD 13.019061309996999** under the
+  USD 15 ceiling. The historical unauthorized employer-account Tavily spend
+  remains invalid evidence and is not part of authorized acceptance spend.
+- **Current blocker:** predicates 9 and 10 remain incomplete due product
+  quality, not due command failure. Next work should continue from the
+  uncommitted repairs and likely add a stronger normal-path query/source-quality
+  layer or model-assisted query expansion before retrieval. Do not count
+  `evals/live/mammoth-core-loop-v6` through `mammoth-core-loop-v19*` as
+  acceptance evidence.
+
+## 2026-07-17 — V8 generic constraint coverage repair; review still blocks
+
+- **Coordinator:** `mammoth-core-loop-coordinator-v8`, same owned worktree
+  `/private/tmp/mammoth-core-loop-v6`, branch
+  `fix/core-live-brave-rate-limit-v6`, continued from local `f50eadb` plus
+  uncommitted V7 repairs. Existing failed/probe artifacts under
+  `evals/live/mammoth-core-loop-v6` through `v19*` were preserved.
+- **Repair:** generic planner search queries now preserve original-order
+  constraint phrases for unrelated constraint-heavy questions; live discovery
+  scores hints by question/query coverage plus generic source-quality signals
+  and interleaves candidates by planned query so broad early searches cannot
+  crowd out narrower constraints; live span/review evidence breadth increased
+  within bounded ceilings; reader fallback evidence prioritizes unresolved
+  question constraints; model-authored `evidenceIndex` syntax is stripped from
+  reader prose. The changes remain topic-agnostic and contain no fixed sources
+  or expected conclusions in runtime branches.
+- **Focused verification:** `pnpm --filter @mammoth/runtime test --
+investigate-governed-execution.test.ts investigate-preview.test.ts` passed
+  **22/22**; `pnpm --filter @mammoth/runtime typecheck` passed; and
+  `pnpm format:check` passed. These are code-health gates only.
+- **Live evidence:** fresh governed Brave/OpenRouter runs were preserved under
+  `evals/live/mammoth-core-loop-v20/` for three unrelated holdouts and the
+  world-model question. V20 completed remote-clinic, grid-battery,
+  heritage-HVAC, and world-model bundles. Targeted world-model iterations V21,
+  V22, and V23 were preserved under `evals/live/mammoth-core-loop-v21/`,
+  `v22/`, and `v23/` after additional generic repairs.
+- **Spend:** V20 opened a hash-chained aggregate loop journal seeded with the
+  previously recorded authorized spend **USD 1.980938690003**. By V23, the
+  aggregate journal records **USD 2.6112140700029998** settled spend, leaving
+  **USD 12.388785929997** under the USD 15 ceiling. Only Brave Search and
+  OpenRouter were configured; Tavily was not read, sourced, or used.
+- **Independent review:** read-only reviewer
+  `019f7140-1453-70c3-ad5c-c8930247f1bd` blocked predicates 9/10. Findings:
+  the V23 world-model report remains too generic and does not rank concrete
+  open-source/private/local/single-consumer-GPU opportunities; source binding
+  is weak for local world-model implementation evidence; V20 holdouts remain
+  structurally complete but substantively unresolved for central constraints
+  (remote-clinic conflict resolution, grid decision/equity/summer peaks,
+  heritage archival collections); and pre-repair reader reports leaked
+  evidence-index syntax. The syntax leak has a focused code repair and test,
+  but the preserved live reports remain failed evidence.
+- **Current blocker:** predicates 9 and 10 remain incomplete due product
+  quality and evidence fit, not provider authority, budget, or command health.
+  Further progress likely requires a different generic strategy: source
+  selection must favor direct implementation/benchmark/project evidence over
+  commentary, and synthesis must produce a ranked decision-grade opportunity
+  portfolio or fail closed when admitted evidence cannot support one.

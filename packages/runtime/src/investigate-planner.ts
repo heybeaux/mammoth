@@ -50,9 +50,11 @@ const STOP_WORDS = new Set([
   'own',
   'researchers',
   'systems',
+  'based',
   'their',
   'there',
   'these',
+  'that',
   'today',
   'using',
   'ways',
@@ -62,6 +64,8 @@ const STOP_WORDS = new Set([
   'which',
   'with',
   'would',
+  'during',
+  'while',
 ]);
 
 const OPTIONAL_ROLES: readonly Omit<ProposedResearchRole, 'mission'>[] = [
@@ -132,8 +136,50 @@ function focusTerms(question: string): readonly string[] {
       candidate.index / Math.max(observed.length, 1);
     return score(right) - score(left) || left.index - right.index;
   });
-  if (ranked.length >= 2) return ranked.slice(0, 8).map(({ term }) => term);
-  return observed.slice(0, 8).map(({ term }) => term);
+  if (ranked.length >= 2) return ranked.slice(0, 16).map(({ term }) => term);
+  return observed.slice(0, 16).map(({ term }) => term);
+}
+
+function orderedFocusTerms(question: string): readonly string[] {
+  const terms: string[] = [];
+  const seen = new Set<string>();
+  for (const match of question.matchAll(/[\p{L}\p{N}][\p{L}\p{N}-]{2,}/gu)) {
+    const term = match[0].toLocaleLowerCase('en-US');
+    if (STOP_WORDS.has(term) || seen.has(term)) continue;
+    seen.add(term);
+    terms.push(term);
+  }
+  return terms;
+}
+
+function constraintPhrases(question: string): readonly string[] {
+  const ordered = orderedFocusTerms(question);
+  const segmentPhrases: string[] = [];
+  const supportingPhrases: string[] = [];
+  const seen = new Set<string>();
+  const add = (target: string[], phrase: string) => {
+    if (phrase.length < 7 || phrase.length > 80 || seen.has(phrase)) return;
+    seen.add(phrase);
+    target.push(phrase);
+  };
+  for (const segment of question.split(
+    /\b(?:after|before|during|for|on|under|using|when|where|while|with|without|based\s+on)\b|[.,;:?!]/giu,
+  )) {
+    const terms = orderedFocusTerms(segment);
+    if (terms.length < 2) continue;
+    add(segmentPhrases, terms.slice(0, 5).join(' '));
+    if (terms.length > 5) add(supportingPhrases, terms.slice(-4).join(' '));
+    for (let index = 0; index < terms.length - 1; index += 1) {
+      add(supportingPhrases, terms.slice(index, index + 3).join(' '));
+    }
+  }
+  for (let index = 0; index < ordered.length; index += 1) {
+    for (const width of [4, 3, 2]) {
+      const phrase = ordered.slice(index, index + width).join(' ');
+      add(supportingPhrases, phrase);
+    }
+  }
+  return [...segmentPhrases, ...supportingPhrases].slice(0, 8);
 }
 
 function stableIndex(seed: string, offset: number, size: number): number {
@@ -191,9 +237,17 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
   if (terms.length < 2) {
     throw new Error('investigate could not derive enough question terms');
   }
-  const primary = terms.slice(0, 4).join(' ');
-  const secondary = terms.slice(4, 8).join(' ') || terms.slice(0, 2).join(' ');
+  const primary = terms.slice(0, 5).join(' ');
+  const secondary = terms.slice(5, 16).join(' ') || terms.slice(0, 3).join(' ');
+  const implementationFocus =
+    orderedFocusTerms(question).slice(0, 16).join(' ') || primary;
+  const constraints = constraintPhrases(question);
+  const directConstraintFocus = constraints[0] ?? implementationFocus;
+  const resourceConstraintFocus = constraints[1] ?? secondary;
+  const deliveryConstraintFocus = constraints[2] ?? implementationFocus;
+  const boundaryConstraintFocus = constraints[3] ?? secondary;
   const directSearch = searchStem(question);
+  const sourceTopic = orderedFocusTerms(question).slice(0, 6).join(' ');
   const investigationId = canonicalDigest({ question }).slice(7, 23);
   const optionalRoles = selectOptionalRoles(question, primary);
   const proposedTeam: ProposedResearchRole[] = [
@@ -243,6 +297,12 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
         'Keep conclusions responsive to the submitted question.',
         'Separate observations, deductions, analogies, hypotheses, and speculation.',
         'Do not execute experiments or external actions without later explicit authority.',
+        ...constraints
+          .slice(0, 4)
+          .map(
+            (constraint) =>
+              `Decision constraint from the question: ${constraint}.`,
+          ),
       ],
       unknowns: [
         'Which assumptions materially affect the answer?',
@@ -273,10 +333,13 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
         `What opportunities survive feasibility, prior-art, risk, and falsification checks?`,
       ],
       searchQueries: [
-        `${directSearch} primary sources evidence`,
-        `${secondary} limitations counterexamples`,
-        `${primary} mechanisms constraints comparative analysis`,
-        `${secondary} replication failures independent review`,
+        `${sourceTopic || directSearch} official project documentation`,
+        `${sourceTopic || primary} ${directConstraintFocus} primary source technical report`,
+        `${sourceTopic || primary} ${resourceConstraintFocus} measured benchmark resource requirements`,
+        `${sourceTopic || primary} ${deliveryConstraintFocus} repository readme implementation`,
+        `${sourceTopic || primary} ${boundaryConstraintFocus} deployment hardware requirements`,
+        `${sourceTopic || primary} ${directConstraintFocus} independent evaluation comparison`,
+        `${sourceTopic || primary} ${boundaryConstraintFocus} limitations counterexamples failure cases`,
       ],
       evidenceRequirements: [
         'Prefer direct, current, and reproducible evidence for critical factual claims.',

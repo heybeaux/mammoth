@@ -13,6 +13,10 @@ import { contentDigest } from '@mammoth/retrieval';
 import {
   GovernedExecutionError,
   type GovernedAcquisitionExecution,
+  type GovernedLiveReviewCitedStatement,
+  type GovernedLiveReviewExperiment,
+  type GovernedLiveReviewHypothesis,
+  type GovernedLiveReviewPortfolioItem,
 } from './investigate-governed-execution.js';
 
 /**
@@ -25,6 +29,42 @@ const READER_FORBIDDEN_PATTERN =
   /sha256:|claim[_:-]|proposal[_:-]|plan digest|parser receipt|budget ledger|coverage verdict/iu;
 const LOW_INFORMATION_READER_FACT_PATTERN =
   /^(?:skip to main content|an official website|official websites use|secure \.gov websites|menu|search|privacy policy|terms of use|cookies?|javascript|equal contribution|corresponding author|received:|accepted:|published:)/iu;
+const READER_QUESTION_STOP_TERMS = new Set([
+  'about',
+  'after',
+  'against',
+  'also',
+  'answer',
+  'based',
+  'before',
+  'being',
+  'beyond',
+  'biggest',
+  'build',
+  'building',
+  'could',
+  'during',
+  'from',
+  'important',
+  'increasingly',
+  'individuals',
+  'lie',
+  'most',
+  'opportunities',
+  'question',
+  'should',
+  'systems',
+  'that',
+  'their',
+  'there',
+  'today',
+  'using',
+  'what',
+  'where',
+  'which',
+  'while',
+  'with',
+]);
 
 function sha256Text(value: string): string {
   return contentDigest(new TextEncoder().encode(value));
@@ -48,38 +88,7 @@ function informativeWordCount(value: string): number {
   return value.match(/[A-Za-z][A-Za-z'-]{2,}/gu)?.length ?? 0;
 }
 
-const READER_SUMMARY_STOP_TERMS = new Set([
-  'about',
-  'after',
-  'against',
-  'based',
-  'because',
-  'before',
-  'between',
-  'could',
-  'during',
-  'evidence',
-  'from',
-  'into',
-  'only',
-  'should',
-  'source',
-  'sources',
-  'that',
-  'their',
-  'there',
-  'these',
-  'this',
-  'through',
-  'using',
-  'what',
-  'where',
-  'which',
-  'while',
-  'with',
-]);
-
-function contentTerms(value: string): readonly string[] {
+function readerQuestionTerms(value: string): readonly string[] {
   return [
     ...new Set(
       [...value.matchAll(/[\p{L}\p{N}][\p{L}\p{N}-]{2,}/gu)]
@@ -87,11 +96,34 @@ function contentTerms(value: string): readonly string[] {
         .filter(
           (term) =>
             term.length >= 4 &&
-            !READER_SUMMARY_STOP_TERMS.has(term) &&
+            !READER_QUESTION_STOP_TERMS.has(term) &&
             !/^\d+$/u.test(term),
         ),
     ),
-  ];
+  ].slice(0, 20);
+}
+
+function readerRelevanceScore(value: string, terms: readonly string[]): number {
+  const normalized = value.toLocaleLowerCase('en-US');
+  return terms.reduce((score, term) => {
+    const variants = new Set([term]);
+    if (term.endsWith('s')) variants.add(term.slice(0, -1));
+    if (term.endsWith('ies')) variants.add(`${term.slice(0, -3)}y`);
+    if (term.endsWith('ate')) variants.add(`${term.slice(0, -3)}acy`);
+    return (
+      score +
+      ([...variants].some((variant) => normalized.includes(variant)) ? 1 : 0)
+    );
+  }, 0);
+}
+
+function termAppears(value: string, term: string): boolean {
+  const normalized = value.toLocaleLowerCase('en-US');
+  const variants = new Set([term]);
+  if (term.endsWith('s')) variants.add(term.slice(0, -1));
+  if (term.endsWith('ies')) variants.add(`${term.slice(0, -3)}y`);
+  if (term.endsWith('ate')) variants.add(`${term.slice(0, -3)}acy`);
+  return [...variants].some((variant) => normalized.includes(variant));
 }
 
 function isReaderQualityFact(sentence: string): boolean {
@@ -100,24 +132,6 @@ function isReaderQualityFact(sentence: string): boolean {
   if (informativeWordCount(sentence) < 8) return false;
   if (LOW_INFORMATION_READER_FACT_PATTERN.test(sentence)) return false;
   return true;
-}
-
-function supportedLiveSummary(
-  summary: string | undefined,
-  facts: readonly RenderableFact[],
-): string | null {
-  const normalized = singleLine(summary ?? '');
-  if (normalized.length < 48 || READER_FORBIDDEN_PATTERN.test(normalized)) {
-    return null;
-  }
-  const evidenceTerms = new Set(
-    facts.flatMap((fact) => contentTerms(fact.sentence)),
-  );
-  const summaryTerms = contentTerms(normalized);
-  if (summaryTerms.length === 0) return null;
-  const overlap = summaryTerms.filter((term) => evidenceTerms.has(term));
-  if (overlap.length < Math.min(3, summaryTerms.length)) return null;
-  return /[.!?]$/u.test(normalized) ? normalized : `${normalized}.`;
 }
 
 function readerVisibleReviewLines(
@@ -129,6 +143,52 @@ function readerVisibleReviewLines(
     .filter((value) => !READER_FORBIDDEN_PATTERN.test(value))
     .slice(0, 3)
     .map((value) => (/[:.!?]$/u.test(value) ? value : `${value}.`));
+}
+
+function readerVisibleDeduction(value: string | undefined): string | null {
+  if (!value) return null;
+  const sentence = singleLine(value)
+    .replace(/\s*\(\s*evidence\s*indexes?\s*:?\s*\[?[\d,\s]+\]?\s*\)/giu, '')
+    .replace(/\s*\(\s*evidenceindexes?\s*:?\s*\[?[\d,\s]+\]?\s*\)/giu, '')
+    .replace(/\s*evidence\s*indexes?\s*:?\s*\[?[\d,\s]+\]?/giu, '')
+    .replace(/\s*evidenceindexes?\s*:?\s*\[?[\d,\s]+\]?/giu, '')
+    .trim();
+  if (sentence.length < 32) return null;
+  if (READER_FORBIDDEN_PATTERN.test(sentence)) return null;
+  return /[.!?]$/u.test(sentence) ? sentence : `${sentence}.`;
+}
+
+function citedReviewStatements<T extends GovernedLiveReviewCitedStatement>(
+  values: readonly T[] | undefined,
+  citationNumbersForEvidenceIndex: (index: number) => readonly number[],
+  limit: number,
+): readonly (T & {
+  readonly sentence: string;
+  readonly citations: readonly number[];
+})[] {
+  const cited: (T & {
+    readonly sentence: string;
+    readonly citations: readonly number[];
+  })[] = [];
+  for (const value of values ?? []) {
+    const sentence = readerVisibleDeduction(value.statement);
+    const citations = [
+      ...new Set(
+        value.evidenceIndexes.flatMap((index) =>
+          citationNumbersForEvidenceIndex(index),
+        ),
+      ),
+    ].sort((left, right) => left - right);
+    if (sentence && citations.length > 0) {
+      cited.push({ ...value, sentence, citations });
+    }
+    if (cited.length >= limit) break;
+  }
+  return cited;
+}
+
+function citationSuffix(citations: readonly number[]): string {
+  return citations.map((number) => `[${String(number)}]`).join('');
 }
 
 export interface GovernedInvestigationBundleInput {
@@ -148,6 +208,7 @@ export interface GovernedInvestigationBundle {
 
 interface RenderableFact {
   readonly claimId: string;
+  readonly reviewEvidenceIndex: number;
   readonly sentence: string;
   readonly citation: number;
   readonly url: string;
@@ -254,13 +315,14 @@ export function composeGovernedInvestigationBundle(
   );
   const urls: string[] = [];
   const facts: RenderableFact[] = [];
-  for (const claim of admitted) {
+  for (const [index, claim] of admitted.entries()) {
     const sentence = singleLine(claim.statement);
     if (READER_FORBIDDEN_PATTERN.test(sentence)) continue;
     if (!isReaderQualityFact(sentence)) continue;
     if (!urls.includes(claim.requestedUrl)) urls.push(claim.requestedUrl);
     facts.push({
       claimId: claim.proposalId,
+      reviewEvidenceIndex: index + 1,
       sentence,
       citation: urls.indexOf(claim.requestedUrl) + 1,
       url: claim.requestedUrl,
@@ -285,10 +347,6 @@ export function composeGovernedInvestigationBundle(
   }
 
   const synthesis = deriveSynthesis(plan, facts);
-  const liveSummary = supportedLiveSummary(
-    execution.liveReview?.summary,
-    facts,
-  );
   const liveWeaknesses = readerVisibleReviewLines(
     execution.liveReview?.weaknesses,
   );
@@ -300,40 +358,291 @@ export function composeGovernedInvestigationBundle(
       .map((fact) => fact.citation);
     return numbers.length > 0 ? numbers : undefined;
   };
+  const citationNumbersForEvidenceIndex = (index: number): readonly number[] =>
+    facts
+      .filter((fact) => fact.reviewEvidenceIndex === index)
+      .map((fact) => fact.citation);
+  const rawReviewAnswerBullets = citedReviewStatements(
+    execution.liveReview?.answerBullets,
+    citationNumbersForEvidenceIndex,
+    4,
+  );
+  const reviewMechanisms = citedReviewStatements(
+    execution.liveReview?.mechanisms,
+    citationNumbersForEvidenceIndex,
+    3,
+  );
+  const reviewDissent = citedReviewStatements(
+    execution.liveReview?.dissent,
+    citationNumbersForEvidenceIndex,
+    3,
+  );
+  const reviewBoundaries = citedReviewStatements(
+    execution.liveReview?.boundaryConditions,
+    citationNumbersForEvidenceIndex,
+    3,
+  );
+  const reviewHypotheses = citedReviewStatements<GovernedLiveReviewHypothesis>(
+    execution.liveReview?.hypotheses,
+    citationNumbersForEvidenceIndex,
+    3,
+  );
+  const reviewExperiments = citedReviewStatements<GovernedLiveReviewExperiment>(
+    execution.liveReview?.experimentProposals,
+    citationNumbersForEvidenceIndex,
+    3,
+  );
+  const reviewPortfolio = [
+    ...citedReviewStatements<GovernedLiveReviewPortfolioItem>(
+      execution.liveReview?.portfolio,
+      citationNumbersForEvidenceIndex,
+      5,
+    ),
+  ].sort((left, right) => left.rank - right.rank);
+  const unresolvedConstraints = readerVisibleReviewLines(
+    execution.liveReview?.unresolvedConstraints,
+  );
 
   const title = READER_FORBIDDEN_PATTERN.test(plan.question)
     ? 'Investigation findings'
     : plan.question;
-  const answerCitations = [
-    ...new Set(facts.slice(0, 4).map((fact) => fact.citation)),
-  ]
-    .map((citation) => `[${String(citation)}]`)
-    .join(' ');
+  const questionTerms = readerQuestionTerms(plan.question);
+  const unsupportedQuestionTerms = questionTerms
+    .filter((term) => !facts.some((fact) => termAppears(fact.sentence, term)))
+    .slice(0, 6);
+  const reviewAnswerBullets = rawReviewAnswerBullets.filter(
+    (item) =>
+      !unsupportedQuestionTerms.some((term) =>
+        termAppears(item.sentence, term),
+      ),
+  );
+  const directAnswerFacts =
+    rawReviewAnswerBullets.length > 0 ? [] : facts.slice(0, 3);
+  const directAnswerLimitations =
+    rawReviewAnswerBullets.length > 0 ? reviewBoundaries.slice(0, 2) : [];
+  const citedBeforeConstraintEvidence = new Set(
+    [...reviewAnswerBullets, ...directAnswerLimitations].flatMap(
+      (item) => item.citations,
+    ),
+  );
+  const directConstraintFacts =
+    rawReviewAnswerBullets.length > 0
+      ? facts
+          .filter((fact) => !citedBeforeConstraintEvidence.has(fact.citation))
+          .map((fact) => ({
+            fact,
+            unresolvedScore: readerRelevanceScore(
+              fact.sentence,
+              unsupportedQuestionTerms,
+            ),
+            questionScore: readerRelevanceScore(fact.sentence, questionTerms),
+          }))
+          .filter((entry) =>
+            unsupportedQuestionTerms.length === 0
+              ? entry.questionScore >= 3
+              : entry.unresolvedScore > 0,
+          )
+          .sort(
+            (left, right) =>
+              right.unresolvedScore - left.unresolvedScore ||
+              right.questionScore - left.questionScore,
+          )
+          .slice(0, 4)
+          .map((entry) => entry.fact)
+      : [];
+  const unresolvedQuestionTerms =
+    rawReviewAnswerBullets.length > 0 ? unsupportedQuestionTerms : [];
+  const renderedSynthesis =
+    reviewMechanisms.length > 0 ||
+    reviewDissent.length > 0 ||
+    reviewBoundaries.length > 0 ||
+    reviewHypotheses.length > 0 ||
+    reviewExperiments.length > 0
+      ? [
+          ...(reviewMechanisms.length === 0
+            ? []
+            : [
+                '## Cross-domain mechanisms',
+                '',
+                ...reviewMechanisms.map(
+                  (mechanism) =>
+                    `- Deduction from admitted evidence: ${
+                      mechanism.sentence
+                    } ${citationSuffix(mechanism.citations)}`,
+                ),
+                '',
+              ]),
+          ...(reviewDissent.length === 0
+            ? []
+            : [
+                '## Competing evidence and dissent',
+                '',
+                ...reviewDissent.map(
+                  (dissent) =>
+                    `- Source-bounded dissent: ${
+                      dissent.sentence
+                    } ${citationSuffix(dissent.citations)}`,
+                ),
+                '',
+              ]),
+          ...(reviewBoundaries.length === 0
+            ? []
+            : [
+                '## Boundary conditions',
+                '',
+                ...reviewBoundaries.map(
+                  (boundary) =>
+                    `- Applicability limit: ${
+                      boundary.sentence
+                    } ${citationSuffix(boundary.citations)}`,
+                ),
+                '',
+              ]),
+          ...(reviewHypotheses.length === 0
+            ? []
+            : [
+                '## Hypotheses',
+                '',
+                ...reviewHypotheses.flatMap((hypothesis) => {
+                  const falsifier = readerVisibleDeduction(
+                    hypothesis.falsifier,
+                  );
+                  return [
+                    `- Hypothesis from admitted evidence: ${
+                      hypothesis.sentence
+                    } ${citationSuffix(hypothesis.citations)}`,
+                    ...(falsifier ? [`  - Falsifier: ${falsifier}`] : []),
+                  ];
+                }),
+                '',
+              ]),
+          ...(reviewExperiments.length === 0
+            ? []
+            : [
+                '## Proposed experiments',
+                '',
+                ...reviewExperiments.flatMap((experiment) => {
+                  const uncertainty = readerVisibleDeduction(
+                    experiment.resolvesUncertainty,
+                  );
+                  const threshold = readerVisibleDeduction(
+                    experiment.threshold,
+                  );
+                  const safetyBoundary = readerVisibleDeduction(
+                    experiment.safetyBoundary,
+                  );
+                  return [
+                    `- Design-only experiment from admitted evidence: ${
+                      experiment.sentence
+                    } ${citationSuffix(experiment.citations)}`,
+                    ...(uncertainty
+                      ? [`  - Resolves uncertainty: ${uncertainty}`]
+                      : []),
+                    ...(threshold ? [`  - Threshold: ${threshold}`] : []),
+                    ...(safetyBoundary
+                      ? [`  - Safety boundary: ${safetyBoundary}`]
+                      : []),
+                  ];
+                }),
+                '',
+              ]),
+        ]
+      : renderSynthesisReaderLines(synthesis, { citationNumbersForClaim });
+  const citedReaderNumbers = new Set(
+    [
+      ...reviewAnswerBullets,
+      ...directAnswerLimitations,
+      ...directConstraintFacts.map((fact) => ({
+        ...fact,
+        citations: [fact.citation],
+        evidenceIndexes: [fact.reviewEvidenceIndex],
+      })),
+      ...reviewMechanisms,
+      ...reviewDissent,
+      ...reviewBoundaries,
+      ...reviewHypotheses,
+      ...reviewExperiments,
+      ...reviewPortfolio,
+    ].flatMap((item) => item.citations),
+  );
+  const supportingFacts =
+    citedReaderNumbers.size > 0
+      ? facts.filter((fact) => citedReaderNumbers.has(fact.citation))
+      : facts;
   const reportLines = [
     `# ${singleLine(title)}`,
     '',
     '## Direct answer',
     '',
-    liveSummary
-      ? `Source-bounded deduction: ${liveSummary} ${answerCitations}`
-      : `${direct.sentence} [${String(direct.citation)}]`,
+    ...reviewAnswerBullets.map(
+      (item) =>
+        `- Deduction from admitted evidence: ${item.sentence} ${citationSuffix(
+          item.citations,
+        )}`,
+    ),
+    ...directAnswerLimitations.map(
+      (item) =>
+        `- Limitation from admitted evidence: ${item.sentence} ${citationSuffix(
+          item.citations,
+        )}`,
+    ),
+    ...directConstraintFacts.map(
+      (fact) =>
+        `- Admitted constraint evidence not resolved by synthesis: ${
+          fact.sentence
+        } [${String(fact.citation)}]`,
+    ),
+    ...(unresolvedQuestionTerms.length === 0
+      ? []
+      : [
+          `- Unresolved question constraint: admitted evidence did not directly resolve ${unresolvedQuestionTerms.join(
+            ', ',
+          )}.`,
+        ]),
+    ...directAnswerFacts.map(
+      (fact) => `- ${fact.sentence} [${String(fact.citation)}]`,
+    ),
     '',
-    liveSummary
-      ? `Most direct admitted evidence: ${direct.sentence} [${String(
-          direct.citation,
-        )}]`
-      : '',
-    '',
+    ...(reviewPortfolio.length === 0
+      ? []
+      : [
+          '## Ranked decision portfolio',
+          '',
+          ...reviewPortfolio.flatMap((item) => [
+            `### ${String(item.rank)}. ${singleLine(item.title)}`,
+            '',
+            `${item.sentence} ${citationSuffix(item.citations)}`,
+            '',
+            `- Why it ranks here: ${singleLine(item.rationale)} ${citationSuffix(
+              item.citations,
+            )}`,
+            ...item.constraints.map(
+              (constraint) => `- Constraint: ${singleLine(constraint)}`,
+            ),
+            `- Next validation: ${singleLine(item.nextValidation)}`,
+            '',
+          ]),
+        ]),
+    ...(unresolvedConstraints.length === 0
+      ? []
+      : [
+          '## Unresolved constraints',
+          '',
+          ...unresolvedConstraints.map((constraint) => `- ${constraint}`),
+          '',
+        ]),
     '## Supporting evidence',
     '',
-    ...facts.map(
+    ...supportingFacts.map(
       (fact) =>
         `- ${fact.sentence} [${String(fact.citation)}] (${fact.sourceClass} source)`,
     ),
     '',
     '## Method and limits',
     '',
-    'Every factual sentence above is quoted verbatim from a preserved source and passed an independent admission review; sentences that failed review were excluded and are preserved in the audit projection.',
+    rawReviewAnswerBullets.length > 0
+      ? 'Supporting evidence sentences above are quoted verbatim from preserved sources and passed independent admission review; direct answers and synthesis sections are source-bounded deductions that cite admitted evidence.'
+      : 'Every factual sentence above is quoted verbatim from a preserved source and passed an independent admission review; sentences that failed review were excluded and are preserved in the audit projection.',
     execution.externalEffectsExecuted
       ? `This investigation ran with governed live effects under scoped authority: ${String(execution.snapshots.length)} source snapshot(s) were preserved and ${String(rejected.length)} candidate statement(s) were rejected rather than repaired.`
       : `This investigation ran strictly offline against an operator-declared source universe: ${String(execution.snapshots.length)} source snapshot(s) were preserved and ${String(rejected.length)} candidate statement(s) were rejected rather than repaired.`,
@@ -348,7 +657,7 @@ export function composeGovernedInvestigationBundle(
           ...liveWeaknesses.map((weakness) => `- ${weakness}`),
         ]),
     '',
-    ...renderSynthesisReaderLines(synthesis, { citationNumbersForClaim }),
+    ...renderedSynthesis,
   ];
   const report = `${reportLines
     .join('\n')
@@ -379,19 +688,26 @@ export function composeGovernedInvestigationBundle(
       citation: fact.citation,
       url: fact.url,
     })),
-    deductions:
-      liveSummary === null
-        ? []
-        : [
-            {
-              sentence: liveSummary,
-              status: 'source-bounded deduction',
-              claimIds: facts.slice(0, 4).map((fact) => fact.claimId),
-              citations: [
-                ...new Set(facts.slice(0, 4).map((fact) => fact.citation)),
-              ],
-            },
-          ],
+    deductions: [],
+    sourceBoundedDeductions: [
+      ...reviewAnswerBullets,
+      ...directAnswerLimitations,
+      ...directConstraintFacts.map((fact) => ({
+        ...fact,
+        citations: [fact.citation],
+        evidenceIndexes: [fact.reviewEvidenceIndex],
+      })),
+      ...reviewMechanisms,
+      ...reviewDissent,
+      ...reviewBoundaries,
+      ...reviewHypotheses,
+      ...reviewExperiments,
+      ...reviewPortfolio,
+    ].map((deduction) => ({
+      sentence: deduction.sentence,
+      citations: deduction.citations,
+      evidenceIndexes: deduction.evidenceIndexes,
+    })),
     citations: urls.map((url, index) => ({ number: index + 1, url })),
     composedAt: input.now,
   });
@@ -455,6 +771,7 @@ export function composeGovernedInvestigationBundle(
       })),
     ),
     'audit/model-work.jsonl': jsonlArtifact(execution.modelWork),
+    'audit/live-review.json': jsonArtifact(execution.liveReview ?? null),
     'audit/live-effect-receipts.jsonl': jsonlArtifact(execution.effectReceipts),
     'audit/budget-journal.jsonl': execution.externalEffectsExecuted
       ? jsonlArtifact(execution.effectReceipts)
