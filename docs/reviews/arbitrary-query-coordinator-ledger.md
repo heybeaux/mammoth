@@ -233,3 +233,83 @@ test:harness` passed (`outcome-1.v1` 4 cases + governed-execution e2e);
   **17/17**, full repository `pnpm typecheck` passed, and `pnpm lint` passed.
   The provider blocker remains unchanged: Brave is rate-limited and Tavily has
   no usable credential in the available environment.
+
+## 2026-07-17 — V6 Brave burst limiter claimed
+
+- **Coordinator:** `mammoth-core-loop-coordinator-v6`, fresh worktree
+  `/private/tmp/mammoth-core-loop-v6`, branch
+  `fix/core-live-brave-rate-limit-v6`, based on verified `origin/main`
+  `fb1abb379ab565ecc63e7a8276526d79c6aeed9c` (PR #145 merge). The old v5
+  worktree is not reused.
+- **Authority boundary:** Beaux explicitly authorized only the existing Brave
+  credential for remaining governed Mammoth acceptance runs under the existing
+  USD 15 aggregate live-provider ceiling. Tavily is permanently out of scope for
+  this loop unless new explicit authorization is granted; the employer-owned
+  DeerFlow Tavily credential must not be sourced, inspected, fingerprinted,
+  tested, copied, or used.
+- **Root cause under repair:** Brave returns comma-separated rate-limit windows
+  such as short burst reset plus monthly reset. The live path treated the list as
+  an opaque reset string and had no bounded short-window retry, so a one-second
+  burst 429 blocked acceptance even though monthly quota remained.
+- **Owned paths:** `packages/runtime/src/brave-rate-limit.ts`,
+  `packages/runtime/src/p9-live-application.ts`,
+  `packages/runtime/src/investigate-governed-execution.ts`,
+  `packages/runtime/src/index.ts`, `packages/runtime/test/brave-rate-limit.test.ts`,
+  `AGENTS.md`, `LOOP.md`, and this ledger.
+- **Initial offline evidence:** added multi-window parsing and bounded burst
+  retry tests covering short/monthly classification, burst 429 then success,
+  monthly exhaustion, malformed headers, bounded retry exhaustion, and abortable
+  wait failure. Focused command
+  `pnpm --filter @mammoth/runtime test -- brave-rate-limit.test.ts` passed
+  **8/8** after `pnpm install --frozen-lockfile`. Runtime typecheck passed.
+- **Independent review:** reviewer `019f70d9-062e-75e0-a2c0-65ca6ec8435f`
+  found that retry attempts initially exceeded the reserved request envelope and
+  incomplete multi-window headers could retry. V6 repaired both, then repaired
+  follow-up findings by capping `max429Retries` to the `attempts: 3`
+  reservation envelope and bounding retry wait inputs. Final re-review reported
+  no remaining findings.
+- **Post-review evidence:** focused runtime tests
+  `pnpm --filter @mammoth/runtime test -- brave-rate-limit.test.ts p9-live-application.test.ts investigate-governed-execution.test.ts`
+  passed **71/71**; full runtime tests passed **150/150**; runtime typecheck,
+  `pnpm lint`, and `pnpm format:check` passed.
+- **Next action:** run the governed Brave-only holdouts and exact world-model
+  question from fresh immutable directories and journals.
+
+## 2026-07-17 — V6 live acceptance blocked by reader-quality failure
+
+- **Commit:** local `e21c170` contains the reviewed Brave short-window limiter,
+  query preservation, arXiv PDF-to-HTML normalization, and stricter
+  low-information/relevance filters.
+- **Brave-only live attempts:** using only `BRAVE_API_KEY` and
+  `OPENROUTER_API_KEY` sourced from `~/projects/tra/.env`, V6 ran fresh
+  governed journals and immutable output directories under
+  `evals/live/mammoth-core-loop-v6/`. The first credential-loading attempt
+  (`holdout-remote-clinic`) failed with Brave HTTP 422 because the shell copied
+  quoted env text instead of sourcing the bounded Brave/OpenRouter lines; it is
+  preserved and does not count for acceptance.
+- **Completed but invalid holdouts:** `holdout-remote-clinic-a2`,
+  `holdout-grid-battery`, and `holdout-heritage-hvac` completed with governed
+  live effects, receipts, and admitted claims, but manual reader audit found
+  boilerplate or irrelevant source-derived claims (license text, publication
+  metadata, replication-crisis content, or weakly related articles). They reject
+  leakage/canned-path concerns but do **not** satisfy the substantive-answer
+  predicate.
+- **Exact world-model attempts:** `world-model-local` through
+  `world-model-local-v5` either completed with irrelevant OpenAI/LARK evidence
+  or failed closed after stricter filters. `world-model-local-v6` failed closed
+  with `no admitted evidence can be rendered on the reader surface`, which is
+  preferable to publishing an uncited or irrelevant report but leaves predicate
+  10 incomplete.
+- **Spend evidence:** search/model/retrieval receipts are preserved in each
+  bundle/journal. `jq -s '[.[] | select(.entry.kind=="settle") | .entry.input.actual.currencyUsd // 0] | add' evals/live/mammoth-core-loop-v6/*/budget-journal.jsonl`
+  returned **USD 0.3600660500000002** for V6 live attempts. The aggregate
+  ceiling remains USD 15 less prior authorized spend and these V6 attempts.
+- **Root cause:** Brave rate limiting is no longer the protected boundary. The
+  normal-path live product still needs stronger source selection, relevance
+  gating, and reader synthesis that answers the submitted question using
+  admitted evidence instead of rendering the first admitted quote.
+- **Next action:** continue from `/private/tmp/mammoth-core-loop-v6` commit
+  `e21c170`; do not count V6 live outputs as acceptance evidence. Fix the
+  source-selection/reader-quality root cause without weakening evidence gates,
+  then rerun three unrelated Brave-only holdouts and the exact world-model
+  question from fresh directories and fresh journals.

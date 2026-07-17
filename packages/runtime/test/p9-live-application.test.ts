@@ -1501,7 +1501,7 @@ describe('P9 live application', () => {
       expect(receipt.usageSource).toBe('absent');
       expect(receipt.observedUsage).toBeNull();
       // ceiling charge, never zero and never an invented observation
-      expect(receipt.charged.bytes).toBe(2_000_000);
+      expect(receipt.charged.bytes).toBe(6_000_000);
       expect(receipt.charged.currencyUsd).toBeGreaterThan(0);
     }
   });

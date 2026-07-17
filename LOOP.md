@@ -156,6 +156,14 @@ effects beyond it, record the exact amount, provider, ceiling, and expected proo
 finish every no-spend predicate, and set the TaskFlow to a protected-boundary wait.
 Do not silently spend or substitute a fixture result for the live claim.
 
+The existing Brave Search credential is the only authorized search credential for
+the remaining live acceptance runs. Tavily is out of scope unless the owner grants
+a new explicit authorization; do not inspect or touch the employer-owned Tavily
+credential in the DeerFlow environment. Brave rate-limit handling must distinguish
+short-window burst throttling from monthly quota exhaustion, pace by the short
+window, retry only bounded burst 429 responses, and preserve all attempts in the
+effect usage and budget record.
+
 Repository implementation and GitHub work for `heybeaux/mammoth` are authorized by the
 current delivery request. No deployment, release publication, or tag on Friday
 2026-07-17; from Saturday 2026-07-18 the release step is authorized without further

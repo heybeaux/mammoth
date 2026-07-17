@@ -76,6 +76,12 @@ import {
   type P9ObservedSourceSnapshot,
 } from './p9-generic-research.js';
 import {
+  BraveRateLimitError,
+  decideBraveRateLimitRetry,
+  nextBraveShortWindowDelayMs,
+  parseBraveRateLimitHeaders,
+} from './brave-rate-limit.js';
+import {
   P9LiveEffectExecutor,
   priceObservedUsage,
   type P9LiveEffectObservation,
@@ -938,7 +944,11 @@ async function runP9LiveApplicationExclusive(
     const result = await executor.execute<readonly P9LiveCandidate[]>({
       id: `search:${query.queryId}`,
       catalogEntryId: 'brave-search',
-      ceiling: ceiling({ bytes: 2_000_000, durationMs: 30_000 }),
+      ceiling: ceiling({
+        bytes: 2_000_000,
+        durationMs: 30_000,
+        attempts: 3,
+      }),
       transport: async () => {
         const startedAt = now().getTime();
         const outcome = await input.search.search(query.query);
@@ -2277,6 +2287,10 @@ export interface BraveP9LiveSearchAdapterInput {
   readonly monotonicNow?: () => number;
   readonly sleep?: (milliseconds: number) => Promise<void>;
   readonly minimumIntervalMs?: number;
+  readonly max429Retries?: number;
+  readonly maxShortResetSeconds?: number;
+  readonly retryPaddingMs?: number;
+  readonly retryJitterMs?: () => number;
 }
 
 export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
@@ -2307,9 +2321,39 @@ export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
       ((milliseconds: number) =>
         new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
     const minimumIntervalMs = this.input.minimumIntervalMs ?? 2_000;
+    const max429Retries = this.input.max429Retries ?? 2;
+    const maxShortResetSeconds = this.input.maxShortResetSeconds ?? 5;
+    const retryPaddingMs = this.input.retryPaddingMs ?? 250;
+    const retryJitterMs = this.input.retryJitterMs ?? (() => 0);
     if (!Number.isFinite(minimumIntervalMs) || minimumIntervalMs < 0) {
       throw new Error(
         'Brave adapter minimum request interval must be a finite non-negative number',
+      );
+    }
+    if (!Number.isInteger(max429Retries) || max429Retries < 0) {
+      throw new Error('Brave adapter 429 retry bound must be non-negative');
+    }
+    if (max429Retries > 2) {
+      throw new Error(
+        'Brave adapter 429 retry bound exceeds the reserved attempt envelope',
+      );
+    }
+    if (
+      !Number.isFinite(maxShortResetSeconds) ||
+      maxShortResetSeconds < 0 ||
+      maxShortResetSeconds > 10
+    ) {
+      throw new Error(
+        'Brave adapter short reset cap must be finite and at most 10 seconds',
+      );
+    }
+    if (
+      !Number.isFinite(retryPaddingMs) ||
+      retryPaddingMs < 0 ||
+      retryPaddingMs > 10_000
+    ) {
+      throw new Error(
+        'Brave adapter retry padding must be finite and at most 10000 milliseconds',
       );
     }
     const admission = this.#admissionTail.then(async () => {
@@ -2319,41 +2363,53 @@ export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
     });
     this.#admissionTail = admission.catch(() => undefined);
     await admission;
-    const fetchImpl = this.input.fetchImpl ?? fetch;
     const url = new URL('https://api.search.brave.com/res/v1/web/search');
     url.searchParams.set('q', query);
     url.searchParams.set('count', '5');
     const startedAt = now().getTime();
-    const response = await fetchImpl(url, {
-      headers: {
-        accept: 'application/json',
-        'x-subscription-token': apiKey,
-      },
-      redirect: 'error',
-      signal: AbortSignal.timeout(10_000),
-    });
-    const remaining = response.headers
-      .get('x-ratelimit-remaining')
-      ?.split(',')
-      .map((value) => Number(value.trim()));
-    const resets = response.headers
-      .get('x-ratelimit-reset')
-      ?.split(',')
-      .map((value) => Number(value.trim()));
-    if (remaining?.[0] === 0 && Number.isFinite(resets?.[0])) {
+    const fetchImpl = this.input.fetchImpl ?? fetch;
+    let attempts = 0;
+    let response: Response | null = null;
+    let responseText = '';
+    let observedBytes = 0;
+    for (;;) {
+      attempts += 1;
+      response = await fetchImpl(url, {
+        headers: {
+          accept: 'application/json',
+          'x-subscription-token': apiKey,
+        },
+        redirect: 'error',
+        signal: AbortSignal.timeout(10_000),
+      });
+      responseText = await response.text();
+      observedBytes += Buffer.byteLength(responseText, 'utf8');
+      const nextDelayMs = nextBraveShortWindowDelayMs({
+        headers: response.headers,
+        fallbackIntervalMs: minimumIntervalMs,
+        retryPaddingMs,
+      });
       this.#nextRequestAtMs = Math.max(
         this.#nextRequestAtMs,
-        monotonicNow() + (resets?.[0] ?? 0) * 1_000 + 250,
+        monotonicNow() + nextDelayMs,
       );
+      if (response.status !== 429) break;
+      const decision = decideBraveRateLimitRetry({
+        status: response.status,
+        headers: response.headers,
+        maxShortResetSeconds,
+        retryPaddingMs,
+        jitterMs: boundedRetryJitter(retryJitterMs()),
+      });
+      if (decision.kind !== 'retry_short_window' || attempts > max429Retries) {
+        throw braveRateLimitError(response.status, response.headers, decision);
+      }
+      await sleep(decision.waitMs);
     }
     if (!response.ok) {
-      const reset = response.headers.get('x-ratelimit-reset');
-      const safeReset = reset?.match(/^[0-9, ]{1,80}$/u)?.[0];
-      throw new Error(
-        `Brave search failed with HTTP ${String(response.status)}${safeReset ? `; rate limit reset ${safeReset} seconds` : ''}`,
-      );
+      throw braveHttpError(response.status, response.headers);
     }
-    const rawBody = await response.text();
+    const rawBody = responseText;
     const parsed = BraveSearchResponseSchema.parse(JSON.parse(rawBody));
     const candidates = parsed.web.results.map((result, index) => {
       const sourceClass = inferSourceClass(result.url);
@@ -2368,14 +2424,53 @@ export class BraveP9LiveSearchAdapter implements P9LiveSearchAdapter {
     return {
       candidates,
       usage: {
-        requests: 1,
+        requests: attempts,
         inputTokens: 0,
         outputTokens: 0,
-        bytes: Buffer.byteLength(rawBody, 'utf8'),
+        bytes: observedBytes,
         durationMs: Math.max(0, now().getTime() - startedAt),
       },
     };
   }
+}
+
+function braveRateLimitError(
+  status: number,
+  headers: Headers,
+  decision: ReturnType<typeof decideBraveRateLimitRetry>,
+): Error {
+  if (decision.kind === 'not_rate_limit')
+    return braveHttpError(status, headers);
+  const reset = headers.get('x-ratelimit-reset');
+  const safeReset = reset?.match(/^[0-9, ]{1,80}$/u)?.[0];
+  return new BraveRateLimitError(
+    `Brave search failed with HTTP ${String(status)}${
+      safeReset ? `; rate limit reset ${safeReset} seconds` : ''
+    }; rate limit ${decision.kind}`,
+    decision,
+  );
+}
+
+function boundedRetryJitter(value: number): number {
+  if (!Number.isFinite(value) || value < 0 || value > 1_000) {
+    throw new Error(
+      'Brave adapter retry jitter must be finite and at most 1000 milliseconds',
+    );
+  }
+  return value;
+}
+
+function braveHttpError(status: number, headers: Headers): Error {
+  const reset = headers.get('x-ratelimit-reset');
+  const safeReset = reset?.match(/^[0-9, ]{1,80}$/u)?.[0];
+  const state = parseBraveRateLimitHeaders(headers);
+  const monthlyExhausted =
+    state.monthlyWindow?.remaining === 0 ? '; monthly quota exhausted' : '';
+  return new Error(
+    `Brave search failed with HTTP ${String(status)}${
+      safeReset ? `; rate limit reset ${safeReset} seconds` : ''
+    }${monthlyExhausted}`,
+  );
 }
 
 const BraveSearchResponseSchema = z

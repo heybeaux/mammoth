@@ -49,6 +49,12 @@ import {
   FileP9DurableJournalStore,
   P9DurableBudgetAuthority,
 } from '@mammoth/governance';
+import {
+  BraveRateLimitError,
+  decideBraveRateLimitRetry,
+  nextBraveShortWindowDelayMs,
+  parseBraveRateLimitHeaders,
+} from './brave-rate-limit.js';
 import { P9LiveEffectExecutor } from './p9-live-executor.js';
 
 const REQUIRED_EFFECT_KINDS = ['search', 'retrieval', 'parser'] as const;
@@ -69,7 +75,7 @@ const LIVE_EVALUATOR_PROFILE_VERSION = 'live-openai-compatible-evaluator/v1';
 const LIVE_EVALUATOR_PROFILE_FAMILY = 'live-openai-compatible-evaluator';
 const LIVE_USER_AGENT = 'mammoth-investigate-live/1.0';
 const LOW_INFORMATION_SPAN_PATTERN =
-  /^(?:skip to main content|an official website|official websites use|secure \.gov websites|menu|search|privacy policy|terms of use|cookies?|javascript|equal contribution|corresponding author|received:|accepted:|published:)/iu;
+  /(?:^(?:skip to main content|an official website|official websites use|secure \.gov websites|menu|search|privacy policy|terms of use|cookies?|javascript|equal contribution|corresponding author|received:|accepted:|published:)|\b(?:open access|creative commons|cc by|copyright|©|competing interests|license|licence|received \d{4}|revised \d{4}|accepted \d{4}|collection date|published by|permission directly from the copyright holder|distributed under the terms|equal contribution)\b)/iu;
 
 export class GovernedExecutionError extends Error {
   constructor(
@@ -209,6 +215,42 @@ function isLowInformationLiveSpan(quote: string): boolean {
   if (informativeWordCount(normalized) < 8) return true;
   if (LOW_INFORMATION_SPAN_PATTERN.test(normalized)) return true;
   return false;
+}
+
+function liveRelevanceTerms(question: string): readonly string[] {
+  return [
+    ...new Set(
+      [...question.matchAll(/[\p{L}\p{N}][\p{L}\p{N}-]{2,}/gu)]
+        .map((match) => match[0].toLocaleLowerCase('en-US'))
+        .filter(
+          (term) =>
+            term.length >= 4 &&
+            ![
+              'that',
+              'with',
+              'where',
+              'today',
+              'using',
+              'based',
+              'systems',
+              'beyond',
+              'argues',
+              'important',
+              'individuals',
+              'building',
+            ].includes(term),
+        ),
+    ),
+  ].slice(0, 12);
+}
+
+function isLiveSpanQuestionRelevant(
+  quote: string,
+  terms: readonly string[],
+): boolean {
+  const normalized = quote.toLocaleLowerCase('en-US');
+  const hits = terms.filter((term) => normalized.includes(term));
+  return hits.length >= Math.min(2, terms.length);
 }
 
 /**
@@ -950,14 +992,21 @@ export async function executeGovernedLiveAcquisition(
           (input.searchProvider ?? 'brave') === 'tavily'
             ? 'tavily-search'
             : 'brave-search',
-        ceiling: ceiling({ bytes: 2_000_000, durationMs: 30_000 }),
+        ceiling: ceiling({
+          bytes: 2_000_000,
+          durationMs: 30_000,
+          attempts: 3,
+        }),
         transport: async () => {
           const nowMs = Date.now();
           const delayMs = Math.max(0, nextSearchAt - nowMs);
           if (delayMs > 0) {
             await new Promise((resolve) => setTimeout(resolve, delayMs));
           }
-          nextSearchAt = Date.now() + (input.minimumSearchIntervalMs ?? 1_100);
+          nextSearchAt =
+            Date.now() +
+            (input.minimumSearchIntervalMs ??
+              ((input.searchProvider ?? 'brave') === 'brave' ? 2_000 : 0));
           const outcome = await liveSearch({
             query: intent.subject,
             apiKeyEnvVar: input.searchApiKeyEnvVar,
@@ -1053,6 +1102,7 @@ export async function executeGovernedLiveAcquisition(
       readonly requestedUrl: string;
       readonly sourceClass: string;
     }[] = [];
+    const relevanceTerms = liveRelevanceTerms(authority.planScope.question);
 
     const recordAttempt = (
       candidate: SelectedRetrievalCandidate,
@@ -1255,7 +1305,9 @@ export async function executeGovernedLiveAcquisition(
           body: parsed.text,
           spanIdPrefix: `live:${candidate.candidateId}`,
           isExcluded: isLowInformationLiveSpan,
-        });
+        }).filter((span) =>
+          isLiveSpanQuestionRelevant(span.quote, relevanceTerms),
+        );
         recordAttempt(
           candidate,
           'admitted',
@@ -1424,6 +1476,7 @@ function ceiling(input: {
   readonly outputTokens?: number;
   readonly bytes?: number;
   readonly durationMs: number;
+  readonly attempts?: number;
   readonly parserClass?: string | null;
 }) {
   return {
@@ -1432,7 +1485,7 @@ function ceiling(input: {
     outputTokens: input.outputTokens ?? 0,
     bytes: input.bytes ?? 0,
     durationMs: input.durationMs,
-    attempts: 1,
+    attempts: input.attempts ?? 1,
     parserClass: input.parserClass ?? null,
   };
 }
@@ -1536,24 +1589,42 @@ async function braveSearch(
   url.searchParams.set('q', query);
   url.searchParams.set('count', '5');
   const startedAt = Date.now();
-  const response = await fetchImpl(url, {
-    headers: {
-      accept: 'application/json',
-      'x-subscription-token': apiKey,
-    },
-    redirect: 'error',
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!response.ok) {
-    const reset = response.headers.get('x-ratelimit-reset');
-    const safeReset = reset?.match(/^[0-9, ]{1,80}$/u)?.[0];
-    throw new Error(
-      `Brave search failed with HTTP ${String(response.status)}${
-        safeReset ? `; rate limit reset ${safeReset} seconds` : ''
-      }`,
-    );
+  let attempts = 0;
+  let observedBytes = 0;
+  let response: Response | null = null;
+  let raw = '';
+  for (;;) {
+    attempts += 1;
+    response = await fetchImpl(url, {
+      headers: {
+        accept: 'application/json',
+        'x-subscription-token': apiKey,
+      },
+      redirect: 'error',
+      signal: AbortSignal.timeout(15_000),
+    });
+    raw = await response.text();
+    observedBytes += Buffer.byteLength(raw, 'utf8');
+    if (response.status !== 429) break;
+    const decision = decideBraveRateLimitRetry({
+      status: response.status,
+      headers: response.headers,
+      maxShortResetSeconds: 5,
+      retryPaddingMs: 250,
+      jitterMs: 0,
+    });
+    if (decision.kind !== 'retry_short_window' || attempts > 2) {
+      throw braveSearchRateLimitError(
+        response.status,
+        response.headers,
+        decision,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, decision.waitMs));
   }
-  const raw = await response.text();
+  if (!response.ok) {
+    throw braveSearchHttpError(response.status, response.headers);
+  }
   const parsed = JSON.parse(raw) as {
     web?: { results?: { url?: string; title?: string }[] };
   };
@@ -1561,24 +1632,73 @@ async function braveSearch(
     .filter((result): result is { url: string; title?: string } => {
       if (!result.url) return false;
       try {
-        return new URL(result.url).protocol === 'https:';
+        const url = new URL(result.url);
+        return (
+          url.protocol === 'https:' &&
+          (!url.pathname.endsWith('.pdf') || url.hostname === 'arxiv.org')
+        );
       } catch {
         return false;
       }
     })
-    .map((result) => ({
-      url: result.url,
-      sourceClass: 'public_web',
-      ...(result.title === undefined ? {} : { title: result.title }),
-    }));
+    .map((result) => {
+      const url = new URL(result.url);
+      const arxivPdf =
+        url.hostname === 'arxiv.org'
+          ? /^\/pdf\/([^/]+?)(?:\.pdf)?$/u.exec(url.pathname)
+          : null;
+      return {
+        url: arxivPdf
+          ? `https://arxiv.org/html/${arxivPdf[1] ?? ''}`
+          : result.url,
+        sourceClass: 'public_web',
+        ...(result.title === undefined ? {} : { title: result.title }),
+      };
+    });
   return {
     hints,
     usage: usageOf({
-      requests: 1,
-      bytes: Buffer.byteLength(raw, 'utf8'),
+      requests: attempts,
+      bytes: observedBytes,
       durationMs: Math.max(0, Date.now() - startedAt),
     }),
   };
+}
+
+function braveSearchRateLimitError(
+  status: number,
+  headers: Headers,
+  decision: ReturnType<typeof decideBraveRateLimitRetry>,
+): Error {
+  if (decision.kind === 'not_rate_limit') {
+    return braveSearchHttpError(status, headers);
+  }
+  const reset = headers.get('x-ratelimit-reset');
+  const safeReset = reset?.match(/^[0-9, ]{1,80}$/u)?.[0];
+  return new BraveRateLimitError(
+    `Brave search failed with HTTP ${String(status)}${
+      safeReset ? `; rate limit reset ${safeReset} seconds` : ''
+    }; rate limit ${decision.kind}`,
+    decision,
+  );
+}
+
+function braveSearchHttpError(status: number, headers: Headers): Error {
+  const reset = headers.get('x-ratelimit-reset');
+  const safeReset = reset?.match(/^[0-9, ]{1,80}$/u)?.[0];
+  const state = parseBraveRateLimitHeaders(headers);
+  const shortDelayMs = nextBraveShortWindowDelayMs({
+    headers,
+    fallbackIntervalMs: 2_000,
+    retryPaddingMs: 250,
+  });
+  const monthlyExhausted =
+    state.monthlyWindow?.remaining === 0 ? '; monthly quota exhausted' : '';
+  return new Error(
+    `Brave search failed with HTTP ${String(status)}${
+      safeReset ? `; rate limit reset ${safeReset} seconds` : ''
+    }; next short-window delay ${String(shortDelayMs)}ms${monthlyExhausted}`,
+  );
 }
 
 async function tavilySearch(

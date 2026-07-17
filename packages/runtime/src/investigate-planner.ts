@@ -141,6 +141,10 @@ function stableIndex(seed: string, offset: number, size: number): number {
   return Number.parseInt(digest.slice(0, 8), 16) % size;
 }
 
+function searchStem(question: string): string {
+  return question;
+}
+
 function selectOptionalRoles(
   question: string,
   focus: string,
@@ -189,6 +193,7 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
   }
   const primary = terms.slice(0, 4).join(' ');
   const secondary = terms.slice(4, 8).join(' ') || terms.slice(0, 2).join(' ');
+  const directSearch = searchStem(question);
   const investigationId = canonicalDigest({ question }).slice(7, 23);
   const optionalRoles = selectOptionalRoles(question, primary);
   const proposedTeam: ProposedResearchRole[] = [
@@ -268,7 +273,7 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
         `What opportunities survive feasibility, prior-art, risk, and falsification checks?`,
       ],
       searchQueries: [
-        `${primary} primary evidence measurements`,
+        `${directSearch} primary sources evidence`,
         `${secondary} limitations counterexamples`,
         `${primary} mechanisms constraints comparative analysis`,
         `${secondary} replication failures independent review`,
