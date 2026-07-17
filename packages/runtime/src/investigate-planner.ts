@@ -162,12 +162,31 @@ export function deriveDecisionConstraints(question: string): readonly string[] {
     seen.add(phrase);
     target.push(phrase);
   };
+  const readableSegment = (segment: string): string => {
+    const normalized = segment
+      .replace(/[“”"']/gu, '')
+      .replace(/[^\p{L}\p{N}./+-]+/gu, ' ')
+      .replace(/\s+/gu, ' ')
+      .trim()
+      .replace(
+        /^(?:how|what|which|where|when|why|should|could|would|can|do|does|did|the|a|an|with)\s+/iu,
+        '',
+      )
+      .replace(
+        /^(?:biggest\s+)?(?:opportunities|strategies|approaches|options)\s+(?:lie\s+)?(?:today\s+)?(?:for\s+)?/iu,
+        '',
+      )
+      .trim();
+    const words = normalized.split(/\s+/u).filter(Boolean);
+    if (words.length < 2) return '';
+    return words.slice(0, 9).join(' ');
+  };
   for (const segment of question.split(
     /\b(?:after|before|during|for|on|under|using|when|where|while|with|without|based\s+on)\b|[.,;:?!]/giu,
   )) {
     const terms = orderedFocusTerms(segment);
     if (terms.length < 2) continue;
-    add(segmentPhrases, terms.slice(0, 5).join(' '));
+    add(segmentPhrases, readableSegment(segment) || terms.slice(0, 6).join(' '));
     if (terms.length > 5) add(supportingPhrases, terms.slice(-4).join(' '));
     for (let index = 0; index < terms.length - 1; index += 1) {
       add(supportingPhrases, terms.slice(index, index + 3).join(' '));
