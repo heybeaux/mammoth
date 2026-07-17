@@ -205,6 +205,7 @@ export interface GovernedAcquisitionExecution {
   readonly claims: readonly GovernedClaimRecord[];
   readonly modelWork: readonly P9ModelWorkRef[];
   readonly liveReview?: GovernedLiveModelReview;
+  readonly acceptanceReview?: GovernedLiveAcceptanceReview;
   readonly reviewEvidenceProposalIds?: readonly string[];
   readonly effectReceipts: readonly unknown[];
   readonly externalEffectsExecuted: boolean;
@@ -261,6 +262,24 @@ export interface GovernedLiveReviewExperiment
   readonly resolvesUncertainty: string;
   readonly threshold: string;
   readonly safetyBoundary: string;
+}
+
+export interface GovernedLiveAcceptanceReview {
+  readonly reviewerId: string;
+  readonly reviewedAt: string;
+  readonly overall: 'pass' | 'fail';
+  readonly criteria: readonly GovernedLiveAcceptanceCriterion[];
+  readonly decisionConstraints: readonly GovernedLiveAcceptanceCriterion[];
+  readonly sourceClusters: readonly {
+    readonly clusterId: string;
+    readonly evidenceCount: number;
+  }[];
+}
+
+export interface GovernedLiveAcceptanceCriterion {
+  readonly criterionId: string;
+  readonly passed: boolean;
+  readonly evidence: string;
 }
 
 export interface GovernedLiveAcquisitionExecutionInput {
@@ -410,6 +429,50 @@ function hasComparatorLanguage(value: string): boolean {
   return /\b(?:baseline|compar(?:e|ator|ison)|control|before[- ]?after|current|existing|alternative|threshold|target|versus|vs\.?|fail(?:ure)? rate|error rate|latency|cost|accuracy|safety|energy|outcome)\b/iu.test(
     value,
   );
+}
+
+function hasMetricLanguage(value: string): boolean {
+  return /\b(?:rate|ratio|percent|percentage|accuracy|latency|throughput|cost|memory|gpu|vram|energy|runtime|hours?|minutes?|days?|error|failure|recall|precision|coverage|completion|safety|quality|score|count|threshold)\b/iu.test(
+    value,
+  );
+}
+
+function hasAdverseConstraintLanguage(value: string): boolean {
+  return /\b(?:adverse|constraint|failure|regression|safety|privacy|security|risk|budget|cost|latency|memory|gpu|vram|offline|local|harm|fallback|blocked)\b/iu.test(
+    value,
+  );
+}
+
+function sourceClusterId(urlValue: string): string {
+  try {
+    const url = new URL(urlValue);
+    const host = url.hostname.toLocaleLowerCase('en-US');
+    const parts = url.pathname
+      .split('/')
+      .filter(Boolean)
+      .map((part) => part.toLocaleLowerCase('en-US'));
+    if (
+      /\b(?:github|gitlab|codeberg|sourcehut)\b/u.test(host) &&
+      parts.length >= 2
+    ) {
+      return `${host}/${parts[0] ?? ''}/${parts[1] ?? ''}`;
+    }
+    if (host === 'arxiv.org' && parts.length >= 2) {
+      return `${host}/${parts[0] ?? ''}/${parts[1] ?? ''}`;
+    }
+    const hostParts = host.split('.');
+    return hostParts.length >= 2 ? hostParts.slice(-2).join('.') : host;
+  } catch {
+    return 'invalid-url';
+  }
+}
+
+function distinctSourceClustersForClaims(
+  claims: readonly GovernedClaimRecord[],
+): readonly string[] {
+  return [
+    ...new Set(claims.map((claim) => sourceClusterId(claim.requestedUrl))),
+  ].filter((cluster) => cluster !== 'invalid-url');
 }
 
 function evidenceReadableConstraint(value: string, fallback: string): string {
@@ -573,6 +636,56 @@ function interleaveRelevantHintsByQuery(
       if (!next) continue;
       ordered.push(next.hint);
       queues.set(queryId, rest);
+      progressed = true;
+    }
+  }
+  return ordered;
+}
+
+function diversifyCandidatesBySourceCluster(
+  candidates: readonly SelectedRetrievalCandidate[],
+  maxCandidates: number,
+): readonly SelectedRetrievalCandidate[] {
+  const queues = new Map<string, SelectedRetrievalCandidate[]>();
+  for (const candidate of candidates) {
+    const cluster = sourceClusterId(candidate.requestedUrl);
+    queues.set(cluster, [...(queues.get(cluster) ?? []), candidate]);
+  }
+  const ordered: SelectedRetrievalCandidate[] = [];
+  let progressed = true;
+  while (progressed && ordered.length < maxCandidates) {
+    progressed = false;
+    for (const cluster of [...queues.keys()].sort()) {
+      const queue = queues.get(cluster) ?? [];
+      const [next, ...rest] = queue;
+      if (!next) continue;
+      ordered.push(next);
+      queues.set(cluster, rest);
+      progressed = true;
+      if (ordered.length >= maxCandidates) break;
+    }
+  }
+  return ordered;
+}
+
+function diversifyClaimsBySourceCluster(
+  claims: readonly GovernedClaimRecord[],
+): readonly GovernedClaimRecord[] {
+  const queues = new Map<string, GovernedClaimRecord[]>();
+  for (const claim of claims) {
+    const cluster = sourceClusterId(claim.requestedUrl);
+    queues.set(cluster, [...(queues.get(cluster) ?? []), claim]);
+  }
+  const ordered: GovernedClaimRecord[] = [];
+  let progressed = true;
+  while (progressed) {
+    progressed = false;
+    for (const cluster of [...queues.keys()].sort()) {
+      const queue = queues.get(cluster) ?? [];
+      const [next, ...rest] = queue;
+      if (!next) continue;
+      ordered.push(next);
+      queues.set(cluster, rest);
       progressed = true;
     }
   }
@@ -1428,8 +1541,8 @@ export async function executeGovernedLiveAcquisition(
       selectedAt: input.now,
     });
     const unauthorizedRetrievalHints: RejectedSourceHint[] = [];
-    const selectedCandidates = selection.candidates
-      .filter((candidate) => {
+    const authorizedSelectedCandidates = selection.candidates.filter(
+      (candidate) => {
         const origin = new URL(candidate.requestedUrl).origin;
         if (
           isRetrievalOriginAuthorized({
@@ -1447,8 +1560,12 @@ export async function executeGovernedLiveAcquisition(
           reason: 'url_not_permitted',
         });
         return false;
-      })
-      .slice(0, maxCandidates);
+      },
+    );
+    const selectedCandidates = diversifyCandidatesBySourceCluster(
+      authorizedSelectedCandidates,
+      maxCandidates,
+    );
 
     const candidateQuery = new Map<string, string>();
     for (const candidate of selectedCandidates) {
@@ -1781,20 +1898,39 @@ export async function executeGovernedLiveAcquisition(
         durationMs: 120_000,
       }),
       transport: async () => {
-        const reviewClaims = claims
+        const rawReviewClaims = claims.filter(
+          (claim) =>
+            claim.decision === 'admitted' &&
+            hints.some((hint) => {
+              try {
+                return (
+                  canonicalizeAcquisitionUrl(hint.url).href ===
+                    claim.requestedUrl && isDecisionGradeLiveSource(hint)
+                );
+              } catch {
+                return false;
+              }
+            }),
+        );
+        if (isBroadDecisionQuestion(intentSet.question)) {
+          const clusters = distinctSourceClustersForClaims(rawReviewClaims);
+          if (clusters.length < 3) {
+            refuse(
+              'insufficient_source_cluster_diversity',
+              'broad live synthesis requires admitted decision-grade evidence from at least three independent source clusters',
+            );
+          }
+        }
+        const reviewClaims = diversifyClaimsBySourceCluster(rawReviewClaims)
           .filter(
-            (claim) =>
-              claim.decision === 'admitted' &&
-              hints.some((hint) => {
-                try {
-                  return (
-                    canonicalizeAcquisitionUrl(hint.url).href ===
-                      claim.requestedUrl && isDecisionGradeLiveSource(hint)
-                  );
-                } catch {
-                  return false;
-                }
-              }),
+            (claim, index, all) =>
+              all
+                .slice(0, index)
+                .filter(
+                  (prior) =>
+                    sourceClusterId(prior.requestedUrl) ===
+                    sourceClusterId(claim.requestedUrl),
+                ).length < 4,
           )
           .slice(0, 32);
         if (reviewClaims.length === 0) {
@@ -1825,28 +1961,53 @@ export async function executeGovernedLiveAcquisition(
       },
     });
     if (modelReview.status === 'failed') throw asError(modelReview.error);
+    const reviewEvidenceClaims = claims.filter(
+      (claim) =>
+        claim.decision === 'admitted' &&
+        hints.some((hint) => {
+          try {
+            return (
+              canonicalizeAcquisitionUrl(hint.url).href ===
+                claim.requestedUrl && isDecisionGradeLiveSource(hint)
+            );
+          } catch {
+            return false;
+          }
+        }),
+    );
     assertDecisionGradeReview({
       review: modelReview.value,
-      admittedEvidenceCount: claims.filter(
-        (claim) =>
-          claim.decision === 'admitted' &&
-          hints.some((hint) => {
-            try {
-              return (
-                canonicalizeAcquisitionUrl(hint.url).href ===
-                  claim.requestedUrl && isDecisionGradeLiveSource(hint)
-              );
-            } catch {
-              return false;
-            }
-          }),
-      ).length,
+      admittedEvidenceCount: reviewEvidenceClaims.length,
       decisionConstraints: deriveDecisionConstraints(intentSet.question).slice(
         0,
         4,
       ),
       question: intentSet.question,
+      reviewClaims: reviewEvidenceClaims,
     });
+    const acceptanceReview = buildLiveAcceptanceReview({
+      review: modelReview.value,
+      reviewClaims: reviewEvidenceClaims,
+      decisionConstraints: deriveDecisionConstraints(intentSet.question).slice(
+        0,
+        4,
+      ),
+      question: intentSet.question,
+      now: input.now,
+    });
+    if (acceptanceReview.overall !== 'pass') {
+      const failed = [
+        ...acceptanceReview.criteria,
+        ...acceptanceReview.decisionConstraints,
+      ]
+        .filter((item) => !item.passed)
+        .map((item) => item.criterionId)
+        .join(', ');
+      refuse(
+        'independent_acceptance_review_failed',
+        `live acceptance review failed one or more explicit pass/fail criteria: ${failed}`,
+      );
+    }
     const reviewSeed = canonicalDigest(modelReview.value).slice(7, 23);
     modelWork.push(
       liveWorkRef({
@@ -1887,20 +2048,19 @@ export async function executeGovernedLiveAcquisition(
       claims,
       modelWork,
       liveReview: modelReview.value,
-      reviewEvidenceProposalIds: claims
+      acceptanceReview,
+      reviewEvidenceProposalIds: diversifyClaimsBySourceCluster(
+        reviewEvidenceClaims,
+      )
         .filter(
-          (claim) =>
-            claim.decision === 'admitted' &&
-            hints.some((hint) => {
-              try {
-                return (
-                  canonicalizeAcquisitionUrl(hint.url).href ===
-                    claim.requestedUrl && isDecisionGradeLiveSource(hint)
-                );
-              } catch {
-                return false;
-              }
-            }),
+          (claim, index, all) =>
+            all
+              .slice(0, index)
+              .filter(
+                (prior) =>
+                  sourceClusterId(prior.requestedUrl) ===
+                  sourceClusterId(claim.requestedUrl),
+              ).length < 4,
         )
         .slice(0, 32)
         .map((claim) => claim.proposalId),
@@ -2593,6 +2753,7 @@ function assertDecisionGradeReview(input: {
   readonly admittedEvidenceCount: number;
   readonly decisionConstraints: readonly string[];
   readonly question: string;
+  readonly reviewClaims: readonly GovernedClaimRecord[];
 }): void {
   const portfolio = input.review.portfolio ?? [];
   if (portfolio.length === 0) {
@@ -2647,6 +2808,13 @@ function assertDecisionGradeReview(input: {
     );
   }
   if (isBroadDecisionQuestion(input.question)) {
+    const clusters = distinctSourceClustersForClaims(input.reviewClaims);
+    if (clusters.length < 3) {
+      refuse(
+        'insufficient_source_cluster_diversity',
+        'broad decision questions require admitted decision-grade evidence from at least three independent source clusters',
+      );
+    }
     if (portfolio.length < 3) {
       refuse(
         'decision_portfolio_too_narrow',
@@ -2691,6 +2859,22 @@ function assertDecisionGradeReview(input: {
     refuse(
       'decision_constraints_unresolved',
       `live synthesis omitted generated decision constraints: ${uncovered.join('; ')}`,
+    );
+  }
+  const unresolvedText = (input.review.unresolvedConstraints ?? []).join(' ');
+  const unresolvedDecisionConstraints = input.decisionConstraints.filter(
+    (constraint) => {
+      const terms = textTerms(constraint);
+      if (terms.length === 0) return false;
+      return (
+        textRelevanceScore(unresolvedText, terms) >= Math.ceil(terms.length / 2)
+      );
+    },
+  );
+  if (unresolvedDecisionConstraints.length > 0) {
+    refuse(
+      'decision_constraints_explicitly_unresolved',
+      `live synthesis left generated decision constraints unresolved: ${unresolvedDecisionConstraints.join('; ')}`,
     );
   }
   if ((input.review.experimentProposals ?? []).length === 0) {
@@ -2746,6 +2930,12 @@ function assertDecisionGradeReview(input: {
   }
   for (const experiment of input.review.experimentProposals ?? []) {
     const threshold = experiment.threshold.trim();
+    const experimentText = [
+      experiment.statement,
+      experiment.resolvesUncertainty,
+      experiment.threshold,
+      experiment.safetyBoundary,
+    ].join(' ');
     if (
       experiment.statement.trim().length < 24 ||
       experiment.resolvesUncertainty.trim().length < 24 ||
@@ -2754,6 +2944,8 @@ function assertDecisionGradeReview(input: {
         threshold,
       ) ||
       !hasComparatorLanguage(threshold) ||
+      !hasMetricLanguage(experimentText) ||
+      !hasAdverseConstraintLanguage(experimentText) ||
       experiment.safetyBoundary.trim().length < 24 ||
       experiment.evidenceIndexes.length === 0 ||
       experiment.evidenceIndexes.some(
@@ -2765,10 +2957,106 @@ function assertDecisionGradeReview(input: {
     ) {
       refuse(
         'invalid_bounded_experiment',
-        'live synthesis requires concrete cited experiments with non-placeholder thresholds',
+        'live synthesis requires concrete cited experiments with metrics, comparators, thresholds, and adverse-constraint checks',
       );
     }
   }
+}
+
+function criterion(
+  criterionId: string,
+  passed: boolean,
+  evidence: string,
+): GovernedLiveAcceptanceCriterion {
+  return { criterionId, passed, evidence };
+}
+
+function buildLiveAcceptanceReview(input: {
+  readonly review: GovernedLiveModelReview;
+  readonly reviewClaims: readonly GovernedClaimRecord[];
+  readonly decisionConstraints: readonly string[];
+  readonly question: string;
+  readonly now: string;
+}): GovernedLiveAcceptanceReview {
+  const clusters = distinctSourceClustersForClaims(input.reviewClaims);
+  const portfolio = input.review.portfolio ?? [];
+  const portfolioText = portfolio
+    .flatMap((item) => [
+      item.title,
+      item.statement,
+      item.rationale,
+      item.nextValidation,
+      ...item.constraints,
+    ])
+    .join(' ');
+  const unresolvedText = (input.review.unresolvedConstraints ?? []).join(' ');
+  const decisionConstraintCriteria = input.decisionConstraints.map(
+    (constraint, index) => {
+      const terms = textTerms(constraint);
+      const resolved =
+        terms.length === 0 ||
+        (textRelevanceScore(portfolioText, terms) >=
+          Math.ceil(terms.length / 2) &&
+          textRelevanceScore(unresolvedText, terms) <
+            Math.ceil(terms.length / 2));
+      return criterion(
+        `decision-constraint-${String(index + 1)}`,
+        resolved,
+        constraint,
+      );
+    },
+  );
+  const experiments = input.review.experimentProposals ?? [];
+  const criteria = [
+    criterion(
+      'source-cluster-diversity',
+      !isBroadDecisionQuestion(input.question) || clusters.length >= 3,
+      `${String(clusters.length)} independent source cluster(s): ${clusters.join(', ')}`,
+    ),
+    criterion(
+      'portfolio-breadth',
+      !isBroadDecisionQuestion(input.question) || portfolio.length >= 3,
+      `${String(portfolio.length)} ranked portfolio item(s)`,
+    ),
+    criterion(
+      'dissent-and-boundaries',
+      (input.review.dissent ?? []).length > 0 &&
+        (input.review.boundaryConditions ?? []).length > 0,
+      `${String((input.review.dissent ?? []).length)} dissent item(s), ${String((input.review.boundaryConditions ?? []).length)} boundary item(s)`,
+    ),
+    criterion(
+      'bounded-experiments',
+      experiments.length > 0 &&
+        experiments.every((experiment) => {
+          const text = [
+            experiment.statement,
+            experiment.resolvesUncertainty,
+            experiment.threshold,
+            experiment.safetyBoundary,
+          ].join(' ');
+          return (
+            hasComparatorLanguage(experiment.threshold) &&
+            hasMetricLanguage(text) &&
+            hasAdverseConstraintLanguage(text)
+          );
+        }),
+      `${String(experiments.length)} experiment proposal(s) with comparator, metric, threshold, and adverse-constraint language`,
+    ),
+  ];
+  const allCriteria = [...criteria, ...decisionConstraintCriteria];
+  return {
+    reviewerId: 'mammoth-live-independent-acceptance-review/v1',
+    reviewedAt: input.now,
+    overall: allCriteria.every((item) => item.passed) ? 'pass' : 'fail',
+    criteria,
+    decisionConstraints: decisionConstraintCriteria,
+    sourceClusters: clusters.map((cluster) => ({
+      clusterId: cluster,
+      evidenceCount: input.reviewClaims.filter(
+        (claim) => sourceClusterId(claim.requestedUrl) === cluster,
+      ).length,
+    })),
+  };
 }
 
 function asError(error: unknown): Error {

@@ -741,3 +741,33 @@ investigate-governed-execution.test.ts investigate-preview.test.ts` passed
   source-diversity/admission policy for broad questions, non-template
   experiment generation with concrete metrics, and a way to preserve real
   contradiction/dissent rather than template limitations.
+
+## 2026-07-17 — V11 architectural acceptance repair checkpoint
+
+- **Takeover verification:** coordinator v11 verified local HEAD and PR #146
+  head were both `c30a9345cc2e1e68c3ea90782eaa9cb1668262a6`; tracked diff was
+  clean, with only preserved untracked OpenClaw/bootstrap/live artifacts. A
+  process scan found no other writer for `/private/tmp/mammoth-core-loop-v6`.
+  Exact-head CI run `29610524900` had static/tests/build/p8-p9 and CodeRabbit
+  green, with foundation/p2-p4/p5-p7 still in progress at takeover.
+- **State:** `coordinator-state.json` now records v11 as active, preserves the
+  v10 blocker status, marks v34-v39 as probe/non-acceptance evidence only, and
+  records the remaining predicates 9-12.
+- **Repair:** live execution now requires broad decision questions to admit
+  decision-grade evidence from at least three independent source clusters, and
+  interleaves retrieval candidates and review evidence by source cluster so one
+  project/domain cluster cannot dominate the synthesis context. Source clusters
+  distinguish repository owners/projects on code hosts.
+- **Acceptance artifact:** live bundles now include
+  `audit/acceptance-review.json` with explicit pass/fail fields for source
+  diversity, portfolio breadth, dissent/boundaries, bounded experiments, and
+  every generated decision constraint. The run fails closed if this independent
+  acceptance artifact is not overall `pass`.
+- **Experiment and constraint gates:** live synthesis now fails closed when a
+  generated decision constraint is explicitly unresolved, and every cited
+  experiment must include comparator, metric, threshold, and adverse-constraint
+  language.
+- **Focused verification:** `pnpm --filter @mammoth/runtime typecheck`,
+  `pnpm --filter @mammoth/runtime test -- investigate-governed-execution.test.ts
+investigate-preview.test.ts`, and `pnpm format:check` passed locally. No
+  provider, search, paid, or Tavily effect was used in this repair checkpoint.

@@ -1,40 +1,51 @@
 {
   "schemaVersion": "1.0.0",
-  "updatedAt": "2026-07-17T20:14:31Z",
-  "owner": "mammoth-core-loop-coordinator-v10",
+  "updatedAt": "2026-07-17T20:24:33Z",
+  "owner": "mammoth-core-loop-coordinator-v11",
   "branch": "fix/core-live-brave-rate-limit-v6",
-  "head": "e783302d305a35e14eb8727ff37fd061d7528621",
+  "head": "c30a9345cc2e1e68c3ea90782eaa9cb1668262a6",
   "pr": "https://github.com/heybeaux/mammoth/pull/146",
-  "status": "blocked",
-  "blockedReason": "Predicates 9/10 remain substantively incomplete after fresh governed live runs and independent review. The normal path can complete structurally, but current live reports still fail substantive acceptance on opportunity breadth, holdout core-constraint resolution, cross-domain mechanisms, bounded experiments, and non-template dissent.",
+  "status": "active",
+  "currentPredicate": "Continue predicates 9-12 from v10 checkpoint; predicates 1-8 remain proved; v34-v39 are probe/non-acceptance evidence only.",
+  "assignment": "Architectural repair before further paid reruns: independent pass/fail review artifact, generic source diversity/admission, evidence-derived experiments, real contradiction/dissent and transfer boundaries, fail-closed decision-constraint resolution.",
   "provedPredicates": [1, 2, 3, 4, 5, 6, 7, 8],
   "unprovedPredicates": [9, 10, 11, 12],
-  "latestRuns": {
-    "v37": {
-      "path": "evals/live/mammoth-core-loop-v37",
-      "result": "all four exit 0; independent review FAIL"
-    },
-    "v38": {
-      "path": "evals/live/mammoth-core-loop-v38",
-      "result": "all four failed closed after stronger synthesis attempt"
-    },
-    "v39": {
-      "path": "evals/live/mammoth-core-loop-v39",
-      "result": "remote-clinic and world-model exit 0; grid-battery and heritage-HVAC failed closed"
-    }
-  },
-  "spendUsdThisContinuationV34ToV39": 2.440757,
-  "latestLocalVerification": [
-    "pnpm --filter @mammoth/runtime typecheck",
-    "pnpm --filter @mammoth/runtime test -- investigate-governed-execution",
-    "pnpm format:check"
-  ],
-  "latestCi": {
-    "head": "e783302d305a35e14eb8727ff37fd061d7528621",
-    "run": "29610194351",
+  "latestVerifiedHead": "c30a9345cc2e1e68c3ea90782eaa9cb1668262a6",
+  "latestRemotePrHead": "c30a9345cc2e1e68c3ea90782eaa9cb1668262a6",
+  "worktreeTrackedDiff": "clean at takeover; untracked live artifacts and workspace bootstrap files preserved and not staged",
+  "exactHeadCi": {
+    "head": "c30a9345cc2e1e68c3ea90782eaa9cb1668262a6",
+    "run": "29610524900",
     "status": "in_progress",
-    "completedSuccess": ["static", "tests", "build", "p8-p9"],
-    "inProgress": ["foundation", "p2-p4", "p5-p7"]
+    "completedSuccess": ["static", "tests", "build", "p8-p9", "CodeRabbit"],
+    "inProgress": ["foundation", "p2-p4", "p5-p7"],
+    "checkedAt": "2026-07-17T20:19:52Z"
   },
-  "releaseStatus": "No tag, release, deployment, merge, or ready-for-review transition performed on Friday 2026-07-17."
+  "processQuiescence": "ps scan at takeover found no other command containing /private/tmp/mammoth-core-loop-v6 besides the scan itself",
+  "prohibitedActions": [
+    "Tavily credential/source/use",
+    "tag",
+    "release",
+    "deploy",
+    "merge before predicates 9/10 and independent review pass"
+  ],
+  "spend": {
+    "ceilingUsd": 15,
+    "knownContinuationSpendUsdV34ToV39": 2.440757,
+    "note": "recompute from authoritative journals before any new governed live effect; reserve before effect"
+  },
+  "latestRepairCheckpoint": {
+    "status": "locally_green_unpushed",
+    "summary": "Added live acceptance-review artifact with explicit pass/fail criteria, broad-question source-cluster diversity, diversified review evidence, stricter experiment metric/comparator/threshold/adverse-constraint gates, and fail-closed explicitly unresolved decision constraints.",
+    "localVerification": [
+      "pnpm --filter @mammoth/runtime typecheck",
+      "pnpm --filter @mammoth/runtime test -- investigate-governed-execution.test.ts investigate-preview.test.ts",
+      "pnpm format:check"
+    ],
+    "effectsUsed": "none"
+  },
+  "requiredEndArtifacts": [
+    "/Users/beauxwalton/.openclaw/agents/scout/workspace/delivery/mammoth-core-loop/operator report",
+    "/Users/beauxwalton/.openclaw/agents/scout/workspace/delivery/mammoth-core-loop/best fresh generated reader report plus audit/manifest references"
+  ]
 }

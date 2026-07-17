@@ -825,6 +825,9 @@ export function composeGovernedInvestigationBundle(
     ),
     'audit/model-work.jsonl': jsonlArtifact(execution.modelWork),
     'audit/live-review.json': jsonArtifact(execution.liveReview ?? null),
+    'audit/acceptance-review.json': jsonArtifact(
+      execution.acceptanceReview ?? null,
+    ),
     'audit/live-effect-receipts.jsonl': jsonlArtifact(execution.effectReceipts),
     'audit/budget-journal.jsonl': execution.externalEffectsExecuted
       ? jsonlArtifact(execution.effectReceipts)

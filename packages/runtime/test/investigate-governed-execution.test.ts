@@ -183,7 +183,11 @@ function liveAuthority(input: {
       'https://api.search.brave.com',
       'https://openrouter.ai',
     ],
-    authorizedRetrievalOrigins: ['https://sources.example.test'],
+    authorizedRetrievalOrigins: [
+      'https://sources.example.test',
+      'https://github.com',
+      'https://docs.couchdb.org',
+    ],
     authorizedBillingAccountIds: ['test'],
     actorId: 'operator:test',
     authorizedAt: NOW,
@@ -353,8 +357,12 @@ describe('governed acquisition execution', () => {
         'Local-first replication guidance describes remote clinic offline synchronization during intermittent connectivity but does not address conflicting patient records.',
       ],
       [
-        'https://sources.example.test/clinic-conflict',
+        'https://github.com/openmrs/openmrs-core',
         'Remote clinic deployments need explicit conflict resolution workflows for ambiguous patient records. Offline systems should surface patient-record conflicts for review instead of silently merging every concurrent update.',
+      ],
+      [
+        'https://docs.couchdb.org/en/stable/replication/conflicts.html',
+        'Replication systems can create conflicting document revisions when disconnected peers update the same record independently. Applications must detect conflicts and choose a resolution policy before treating replicated data as final.',
       ],
     ]);
     const retrievedUrls: string[] = [];
@@ -387,11 +395,18 @@ describe('governed acquisition execution', () => {
               ]
             : [
                 {
-                  url: 'https://sources.example.test/clinic-conflict',
+                  url: 'https://github.com/openmrs/openmrs-core',
                   title:
                     'Technical report: conflicting patient records resolution workflows',
                   description:
                     'Primary-source implementation evidence for explicit conflict resolution workflows.',
+                },
+                {
+                  url: 'https://docs.couchdb.org/en/stable/replication/conflicts.html',
+                  title:
+                    'Official documentation: replication conflict handling',
+                  description:
+                    'Implementation documentation about disconnected replication conflicts and resolution policy.',
                 },
               ];
         return Promise.resolve(
@@ -420,7 +435,7 @@ describe('governed acquisition execution', () => {
                           rank: 1,
                           title: 'Exception-first offline synchronization',
                           statement:
-                            'Adopt local writes with explicit review for ambiguous patient-record conflicts.',
+                            'Adopt field data synchronization with local writes and explicit review for ambiguous patient-record conflicts in remote clinics operating offline.',
                           rationale:
                             'The admitted evidence supports both offline availability and a fail-safe path for ambiguous records.',
                           constraints: [
@@ -446,24 +461,21 @@ describe('governed acquisition execution', () => {
                         },
                         {
                           rank: 3,
-                          title: 'Duplicate-record registry review',
+                          title: 'Replication conflict policy check',
                           statement:
-                            'Use a registry review workflow to detect duplicate or incomplete patient records before accepting merged data.',
+                            'Require a conflict policy before accepting replicated patient records as final.',
                           rationale:
-                            'The admitted conflict evidence supports explicit duplicate-record management rather than silent automated acceptance.',
+                            'The admitted replication documentation supports conflict detection and resolution policy as a separate decision lever.',
                           constraints: [
-                            'Duplicate or incomplete patient records require explicit review before merged data is accepted.',
+                            'Disconnected replication can create conflicting document revisions.',
                           ],
                           nextValidation:
-                            'Compare registry-assisted review with manual review on duplicate detection rate and false merge rate.',
-                          evidenceIndexes: [3],
+                            'Compare policy-assisted conflict handling with manual reconciliation on conflict detection rate and false merge rate.',
+                          evidenceIndexes: [4],
                         },
                       ],
                       unresolvedConstraints: [
                         'No admitted field trial establishes clinical outcome safety.',
-                        'Intermittent connectivity remains an operating constraint.',
-                        'Data synchronization strategies require deployment validation.',
-                        'Strategies that help remote clinics require field evidence.',
                       ],
                       answerBullets: [
                         {
@@ -482,7 +494,7 @@ describe('governed acquisition execution', () => {
                       dissent: [
                         {
                           statement:
-                            'The available fixture evidence does not prove the strategy in a deployed remote clinic.',
+                            'The available fixture evidence separates offline availability from conflict safety and does not prove clinical outcome safety.',
                           evidenceIndexes: [3],
                         },
                       ],
@@ -558,7 +570,7 @@ describe('governed acquisition execution', () => {
           mandatory: true,
         },
       ],
-      maxCandidates: 2,
+      maxCandidates: 3,
       maxClaimsPerSnapshot: 2,
       minimumSearchIntervalMs: 0,
     });
@@ -589,8 +601,9 @@ describe('governed acquisition execution', () => {
     expect(retrievedUrls).toContain(
       'https://sources.example.test/clinic-sync-a',
     );
+    expect(retrievedUrls).toContain('https://github.com/openmrs/openmrs-core');
     expect(retrievedUrls).toContain(
-      'https://sources.example.test/clinic-conflict',
+      'https://docs.couchdb.org/en/stable/replication/conflicts.html',
     );
     expect(retrievedUrls).not.toContain(
       'https://www.reddit.com/r/healthit/comments/clinic_sync_b/',
@@ -611,6 +624,12 @@ describe('governed acquisition execution', () => {
     );
     expect(bundle.files['reader/report.md']).toContain(
       '## Proposed experiments',
+    );
+    expect(bundle.files['audit/acceptance-review.json']).toContain(
+      '"overall": "pass"',
+    );
+    expect(bundle.files['audit/acceptance-review.json']).toContain(
+      'source-cluster-diversity',
     );
     expect(bundle.files['reader/report.md']).not.toMatch(/evidence\s*index/iu);
     expect(bundle.files['execution-receipt.json']).toContain(
