@@ -21,3 +21,28 @@
 - **Effect authority:** none. No provider, search, or paid effect may run.
 - **Next action:** reconcile lane handoffs, independently review the smallest
   plan/authority seam, then integrate and claim plan-driven discovery.
+
+## 2026-07-16 — projection stocktake reconciled and integrated
+
+- **Managed flow:** `56206e6d-363b-486b-94bc-1f315f859d0d` remains running.
+  The coordinator session is not live (its prior turn timed out); active children
+  are plan/authority `agent:scout:subagent:7c9d7a13-f2e0-4f41-a9f3-80ca1a2816d6`
+  and evidence `agent:scout:subagent:910bc0c9-953a-41c4-b368-9d72a2b9cf1f`.
+  Projection `agent:scout:subagent:8401c3bb-f0c6-4c80-8991-b8b88cce52c8`
+  completed at reported commit `05fc628`.
+- **Projection verification:** its committed diff is limited to its owned
+  `packages/report-compiler` paths (`src/index.ts`, `src/synthesis-extension.ts`,
+  `test/synthesis-extension.test.ts`). Its tracked tree is clean; untracked
+  `.openclaw/` and identity/bootstrap files are not lane changes. The coordinator
+  cherry-picked it serially as `6cc67f8` onto `feat/core-thesis-arbitrary-query`.
+- **Coordinator gates:** integration `@mammoth/report-compiler` test passed
+  **29/29** and its TypeScript typecheck passed. No effect authority was used.
+- **Product evidence:** the additive extension supplies fail-closed typed mechanism
+  transfers, hypotheses, and bounded experiment proposals plus reader-visible
+  epistemic labels. It is intentionally not yet on the runtime path; composition
+  waits on the immutable plan/authority seam.
+- **Next action:** reconcile the two still-running disjoint lanes, integrate the
+  plan authority work if its focused and regression gates hold, then schedule the
+  smallest runtime composition lane. TaskFlow runtime mutation is unavailable to
+  this cron worker's exposed tool surface; this ledger and the coordinator state
+  are the durable reconciliation record for the next coordinator turn.
