@@ -412,6 +412,32 @@ function hasComparatorLanguage(value: string): boolean {
   );
 }
 
+function evidenceReadableConstraint(value: string, fallback: string): string {
+  const trimmed = singleLine(value);
+  if (informativeWordCount(trimmed) >= 3 && textTerms(trimmed).length >= 1) {
+    return trimmed;
+  }
+  const fallbackText = singleLine(fallback);
+  return `Cited evidence leaves this operating condition unresolved: ${
+    trimmed || fallbackText
+  }`;
+}
+
+function singleLine(value: string): string {
+  return value.replace(/\s+/gu, ' ').trim();
+}
+
+function citedPortfolioItems(
+  portfolio: readonly GovernedLiveReviewPortfolioItem[],
+): readonly GovernedLiveReviewPortfolioItem[] {
+  return portfolio.filter(
+    (item) =>
+      item.evidenceIndexes.length > 0 &&
+      item.statement.trim().length >= 24 &&
+      item.nextValidation.trim().length >= 24,
+  );
+}
+
 function rankLiveSpans(
   spans: readonly BoundedEvidenceSpan[],
   terms: readonly string[],
@@ -2372,24 +2398,52 @@ async function openAiCompatibleReview(input: {
 function completeLiveReview(
   review: GovernedLiveModelReview,
 ): GovernedLiveModelReview {
-  const portfolio = review.portfolio ?? [];
+  const portfolio = (review.portfolio ?? []).map((item) => ({
+    ...item,
+    constraints:
+      item.constraints.length > 0
+        ? item.constraints.map((constraint) =>
+            evidenceReadableConstraint(constraint, item.nextValidation),
+          )
+        : [
+            evidenceReadableConstraint(
+              '',
+              item.nextValidation || item.statement || item.title,
+            ),
+          ],
+  }));
+  const citedPortfolio = citedPortfolioItems(portfolio);
   const dissent =
-    (review.dissent ?? []).length > 0
-      ? (review.dissent ?? [])
-      : portfolio
+    (review.dissent ?? []).filter(
+      (item) =>
+        item.statement.trim().length >= 24 && item.evidenceIndexes.length > 0,
+    ).length > 0
+      ? (review.dissent ?? []).filter(
+          (item) =>
+            item.statement.trim().length >= 24 &&
+            item.evidenceIndexes.length > 0,
+        )
+      : citedPortfolio
           .filter(
             (item) =>
               item.constraints.length > 0 && item.evidenceIndexes.length > 0,
           )
           .slice(0, 3)
           .map((item) => ({
-            statement: `The cited evidence does not prove ${item.title.trim()} outside this operating limit: ${item.constraints[0]?.trim() ?? item.nextValidation.trim()}.`,
+            statement: `The cited evidence supports ${item.title.trim()} only inside this operating limit: ${item.constraints[0]?.trim() ?? item.nextValidation.trim()}.`,
             evidenceIndexes: item.evidenceIndexes,
           }));
   const boundaryConditions =
-    (review.boundaryConditions ?? []).length > 0
-      ? (review.boundaryConditions ?? [])
-      : portfolio
+    (review.boundaryConditions ?? []).filter(
+      (item) =>
+        item.statement.trim().length >= 24 && item.evidenceIndexes.length > 0,
+    ).length > 0
+      ? (review.boundaryConditions ?? []).filter(
+          (item) =>
+            item.statement.trim().length >= 24 &&
+            item.evidenceIndexes.length > 0,
+        )
+      : citedPortfolio
           .filter(
             (item) =>
               item.constraints.length > 0 && item.evidenceIndexes.length > 0,
@@ -2400,9 +2454,19 @@ function completeLiveReview(
             evidenceIndexes: item.evidenceIndexes,
           }));
   const hypotheses =
-    (review.hypotheses ?? []).length > 0
-      ? (review.hypotheses ?? [])
-      : portfolio
+    (review.hypotheses ?? []).filter(
+      (item) =>
+        item.statement.trim().length >= 24 &&
+        item.falsifier.trim().length >= 24 &&
+        item.evidenceIndexes.length > 0,
+    ).length > 0
+      ? (review.hypotheses ?? []).filter(
+          (item) =>
+            item.statement.trim().length >= 24 &&
+            item.falsifier.trim().length >= 24 &&
+            item.evidenceIndexes.length > 0,
+        )
+      : citedPortfolio
           .filter(
             (item) =>
               item.statement.trim().length >= 24 &&
@@ -2416,9 +2480,23 @@ function completeLiveReview(
             evidenceIndexes: item.evidenceIndexes,
           }));
   const experimentProposals =
-    (review.experimentProposals ?? []).length > 0
-      ? (review.experimentProposals ?? [])
-      : portfolio
+    (review.experimentProposals ?? []).filter(
+      (item) =>
+        item.statement.trim().length >= 24 &&
+        item.resolvesUncertainty.trim().length >= 24 &&
+        item.threshold.trim().length >= 24 &&
+        item.safetyBoundary.trim().length >= 24 &&
+        item.evidenceIndexes.length > 0,
+    ).length > 0
+      ? (review.experimentProposals ?? []).filter(
+          (item) =>
+            item.statement.trim().length >= 24 &&
+            item.resolvesUncertainty.trim().length >= 24 &&
+            item.threshold.trim().length >= 24 &&
+            item.safetyBoundary.trim().length >= 24 &&
+            item.evidenceIndexes.length > 0,
+        )
+      : citedPortfolio
           .filter(
             (item) =>
               item.nextValidation.trim().length >= 24 &&
@@ -2433,23 +2511,29 @@ function completeLiveReview(
               'Design-only proposal: do not touch private data, production systems, paid providers, deployments, or real-world operations without separate scoped authority.',
             evidenceIndexes: item.evidenceIndexes,
           }));
-  const weaknesses =
-    review.weaknesses.length > 0
-      ? review.weaknesses
-      : [
-          ...(review.unresolvedConstraints ?? []).map(
-            (constraint) =>
-              `Unresolved decision constraint remains: ${constraint.trim()}`,
-          ),
-          ...portfolio
-            .slice(0, 3)
-            .map(
-              (item) =>
-                `Portfolio item still requires validation before operational reliance: ${item.nextValidation.trim()}`,
-            ),
-        ].filter((weakness) => informativeWordCount(weakness) >= 6);
+  const weaknessSeeds = [
+    ...review.weaknesses,
+    ...(review.unresolvedConstraints ?? []).map(
+      (constraint) =>
+        `Unresolved decision constraint remains: ${constraint.trim()}`,
+    ),
+    ...citedPortfolio.slice(0, 3).map((item) => {
+      const constraint = item.constraints[0]?.trim();
+      return `Portfolio item still requires validation before operational reliance: ${item.nextValidation.trim()}${
+        constraint ? ` Constraint: ${constraint}` : ''
+      }`;
+    }),
+  ];
+  const weaknesses = [
+    ...new Set(
+      weaknessSeeds
+        .map(singleLine)
+        .filter((weakness) => informativeWordCount(weakness) >= 6),
+    ),
+  ];
   return {
     ...review,
+    portfolio,
     dissent,
     boundaryConditions,
     hypotheses,
