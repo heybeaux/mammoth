@@ -810,3 +810,73 @@ investigate-preview.test.ts`, and `pnpm format:check` passed locally. No
   performed on Friday 2026-07-17. The next repair should make reader projection
   and machine acceptance share the same real decision-constraint/experiment
   quality contract before any further live spend.
+
+## 2026-07-17 — V46-V50 evidence-binding checkpoint; blind reruns quarantined
+
+- **Exact-head baseline:** PR #146 was fully green at `ce7c8a4`. V46 then
+  failed closed after the planner incorrectly promoted the attribution fragment
+  `Yann LeCun world` into a decision constraint. Commit `b7954e7` strips
+  attribution framing from generic decision-constraint extraction; focused
+  runtime tests, typecheck, lint, format, and exact-head CI run `29614466276`
+  passed.
+- **V47 report rejected after manual reading:** V47 exited 0 and produced a
+  complete reader/audit bundle, but it overclaimed consumer-GPU, private, and
+  local suitability from citations that proved only open-source or single-GPU
+  facts. It also accepted template experiment thresholds and counted multiple
+  arXiv views/versions of the same paper as independent source clusters. Preserve
+  `evals/live/mammoth-core-loop-v47/` as failed/non-acceptance evidence only.
+- **Evidence and experiment gates:** commit `cf49bea` makes decision-sensitive
+  assertions fail closed when their cited admitted snippets do not contain the
+  asserted constraint terms; requires numeric experiment thresholds; normalizes
+  arXiv paper IDs across `abs`/`html` and version suffixes; and uses the exact
+  same diversified evidence ordering for provider indexes, validation, and
+  reader citations. Focused tests are 24/24, typecheck/lint/format pass, and
+  exact-head CI run `29615362510` passed.
+- **Acquisition changes:** `4b3a410` replaces attribution-heavy tail queries
+  with direct decision-constraint plus tested-hardware/configuration searches;
+  exact-head CI run `29615858581` passed. `6726460` fixes a deeper source
+  selection defect: cluster diversification previously re-sorted clusters
+  alphabetically after relevance ranking, allowing early arXiv clusters to
+  displace later, more relevant repository/hardware sources under the 16-source
+  cap. The fix preserves first-seen relevance order; focused gates and exact-head
+  CI run `29616321285` passed.
+- **Three-strategy failure:** V48, V49, and V50 each failed closed because the
+  live reviewer asserted consumer-hardware suitability without cited evidence
+  that actually established `consumer`; V50 also asserted unsupported `LLMs`.
+  Per loop policy, blind paid reruns are now quarantined. The next slice is a
+  no-spend failure-residue diagnostic so retrieval hints, selected candidates,
+  snapshots, and review evidence can be inspected after a fail-closed synthesis
+  instead of disappearing with the unrendered bundle.
+- **Spend:** V46-V50 settled USD `0.85032691` in total. Effective continuation
+  spend is USD `4.991602100001`, leaving USD `10.008397899999` under the USD 15
+  ceiling. All effects used only authorized Brave/OpenRouter credentials; no
+  Tavily credential was read, sourced, tested, copied, or used.
+- **Status:** predicates 9/10 remain unproved; predicates 11/12 remain blocked.
+  PR #146 remains draft. No merge, tag, release, deploy, or acceptance claim was
+  made.
+
+## 2026-07-17 — Partial-report publication contract corrected
+
+- **Product correction:** a weak or unsupported inference no longer destroys an
+  otherwise useful evidence-bound report. Structural corruption, invalid
+  citation indexes, and zero renderable admitted evidence still fail closed;
+  decision-quality shortcomings now produce a persisted `partial` reader
+  result and a failing acceptance verdict.
+- **Evidence treatment:** decision-sensitive assertions whose citations support
+  only adjacent facts are preserved as `evidenceGaps`. The reader labels them
+  `Suggestive, not established`, cites the underlying admitted evidence, names
+  the unsupported terms, and retains the proposed next validation. They cannot
+  silently count as strong factual support.
+- **Concrete regression:** a source saying `runs on a single GPU` may support
+  single-GPU feasibility, but does not itself establish `consumer GPU`.
+  Regression coverage proves this becomes a partial report with `consumer`
+  recorded as the unsupported term rather than an aborted run.
+- **Acceptance remains strict:** source diversity, portfolio breadth and
+  distinctness, direct evidence binding, dissent/boundaries, substantive
+  limitations, cited hypotheses, bounded experiments, and every decision
+  constraint still determine the machine acceptance verdict. A partial report
+  is useful reader output, not predicate-9/10 acceptance evidence.
+- **Checkpoint:** pushed `d6c0a8c` to draft PR #146. Focused runtime tests are
+  25/25; runtime typecheck, repository lint, format check, and diff check pass.
+  No search, provider, paid, Tavily, merge, tag, release, or deploy effect was
+  used for this correction.
