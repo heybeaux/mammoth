@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "tsx test/preview-contract.ts",
-    "test:harness": "tsx test/harness.test.ts",
+    "test:harness": "tsx test/harness.test.ts && tsx test/governed-execution-e2e.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

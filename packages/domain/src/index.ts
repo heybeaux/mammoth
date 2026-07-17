@@ -4,6 +4,8 @@ export * from './digest.js';
 export * from './evidence.js';
 export * from './graph.js';
 export * from './investigation.js';
+export * from './investigation-acquisition.js';
+export * from './investigation-plan.js';
 export * from './lineage.js';
 export * from './model-work.js';
 export * from './p9.js';
