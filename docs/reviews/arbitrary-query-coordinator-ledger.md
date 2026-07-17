@@ -624,3 +624,26 @@ investigate-governed-execution.test.ts investigate-preview.test.ts` and
 investigate-governed-execution.test.ts investigate-preview.test.ts` and
   `pnpm format:check && pnpm lint && pnpm typecheck` passed locally. Predicates
   9/10 remain incomplete pending fresh live runs and independent review.
+
+## 2026-07-17 — V30 fail-closed; derived boundary repair
+
+- **Fresh/probe live evidence:** V30 ran the three unrelated holdouts and exact
+  world-model question through the normal governed live path. Grid-battery
+  completed, while remote-clinic, heritage-HVAC, and world-model failed closed
+  with `live synthesis requires at least one cited boundary condition`.
+  Preserve `evals/live/mammoth-core-loop-v30/` as failed/probe evidence only.
+- **Spend:** the aggregate journal settled the completed grid-battery run at
+  **USD 0.12004015**. Failed per-run journals also settled model-review charges
+  of **USD 0.00004701**, **USD 0.00003078**, and **USD 0.00005384**. Effective
+  aggregate spend after V30 is therefore **USD 4.502232130004**, leaving
+  **USD 10.497767869996** under the USD 15 ceiling; the next aggregate journal
+  must carry these failed-run settlements forward explicitly.
+- **Repair:** live review completion now derives conservative cited boundary
+  conditions and falsifiable hypotheses from already cited portfolio
+  constraints and validations when the model omits those arrays. Fallback
+  experiment thresholds are tied to the validation text and require a named
+  outcome, baseline/comparator, and adverse-constraint check.
+- **Focused verification:** `pnpm --filter @mammoth/runtime test --
+investigate-governed-execution.test.ts investigate-preview.test.ts` and
+  `pnpm format:check && pnpm lint && pnpm typecheck` passed locally. Predicates
+  9/10 remain incomplete pending fresh live runs and independent review.

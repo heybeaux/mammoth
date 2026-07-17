@@ -2325,24 +2325,58 @@ async function openAiCompatibleReview(input: {
 function completeLiveReview(
   review: GovernedLiveModelReview,
 ): GovernedLiveModelReview {
-  if ((review.experimentProposals ?? []).length > 0) return review;
-  const experimentProposals = (review.portfolio ?? [])
-    .filter(
-      (item) =>
-        item.nextValidation.trim().length >= 24 &&
-        item.evidenceIndexes.length > 0,
-    )
-    .slice(0, 3)
-    .map((item) => ({
-      statement: item.nextValidation,
-      resolvesUncertainty: `Whether ${item.title.trim()} is supported enough to keep or change its current portfolio rank.`,
-      threshold: `Pass only if the validation produces an observable result for: ${item.nextValidation.trim()}`,
-      safetyBoundary:
-        'Design-only proposal: do not touch private data, production systems, paid providers, deployments, or real-world operations without separate scoped authority.',
-      evidenceIndexes: item.evidenceIndexes,
-    }));
+  const portfolio = review.portfolio ?? [];
+  const boundaryConditions =
+    (review.boundaryConditions ?? []).length > 0
+      ? (review.boundaryConditions ?? [])
+      : portfolio
+          .filter(
+            (item) =>
+              item.constraints.length > 0 && item.evidenceIndexes.length > 0,
+          )
+          .slice(0, 3)
+          .map((item) => ({
+            statement: `Applicability depends on ${item.constraints[0]?.trim() ?? item.title.trim()}`,
+            evidenceIndexes: item.evidenceIndexes,
+          }));
+  const hypotheses =
+    (review.hypotheses ?? []).length > 0
+      ? (review.hypotheses ?? [])
+      : portfolio
+          .filter(
+            (item) =>
+              item.statement.trim().length >= 24 &&
+              item.nextValidation.trim().length >= 24 &&
+              item.evidenceIndexes.length > 0,
+          )
+          .slice(0, 3)
+          .map((item) => ({
+            statement: `If ${item.statement.trim()}, then ${item.nextValidation.trim()}`,
+            falsifier: `The validation fails to observe the expected effect, shows no advantage over the baseline, or exposes a material constraint failure.`,
+            evidenceIndexes: item.evidenceIndexes,
+          }));
+  const experimentProposals =
+    (review.experimentProposals ?? []).length > 0
+      ? (review.experimentProposals ?? [])
+      : portfolio
+          .filter(
+            (item) =>
+              item.nextValidation.trim().length >= 24 &&
+              item.evidenceIndexes.length > 0,
+          )
+          .slice(0, 3)
+          .map((item) => ({
+            statement: item.nextValidation,
+            resolvesUncertainty: `Whether ${item.title.trim()} is supported enough to keep or change its current portfolio rank.`,
+            threshold: `Pass only if the validation records the named outcome, a baseline or comparator, and any adverse constraint failure for: ${item.nextValidation.trim()}`,
+            safetyBoundary:
+              'Design-only proposal: do not touch private data, production systems, paid providers, deployments, or real-world operations without separate scoped authority.',
+            evidenceIndexes: item.evidenceIndexes,
+          }));
   return {
     ...review,
+    boundaryConditions,
+    hypotheses,
     experimentProposals,
   };
 }
