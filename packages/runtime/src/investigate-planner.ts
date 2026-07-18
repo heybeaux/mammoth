@@ -50,9 +50,11 @@ const STOP_WORDS = new Set([
   'own',
   'researchers',
   'systems',
+  'based',
   'their',
   'there',
   'these',
+  'that',
   'today',
   'using',
   'ways',
@@ -62,6 +64,8 @@ const STOP_WORDS = new Set([
   'which',
   'with',
   'would',
+  'during',
+  'while',
 ]);
 
 const OPTIONAL_ROLES: readonly Omit<ProposedResearchRole, 'mission'>[] = [
@@ -132,13 +136,118 @@ function focusTerms(question: string): readonly string[] {
       candidate.index / Math.max(observed.length, 1);
     return score(right) - score(left) || left.index - right.index;
   });
-  if (ranked.length >= 2) return ranked.slice(0, 8).map(({ term }) => term);
-  return observed.slice(0, 8).map(({ term }) => term);
+  if (ranked.length >= 2) return ranked.slice(0, 16).map(({ term }) => term);
+  return observed.slice(0, 16).map(({ term }) => term);
+}
+
+function orderedFocusTerms(question: string): readonly string[] {
+  const terms: string[] = [];
+  const seen = new Set<string>();
+  for (const match of question.matchAll(/[\p{L}\p{N}][\p{L}\p{N}-]{2,}/gu)) {
+    const term = match[0].toLocaleLowerCase('en-US');
+    if (STOP_WORDS.has(term) || seen.has(term)) continue;
+    seen.add(term);
+    terms.push(term);
+  }
+  return terms;
+}
+
+function stripAttributionFraming(value: string): string {
+  return value.replace(
+    /(^|[.!?]\s*)[^.!?]{0,120}?\b(?:argues?|claims?|says?|suggests?)\s+that\b/giu,
+    '$1',
+  );
+}
+
+export function deriveDecisionConstraints(question: string): readonly string[] {
+  const decisionText = stripAttributionFraming(question);
+  const ordered = orderedFocusTerms(decisionText);
+  const segmentPhrases: string[] = [];
+  const supportingPhrases: string[] = [];
+  const seen = new Set<string>();
+  const add = (target: string[], phrase: string) => {
+    if (phrase.length < 7 || phrase.length > 80 || seen.has(phrase)) return;
+    seen.add(phrase);
+    target.push(phrase);
+  };
+  const readableSegment = (segment: string): string => {
+    const normalized = segment
+      .replace(/[“”"']/gu, '')
+      .replace(/[^\p{L}\p{N}./+-]+/gu, ' ')
+      .replace(/\s+/gu, ' ')
+      .trim()
+      .replace(
+        /^(?:how|what|which|where|when|why|should|could|would|can|do|does|did|the|a|an|with)\s+/iu,
+        '',
+      )
+      .replace(/\b(?:argues?|claims?|says?|suggests?)\s+that\b/giu, ' ')
+      .replace(/\b(?:are|is|was|were)\s+important\s+beyond\b/giu, ' beyond ')
+      .replace(
+        /^(?:biggest\s+)?(?:opportunities|strategies|approaches|options)\s+(?:lie\s+)?(?:today\s+)?(?:for\s+)?/iu,
+        '',
+      )
+      .trim();
+    const words = normalized.split(/\s+/u).filter(Boolean);
+    if (words.length < 2) return '';
+    return words.slice(0, 9).join(' ');
+  };
+  for (const segment of decisionText.split(
+    /\b(?:after|before|during|for|on|under|using|when|where|while|with|without|based\s+on)\b|[.;:?!]/giu,
+  )) {
+    const terms = orderedFocusTerms(segment);
+    if (terms.length < 2) continue;
+    add(
+      segmentPhrases,
+      readableSegment(segment) || terms.slice(0, 6).join(' '),
+    );
+    if (terms.length > 5) add(supportingPhrases, terms.slice(-4).join(' '));
+    for (let index = 0; index < terms.length - 1; index += 1) {
+      add(supportingPhrases, terms.slice(index, index + 3).join(' '));
+    }
+  }
+  for (let index = 0; index < ordered.length; index += 1) {
+    for (const width of [4, 3, 2]) {
+      const phrase = ordered.slice(index, index + width).join(' ');
+      add(supportingPhrases, phrase);
+    }
+  }
+  return (
+    segmentPhrases.length >= 3
+      ? segmentPhrases
+      : [...segmentPhrases, ...supportingPhrases]
+  ).slice(0, 8);
 }
 
 function stableIndex(seed: string, offset: number, size: number): number {
   const digest = canonicalDigest({ seed, offset }).slice(7);
   return Number.parseInt(digest.slice(0, 8), 16) % size;
+}
+
+function compactQuery(value: string, maxTerms = 18): string {
+  const terms: string[] = [];
+  const seen = new Set<string>();
+  for (const term of orderedFocusTerms(value)) {
+    if (seen.has(term)) continue;
+    seen.add(term);
+    terms.push(term);
+    if (terms.length >= maxTerms) break;
+  }
+  return terms.join(' ');
+}
+
+function phraseOccurrenceCount(value: string, phrase: string): number {
+  const normalizedValue = value.toLocaleLowerCase('en-US');
+  const normalizedPhrase = phrase.toLocaleLowerCase('en-US').trim();
+  if (!normalizedPhrase) return 0;
+  let count = 0;
+  let offset = 0;
+  while (offset < normalizedValue.length) {
+    const found = normalizedValue.indexOf(normalizedPhrase, offset);
+    if (found < 0) break;
+    count += 1;
+    offset = found + normalizedPhrase.length;
+  }
+  return count;
 }
 
 function selectOptionalRoles(
@@ -187,8 +296,38 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
   if (terms.length < 2) {
     throw new Error('investigate could not derive enough question terms');
   }
-  const primary = terms.slice(0, 4).join(' ');
-  const secondary = terms.slice(4, 8).join(' ') || terms.slice(0, 2).join(' ');
+  const primary = terms.slice(0, 5).join(' ');
+  const secondary = terms.slice(5, 16).join(' ') || terms.slice(0, 3).join(' ');
+  const implementationFocus =
+    orderedFocusTerms(question).slice(0, 16).join(' ') || primary;
+  const constraints = deriveDecisionConstraints(question);
+  const directConstraintFocus = constraints[0] ?? implementationFocus;
+  const resourceConstraintFocus = constraints[1] ?? secondary;
+  const deliveryConstraintFocus = constraints[2] ?? implementationFocus;
+  const boundaryConstraintFocus = constraints[3] ?? secondary;
+  const lateConstraintFocus = constraints[4] ?? boundaryConstraintFocus;
+  const subjectConstraintFocus = constraints.reduce(
+    (best, candidate) =>
+      phraseOccurrenceCount(question, candidate) >
+      phraseOccurrenceCount(question, best)
+        ? candidate
+        : best,
+    directConstraintFocus,
+  );
+  const sourceTopic = orderedFocusTerms(question).slice(0, 6).join(' ');
+  const implementationQuery = compactQuery(
+    [implementationFocus, ...constraints].join(' '),
+  );
+  const constraintQuery = compactQuery(
+    [directConstraintFocus, resourceConstraintFocus, deliveryConstraintFocus]
+      .filter(Boolean)
+      .join(' '),
+    14,
+  );
+  const boundaryQuery = compactQuery(
+    [boundaryConstraintFocus, ...constraints.slice(2)].join(' '),
+    14,
+  );
   const investigationId = canonicalDigest({ question }).slice(7, 23);
   const optionalRoles = selectOptionalRoles(question, primary);
   const proposedTeam: ProposedResearchRole[] = [
@@ -238,6 +377,12 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
         'Keep conclusions responsive to the submitted question.',
         'Separate observations, deductions, analogies, hypotheses, and speculation.',
         'Do not execute experiments or external actions without later explicit authority.',
+        ...constraints
+          .slice(0, 4)
+          .map(
+            (constraint) =>
+              `Decision constraint from the question: ${constraint}.`,
+          ),
       ],
       unknowns: [
         'Which assumptions materially affect the answer?',
@@ -268,10 +413,24 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
         `What opportunities survive feasibility, prior-art, risk, and falsification checks?`,
       ],
       searchQueries: [
-        `${primary} primary evidence measurements`,
-        `${secondary} limitations counterexamples`,
-        `${primary} mechanisms constraints comparative analysis`,
-        `${secondary} replication failures independent review`,
+        `${constraintQuery || implementationQuery || sourceTopic || primary} official project documentation`,
+        `${subjectConstraintFocus} ${deliveryConstraintFocus} ${resourceConstraintFocus} repository readme implementation`,
+        `${subjectConstraintFocus} ${lateConstraintFocus} github repository readme implementation`,
+        `${subjectConstraintFocus} ${deliveryConstraintFocus} distinct implementation categories alternative projects comparison`,
+        `${subjectConstraintFocus} ${deliveryConstraintFocus} practical applications use cases local deployment`,
+        `${subjectConstraintFocus} ${deliveryConstraintFocus} privacy local deployment architecture`,
+        `${resourceConstraintFocus || secondary} fixed compute budget benchmark comparison`,
+        `${implementationQuery || constraintQuery || sourceTopic || primary} approaches alternatives comparison`,
+        `${constraintQuery || implementationQuery || sourceTopic || primary} open source implementation comparison`,
+        `${subjectConstraintFocus} ${lateConstraintFocus} measured benchmark resource requirements`,
+        `${subjectConstraintFocus} ${lateConstraintFocus} deployment hardware requirements`,
+        `${boundaryQuery || implementationQuery || sourceTopic || primary} limitations counterexamples failure cases`,
+        `${subjectConstraintFocus} ${lateConstraintFocus} official project documentation tested hardware configuration`,
+        `${subjectConstraintFocus} ${lateConstraintFocus} primary source technical report`,
+        `${sourceTopic || primary} ${resourceConstraintFocus} measured benchmark resource requirements`,
+        `${constraintQuery || implementationQuery || sourceTopic || primary} official implementation constraints`,
+        `${boundaryQuery || implementationQuery || sourceTopic || primary} benchmark feasibility comparison`,
+        `${subjectConstraintFocus} ${lateConstraintFocus} independent evaluation measured comparison`,
       ],
       evidenceRequirements: [
         'Prefer direct, current, and reproducible evidence for critical factual claims.',

@@ -107,6 +107,17 @@ predicates 9 and 10 through the normal public path. Rules:
 - Every other restricted action above (destructive operations, external
   publication, deployment, account changes) remains out of scope.
 
+The existing Brave Search credential is explicitly authorized for the remaining
+governed acceptance runs under this ceiling. Tavily is not authorized for this
+loop: do not source, inspect, fingerprint, test, copy, or use the employer-owned
+Tavily credential in
+`/Users/beauxwalton/projects/openclaw-skill-deerflow/.env`.
+
+Brave Search rate-limit headers may contain multiple comma-separated windows,
+including a short burst window and a monthly quota window. Governed live search
+must pace by the short window, retry bounded 429 burst throttles only after the
+short reset, and must fail closed rather than waiting on monthly quota exhaustion.
+
 Release timing: no tag, release, or deployment on Friday 2026-07-17. From Saturday
 2026-07-18, tagging and releasing `heybeaux/mammoth` is authorized once all
 predicates pass; the loop proceeds without further owner approval.

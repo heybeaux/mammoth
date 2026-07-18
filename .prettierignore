@@ -10,3 +10,4 @@ evals/fixtures/p8/explore-corpus/sources
 evals/fixtures/p8/hostile/sources
 # Committed live exhibition bundles retain the exact inspected bytes and digests
 research/examples/*
+evals/live/*

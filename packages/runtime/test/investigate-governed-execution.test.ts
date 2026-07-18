@@ -18,6 +18,7 @@ import {
   buildInvestigateLivePriceCatalog,
   deriveAcquisitionIntents,
   evaluateAcquisitionRelease,
+  evaluateLiveAcceptanceReview,
   executeGovernedAcquisition,
   executeGovernedLiveAcquisition,
   GovernedExecutionError,
@@ -180,10 +181,14 @@ function liveAuthority(input: {
     },
     authorizedEffectKinds: ['search', 'retrieval', 'parser', 'model'] as const,
     authorizedDestinationOrigins: [
-      'https://api.tavily.com',
+      'https://api.search.brave.com',
       'https://openrouter.ai',
     ],
-    authorizedRetrievalOrigins: ['https://sources.example.test'],
+    authorizedRetrievalOrigins: [
+      'https://sources.example.test',
+      'https://github.com',
+      'https://docs.couchdb.org',
+    ],
     authorizedBillingAccountIds: ['test'],
     actorId: 'operator:test',
     authorizedAt: NOW,
@@ -326,10 +331,10 @@ describe('governed acquisition execution', () => {
   });
 
   it('executes the governed live path through search, retrieval, parser, and model reservations', async () => {
-    process.env.TEST_TAVILY_KEY = 'tvly-test';
+    process.env.TEST_BRAVE_KEY = 'brave-test';
     process.env.TEST_MODEL_KEY = 'sk-test';
     const plan = boundPlan(
-      'Which field data synchronization strategies help remote clinics operate during intermittent connectivity?',
+      'Which field data synchronization strategies help remote clinics operate offline during intermittent connectivity while resolving conflicting patient records?',
     );
     const journalPath = join(
       await mkdtemp(join(tmpdir(), 'mammoth-live-test-')),
@@ -343,21 +348,74 @@ describe('governed acquisition execution', () => {
       trustedIssuerId: 'mammoth-core-loop-live-authority/v1',
       now: NOW,
     });
-    const sourceBody =
-      'Skip to main content. An official website of the United States government. Local-first systems keep writes available on devices while connectivity is intermittent. Conflict-free replicated data types can merge concurrent updates without a central coordinator. Remote clinic deployments need explicit conflict resolution workflows for ambiguous patient records.';
+    const sourceBodies = new Map([
+      [
+        'https://sources.example.test/clinic-sync-a',
+        'Skip to main content. An official website of the United States government. Field data synchronization with local-first systems keeps offline writes available on devices while connectivity is intermittent. Conflict-free replicated data types can merge concurrent updates without a central coordinator.',
+      ],
+      [
+        'https://www.reddit.com/r/healthit/comments/clinic_sync_b/',
+        'Local-first replication guidance describes remote clinic offline synchronization during intermittent connectivity but does not address conflicting patient records.',
+      ],
+      [
+        'https://github.com/openmrs/openmrs-core',
+        'Remote clinic deployments need explicit conflict resolution workflows for ambiguous patient records. Offline systems should surface patient-record conflicts for review instead of silently merging every concurrent update.',
+      ],
+      [
+        'https://docs.couchdb.org/en/stable/replication/conflicts.html',
+        'Replication systems can create conflicting document revisions when disconnected peers update the same record independently. Applications must detect conflicts and choose a resolution policy before treating replicated data as final.',
+      ],
+    ]);
+    const retrievedUrls: string[] = [];
+    let searchCalls = 0;
     const fetchImpl: typeof fetch = (url) => {
       const href =
         typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
-      if (href === 'https://api.tavily.com/search') {
+      if (href.startsWith('https://api.search.brave.com/res/v1/web/search')) {
+        searchCalls += 1;
+        const results =
+          searchCalls === 1
+            ? [
+                {
+                  url: 'https://sources.example.test/unrelated',
+                  title: 'Consumer privacy compliance overview',
+                },
+                {
+                  url: 'https://sources.example.test/clinic-sync-a',
+                  title:
+                    'Official project documentation: remote clinic offline synchronization',
+                  description:
+                    'Implementation reference for local-first systems and conflict-free replicated data types.',
+                },
+                {
+                  url: 'https://www.reddit.com/r/healthit/comments/clinic_sync_b/',
+                  title: 'Blog: remote clinic offline replication explained',
+                  description:
+                    'Commentary about local-first replication for remote clinics.',
+                },
+              ]
+            : [
+                {
+                  url: 'https://github.com/openmrs/openmrs-core',
+                  title:
+                    'Technical report: conflicting patient records resolution workflows',
+                  description:
+                    'Primary-source implementation evidence for explicit conflict resolution workflows.',
+                },
+                {
+                  url: 'https://docs.couchdb.org/en/stable/replication/conflicts.html',
+                  title:
+                    'Official documentation: replication conflict handling',
+                  description:
+                    'Implementation documentation about disconnected replication conflicts and resolution policy.',
+                },
+              ];
         return Promise.resolve(
           new Response(
             JSON.stringify({
-              results: [
-                {
-                  url: 'https://sources.example.test/clinic-sync',
-                  title: 'Clinic sync guide',
-                },
-              ],
+              web: {
+                results,
+              },
             }),
             { status: 200, headers: { 'content-type': 'application/json' } },
           ),
@@ -372,7 +430,105 @@ describe('governed acquisition execution', () => {
                   message: {
                     content: JSON.stringify({
                       summary:
-                        'The admitted evidence supports offline writes and conflict handling.',
+                        'Local-first systems keep writes available and conflict-free replicated data types merge concurrent updates.',
+                      portfolio: [
+                        {
+                          rank: 1,
+                          title: 'Exception-first offline synchronization',
+                          statement:
+                            'Adopt field data synchronization with local writes and explicit review for ambiguous patient-record conflicts in remote clinics operating offline.',
+                          rationale:
+                            'The admitted evidence supports both offline availability and a fail-safe path for ambiguous records.',
+                          constraints: [
+                            'Ambiguous patient-record conflicts require a documented human review path.',
+                          ],
+                          nextValidation:
+                            'Replay a bounded set of concurrent record edits and require every ambiguous merge to surface for review.',
+                          evidenceIndexes: [1, 2, 3, 4],
+                        },
+                        {
+                          rank: 2,
+                          title: 'Local write queue with later synchronization',
+                          statement:
+                            'Use a local write queue so clinic work can continue when connectivity drops.',
+                          rationale:
+                            'The admitted evidence supports local offline writes as the availability mechanism during intermittent connectivity.',
+                          constraints: [
+                            'Offline local writes require later synchronization when connectivity returns.',
+                          ],
+                          nextValidation:
+                            'Compare queued offline encounters against always-online entry for completion rate and synchronization error rate.',
+                          evidenceIndexes: [1, 2, 3, 4],
+                        },
+                        {
+                          rank: 3,
+                          title: 'Replication conflict policy check',
+                          statement:
+                            'Require a conflict policy before accepting replicated patient records as final.',
+                          rationale:
+                            'The admitted replication documentation supports conflict detection and resolution policy as a separate decision lever.',
+                          constraints: [
+                            'Disconnected replication can create conflicting document revisions.',
+                          ],
+                          nextValidation:
+                            'Compare policy-assisted conflict handling with manual reconciliation on conflict detection rate and false merge rate.',
+                          evidenceIndexes: [1, 2, 3, 4],
+                        },
+                      ],
+                      unresolvedConstraints: [
+                        'Portfolio breadth remains unresolved: the admitted evidence does not establish clinical outcome safety.',
+                        'No admitted field trial establishes clinical outcome safety.',
+                      ],
+                      answerBullets: [
+                        {
+                          statement:
+                            'Local-first systems can preserve clinic work during intermittent connectivity while explicit conflict workflows guard ambiguous patient records.',
+                          evidenceIndexes: [1, 2, 3, 4],
+                        },
+                      ],
+                      mechanisms: [
+                        {
+                          statement:
+                            'The transferable mechanism is local write availability plus later conflict resolution.',
+                          evidenceIndexes: [1, 2, 3, 4],
+                        },
+                      ],
+                      dissent: [
+                        {
+                          statement:
+                            'The available fixture evidence separates offline availability from conflict safety and does not prove clinical outcome safety.',
+                          evidenceIndexes: [1, 2, 3, 4],
+                        },
+                      ],
+                      boundaryConditions: [
+                        {
+                          statement:
+                            'The strategy depends on explicit handling for ambiguous patient-record conflicts.',
+                          evidenceIndexes: [1, 2, 3, 4],
+                        },
+                      ],
+                      hypotheses: [
+                        {
+                          statement:
+                            'Remote clinic sync will be safer when ambiguous patient-record conflicts are surfaced as workflow exceptions.',
+                          falsifier:
+                            'Field trials showing automated merges safely resolve ambiguous patient records would falsify the workflow-exception hypothesis.',
+                          evidenceIndexes: [1, 2, 3, 4],
+                        },
+                      ],
+                      experimentProposals: [
+                        {
+                          statement:
+                            'Replay 100 concurrent offline patient-record edits against the current manual reconciliation workflow.',
+                          resolvesUncertainty:
+                            'Whether exception-first synchronization detects ambiguous record conflicts without blocking routine offline clinic work.',
+                          threshold:
+                            'Pass only if conflict detection reaches at least 95% while the false-merge rate is no worse than the manual baseline.',
+                          safetyBoundary:
+                            'Use synthetic records only and stop if any private patient data or production clinic system would be touched.',
+                          evidenceIndexes: [1, 2, 3, 4],
+                        },
+                      ],
                       weaknesses: [
                         'Only one source was available in the fixture.',
                       ],
@@ -396,14 +552,20 @@ describe('governed acquisition execution', () => {
       trustedIssuerId: 'mammoth-core-loop-live-authority/v1',
       now: NOW,
       budgetJournalPath: journalPath,
-      searchProvider: 'tavily',
-      searchApiKeyEnvVar: 'TEST_TAVILY_KEY',
+      searchApiKeyEnvVar: 'TEST_BRAVE_KEY',
       modelApiKeyEnvVar: 'TEST_MODEL_KEY',
       modelBaseUrl: 'https://openrouter.ai/api/v1',
       modelId: 'test/model',
       fetchImpl,
-      retrieve: (request) =>
-        Promise.resolve({
+      retrieve: (request) => {
+        const body = sourceBodies.get(request.url);
+        if (!body) {
+          return Promise.reject(
+            new Error(`unexpected retrieval: ${request.url}`),
+          );
+        }
+        retrievedUrls.push(request.url);
+        return Promise.resolve({
           requestedUrl: request.url,
           finalUrl: request.url,
           redirectChain: [],
@@ -411,9 +573,10 @@ describe('governed acquisition execution', () => {
           status: 200,
           headers: { 'content-type': 'text/plain' },
           mediaType: 'text/plain',
-          bytes: new TextEncoder().encode(sourceBody),
+          bytes: new TextEncoder().encode(body),
           networkReceipts: [],
-        }),
+        });
+      },
       sourceClassTargets: [
         {
           sourceClass: 'public_web',
@@ -421,8 +584,9 @@ describe('governed acquisition execution', () => {
           mandatory: true,
         },
       ],
-      maxCandidates: 1,
+      maxCandidates: 3,
       maxClaimsPerSnapshot: 2,
+      minimumSearchIntervalMs: 0,
     });
     expect(execution.executionMode).toBe('governed_live');
     expect(execution.externalEffectsExecuted).toBe(true);
@@ -443,6 +607,21 @@ describe('governed acquisition execution', () => {
     expect(
       execution.modelWork.some((work) => work.workId.startsWith('live-')),
     ).toBe(true);
+    expect(
+      execution.rejectedHints.some(
+        (hint) => hint.reason === 'low_relevance_hint',
+      ),
+    ).toBe(true);
+    expect(retrievedUrls).toContain(
+      'https://sources.example.test/clinic-sync-a',
+    );
+    expect(retrievedUrls).toContain('https://github.com/openmrs/openmrs-core');
+    expect(retrievedUrls).toContain(
+      'https://docs.couchdb.org/en/stable/replication/conflicts.html',
+    );
+    expect(retrievedUrls).not.toContain(
+      'https://www.reddit.com/r/healthit/comments/clinic_sync_b/',
+    );
     const bundle = composeGovernedInvestigationBundle({
       plan,
       intentSet,
@@ -450,12 +629,281 @@ describe('governed acquisition execution', () => {
       execution,
       now: NOW,
     });
+    expect(bundle.files['reader/report.md']).toContain('## Direct answer');
+    expect(bundle.files['reader/report.md']).toContain(
+      '## Ranked decision portfolio',
+    );
+    expect(bundle.files['reader/report.md']).toContain(
+      '## Unresolved constraints',
+    );
+    expect(bundle.files['reader/report.md']).toContain(
+      '## Proposed experiments',
+    );
+    expect(bundle.files['reader/report.md']).toContain(
+      'Question scope remains unresolved: the admitted evidence does not establish clinical outcome safety.',
+    );
+    expect(bundle.files['reader/report.md']).not.toContain(
+      'Portfolio breadth remains unresolved: the admitted evidence does not establish clinical outcome safety.',
+    );
+    expect(bundle.files['audit/acceptance-review.json']).toContain(
+      '"overall": "pass"',
+    );
+    expect(bundle.files['audit/acceptance-review.json']).toContain(
+      'source-cluster-diversity',
+    );
+    expect(bundle.files['reader/report.md']).not.toMatch(/evidence\s*index/iu);
     expect(bundle.files['execution-receipt.json']).toContain(
       '"externalEffectsExecuted": true',
     );
     expect(bundle.files['audit/live-effect-receipts.jsonl']).toContain(
       'effect-receipt:',
     );
+    const firstPortfolioItem = execution.liveReview?.portfolio?.[0];
+    const firstMechanism = execution.liveReview?.mechanisms?.[0];
+    const firstBoundary = execution.liveReview?.boundaryConditions?.[0];
+    const firstHypothesis = execution.liveReview?.hypotheses?.[0];
+    const acceptanceReview = execution.acceptanceReview;
+    if (
+      !firstPortfolioItem ||
+      !firstMechanism ||
+      !firstBoundary ||
+      !firstHypothesis ||
+      !acceptanceReview
+    ) {
+      throw new Error('live fixture did not produce review artifacts');
+    }
+    const qualifiedEvidenceGaps = [
+      {
+        assertionLabel: 'portfolio item 1',
+        statement: firstPortfolioItem.statement,
+        unsupportedTerms: ['consumer'],
+        evidenceIndexes: firstPortfolioItem.evidenceIndexes,
+      },
+      {
+        assertionLabel: 'mechanism 1',
+        statement: firstMechanism.statement,
+        unsupportedTerms: ['private'],
+        evidenceIndexes: firstMechanism.evidenceIndexes,
+      },
+      {
+        assertionLabel: 'boundary condition 1',
+        statement: firstBoundary.statement,
+        unsupportedTerms: ['private'],
+        evidenceIndexes: firstBoundary.evidenceIndexes,
+      },
+      {
+        assertionLabel: 'hypothesis 1',
+        statement: firstHypothesis.statement,
+        unsupportedTerms: ['private'],
+        evidenceIndexes: firstHypothesis.evidenceIndexes,
+      },
+    ];
+    const partialBundle = composeGovernedInvestigationBundle({
+      plan,
+      intentSet,
+      release,
+      now: NOW,
+      execution: {
+        ...execution,
+        acceptanceReview: {
+          ...acceptanceReview,
+          overall: 'fail',
+          evidenceGaps: qualifiedEvidenceGaps,
+        },
+      },
+    });
+    expect(partialBundle.files['reader/report.md']).toContain(
+      '**Research status: partial.**',
+    );
+    expect(partialBundle.files['reader/report.md']).toContain(
+      '## Evidence gaps',
+    );
+    expect(partialBundle.files['reader/report.md']).toContain(
+      '**Suggestive, not established:**',
+    );
+    expect(partialBundle.files['reader/report.md']).toContain(
+      '**Suggestive limitation:**',
+    );
+    expect(partialBundle.files['reader/report.md']).toContain(
+      '**Suggestive mechanism:**',
+    );
+    expect(partialBundle.files['reader/report.md']).toContain(
+      '**Suggestive boundary:**',
+    );
+    expect(partialBundle.files['reader/report.md']).toContain(
+      '**Suggestive hypothesis:**',
+    );
+    const qualifiedBundle = composeGovernedInvestigationBundle({
+      plan,
+      intentSet,
+      release,
+      now: NOW,
+      execution: {
+        ...execution,
+        acceptanceReview: {
+          ...acceptanceReview,
+          overall: 'pass',
+          evidenceGaps: qualifiedEvidenceGaps,
+        },
+      },
+    });
+    expect(qualifiedBundle.files['reader/report.md']).toContain(
+      '**Research status: accepted with qualifications.**',
+    );
+  });
+
+  it('records a weak consumer-hardware inference as a partial evidence gap instead of throwing away the report', () => {
+    const review = evaluateLiveAcceptanceReview({
+      question:
+        'Which local world-model opportunities fit on a single consumer GPU?',
+      decisionConstraints: ['single consumer GPU'],
+      now: NOW,
+      reviewClaims: [
+        {
+          proposalId: 'claim:single-gpu',
+          statement: 'The model runs on a single GPU.',
+          candidateId: 'candidate:single-gpu',
+          requestedUrl: 'https://example.test/model-card',
+          sourceClass: 'public_web',
+          decision: 'admitted',
+          reasonCodes: [],
+        },
+      ],
+      review: {
+        summary: 'One implementation reports single-GPU operation.',
+        portfolio: [
+          {
+            rank: 1,
+            title: 'Consumer GPU deployment',
+            statement:
+              'Use this implementation as a consumer-GPU world-model baseline.',
+            rationale:
+              'The implementation documents operation on one GPU, but does not name a consumer card.',
+            constraints: ['Consumer-card VRAM and latency remain unverified.'],
+            nextValidation:
+              'Measure peak VRAM and latency on a named consumer card before relying on this option.',
+            evidenceIndexes: [1],
+          },
+        ],
+        weaknesses: ['The cited source does not identify the GPU class.'],
+        suggestedSearches: ['named consumer GPU world model benchmark'],
+      },
+    });
+
+    expect(review.overall).toBe('fail');
+    const gap = review.evidenceGaps.find(
+      (item) => item.assertionLabel === 'portfolio item 1',
+    );
+    expect(gap?.unsupportedTerms).toContain('consumer');
+    expect(gap?.evidenceIndexes).toEqual([1]);
+  });
+
+  it('accepts an honest qualified result without upgrading a suggestive claim', () => {
+    const review = evaluateLiveAcceptanceReview({
+      question: 'Can this world-model implementation run on a consumer GPU?',
+      decisionConstraints: ['consumer GPU'],
+      now: NOW,
+      reviewClaims: [
+        {
+          proposalId: 'claim:single-gpu-qualified',
+          statement: 'The implementation runs on a single GPU.',
+          candidateId: 'candidate:single-gpu-qualified',
+          requestedUrl: 'https://example.test/model-card-qualified',
+          sourceClass: 'public_web',
+          decision: 'admitted',
+          reasonCodes: [],
+        },
+      ],
+      review: {
+        summary:
+          'The implementation reports single-GPU operation, but the GPU class is not defined.',
+        portfolio: [
+          {
+            rank: 1,
+            title: 'Qualified single-GPU trial',
+            statement:
+              'Treat the implementation as a consumer-GPU candidate, not an established consumer-GPU deployment.',
+            rationale:
+              'The source establishes one-GPU operation while leaving consumer-grade hardware undefined.',
+            constraints: [
+              'Consumer-card identity, VRAM, latency, thermals, and power remain unverified.',
+            ],
+            nextValidation:
+              'Run the implementation on a named consumer card and record peak VRAM, latency, thermals, and power.',
+            evidenceIndexes: [1],
+          },
+        ],
+        answerBullets: [
+          {
+            statement:
+              'Single-GPU operation is established; consumer-GPU suitability is only suggestive.',
+            evidenceIndexes: [1],
+          },
+        ],
+        mechanisms: [
+          {
+            statement:
+              'The directly observed mechanism is execution within one GPU boundary.',
+            evidenceIndexes: [1],
+          },
+        ],
+        dissent: [
+          {
+            statement:
+              'A single-GPU statement does not identify card class, memory capacity, power, or sustained thermal limits.',
+            evidenceIndexes: [1],
+          },
+        ],
+        boundaryConditions: [
+          {
+            statement:
+              'Consumer-GPU suitability remains conditional on a named card and measured resource use.',
+            evidenceIndexes: [1],
+          },
+        ],
+        hypotheses: [
+          {
+            statement:
+              'The implementation may fit a named consumer GPU under a bounded workload.',
+            falsifier:
+              'Peak VRAM exceeds the named card or the workload fails its latency and thermal limits.',
+            evidenceIndexes: [1],
+          },
+        ],
+        experimentProposals: [
+          {
+            statement:
+              'Compare the implementation on one named consumer card against the documented single-GPU baseline.',
+            resolvesUncertainty:
+              'Whether the unspecified single GPU can be replaced by an explicitly defined consumer card.',
+            threshold:
+              'Pass only if peak VRAM stays below 90% of capacity across 3 runs and latency is no more than 10% worse than baseline.',
+            safetyBoundary:
+              'Stop if thermal throttling occurs, power exceeds the card limit, or the workload touches private data.',
+            evidenceIndexes: [1],
+          },
+        ],
+        weaknesses: [
+          'The admitted source omits the GPU model and measured resource envelope.',
+        ],
+        suggestedSearches: ['named consumer GPU measured benchmark'],
+      },
+    });
+
+    expect(review.overall).toBe('pass');
+    expect(
+      review.criteria.find((item) => item.criterionId === 'evidence-binding'),
+    ).toMatchObject({ passed: false, requiredForOverall: false });
+    expect(
+      review.criteria.find(
+        (item) => item.criterionId === 'uncertainty-handling',
+      ),
+    ).toMatchObject({ passed: true, requiredForOverall: true });
+    expect(review.evidenceGaps.length).toBeGreaterThan(0);
+    expect(review.decisionConstraints[0]).toMatchObject({
+      passed: true,
+      evidence: 'explicitly qualified by a cited evidence gap: consumer GPU',
+    });
   });
 
   it('is deterministic for a fixed clock and catalog', () => {

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   createInvestigationPreview,
+  deriveDecisionConstraints,
   INVESTIGATION_ARTIFACT_NAMES,
   planInvestigation,
 } from '../src/index.js';
@@ -53,6 +54,102 @@ describe('local investigation preview', () => {
       new Set(previews.map((preview) => preview.plan.reportSections.join('\n')))
         .size,
     ).toBe(questions.length);
+  });
+
+  it('preserves explicit constraint phrases in generic search plans', () => {
+    const cases = [
+      {
+        question:
+          'Which field data synchronization strategies help remote clinics operate offline during intermittent connectivity while resolving conflicting patient records?',
+        expected: [
+          'remote clinics operate offline',
+          'conflicting patient records',
+        ],
+      },
+      {
+        question:
+          'Where should individuals building open-source private local world-model systems on a single consumer GPU focus first?',
+        expected: ['open-source private local', 'single consumer gpu'],
+      },
+      {
+        question:
+          'How should small heritage buildings cut winter heating costs without damaging archival collections under a limited maintenance budget?',
+        expected: [
+          'heritage buildings cut winter',
+          'limited maintenance budget',
+        ],
+      },
+    ] as const;
+
+    for (const item of cases) {
+      const planText = planInvestigation(item.question)
+        .plan.searchQueries.join('\n')
+        .toLocaleLowerCase('en-US');
+      for (const phrase of item.expected) {
+        expect(planText).toContain(phrase);
+      }
+    }
+  });
+
+  it('carries late question constraints into implementation and feasibility searches', () => {
+    const plan = planInvestigation(
+      'Where should individuals building open-source private local world-model systems on a single consumer GPU focus first?',
+    ).plan.searchQueries.map((query) => query.toLocaleLowerCase('en-US'));
+
+    expect(plan[0]).toContain('open-source private local');
+    expect(plan[0]).toContain('official project documentation');
+    expect(plan[1]).toContain('repository readme implementation');
+    expect(plan[1]).toContain('single consumer gpu');
+    expect(
+      plan.some(
+        (query) =>
+          query.includes('repository readme implementation') &&
+          query.includes('open-source') &&
+          query.includes('private') &&
+          query.includes('local') &&
+          query.includes('single') &&
+          query.includes('consumer') &&
+          query.includes('gpu'),
+      ),
+    ).toBe(true);
+    expect(
+      plan.some(
+        (query) =>
+          query.includes('benchmark feasibility comparison') &&
+          query.includes('single') &&
+          query.includes('consumer') &&
+          query.includes('gpu'),
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps comma-separated delivery constraints in the governed review contract', () => {
+    const question =
+      'Yann LeCun argues that world models are important beyond the limitations of LLMs. With compute increasingly scarce, where do the biggest opportunities lie today for individuals building open-source, private, local systems based on world models using a single consumer GPU?';
+    const constraints = deriveDecisionConstraints(question)
+      .join('\n')
+      .toLocaleLowerCase('en-US');
+
+    expect(constraints).toContain('open-source private local');
+    expect(constraints).toContain('single consumer gpu');
+    expect(constraints).toContain('world models');
+    expect(constraints).not.toContain('yann');
+    expect(constraints).not.toContain('lecun');
+
+    const queries = planInvestigation(question).plan.searchQueries;
+    expect(
+      queries.some(
+        (query) =>
+          query.includes('world models') &&
+          query.includes(
+            'individuals building open-source private local systems',
+          ) &&
+          query.includes('repository readme implementation'),
+      ),
+    ).toBe(true);
+    expect(queries).toContain(
+      'world models single consumer GPU measured benchmark resource requirements',
+    );
   });
 
   it('projects one digest-bound preview into the required machine and reader artifacts', () => {

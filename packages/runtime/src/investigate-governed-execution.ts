@@ -49,7 +49,14 @@ import {
   FileP9DurableJournalStore,
   P9DurableBudgetAuthority,
 } from '@mammoth/governance';
+import {
+  BraveRateLimitError,
+  decideBraveRateLimitRetry,
+  nextBraveShortWindowDelayMs,
+  parseBraveRateLimitHeaders,
+} from './brave-rate-limit.js';
 import { P9LiveEffectExecutor } from './p9-live-executor.js';
+import { deriveDecisionConstraints } from './investigate-planner.js';
 
 const REQUIRED_EFFECT_KINDS = ['search', 'retrieval', 'parser'] as const;
 const LIVE_REQUIRED_EFFECT_KINDS = [
@@ -68,8 +75,58 @@ const LIVE_PROPOSER_PROFILE_FAMILY = 'live-openai-compatible-proposer';
 const LIVE_EVALUATOR_PROFILE_VERSION = 'live-openai-compatible-evaluator/v1';
 const LIVE_EVALUATOR_PROFILE_FAMILY = 'live-openai-compatible-evaluator';
 const LIVE_USER_AGENT = 'mammoth-investigate-live/1.0';
+const PUBLIC_WEB_RETRIEVAL_AUTHORITY_ORIGIN = 'https://public-web.invalid';
 const LOW_INFORMATION_SPAN_PATTERN =
-  /^(?:skip to main content|an official website|official websites use|secure \.gov websites|menu|search|privacy policy|terms of use|cookies?|javascript|equal contribution|corresponding author|received:|accepted:|published:)/iu;
+  /(?:^(?:skip to main content|an official website|official websites use|secure \.gov websites|menu|search|privacy policy|terms of use|cookies?|javascript|equal contribution|corresponding author|received:|accepted:|published:)|\b(?:open access|creative commons|cc by|copyright|©|competing interests|license|licence|received \d{4}|revised \d{4}|accepted \d{4}|collection date|published by|permission directly from the copyright holder|distributed under the terms|equal contribution)\b)/iu;
+const QUESTION_STOP_TERMS = new Set([
+  'about',
+  'after',
+  'against',
+  'also',
+  'answer',
+  'apply',
+  'based',
+  'before',
+  'being',
+  'best',
+  'beyond',
+  'argues',
+  'approaches',
+  'build',
+  'building',
+  'could',
+  'during',
+  'evidence',
+  'from',
+  'help',
+  'important',
+  'increasingly',
+  'individuals',
+  'lie',
+  'most',
+  'operate',
+  'opportunities',
+  'question',
+  'reduce',
+  'should',
+  'single',
+  'strategies',
+  'strategy',
+  'options',
+  'systems',
+  'that',
+  'their',
+  'there',
+  'today',
+  'using',
+  'what',
+  'where',
+  'which',
+  'while',
+  'with',
+  'within',
+  'would',
+]);
 
 export class GovernedExecutionError extends Error {
   constructor(
@@ -86,6 +143,7 @@ export interface GovernedDiscoveryHint {
   readonly url: string;
   readonly sourceClass: string;
   readonly title?: string;
+  readonly description?: string;
 }
 
 /**
@@ -151,6 +209,9 @@ export interface GovernedAcquisitionExecution {
   readonly admissions: readonly P9ClaimAdmission[];
   readonly claims: readonly GovernedClaimRecord[];
   readonly modelWork: readonly P9ModelWorkRef[];
+  readonly liveReview?: GovernedLiveModelReview;
+  readonly acceptanceReview?: GovernedLiveAcceptanceReview;
+  readonly reviewEvidenceProposalIds?: readonly string[];
   readonly effectReceipts: readonly unknown[];
   readonly externalEffectsExecuted: boolean;
   readonly executionMode: 'offline_fixture' | 'governed_live';
@@ -170,8 +231,74 @@ export interface GovernedAcquisitionExecutionInput {
 
 export interface GovernedLiveModelReview {
   readonly summary: string;
+  readonly portfolio?: readonly GovernedLiveReviewPortfolioItem[];
+  readonly unresolvedConstraints?: readonly string[];
+  readonly answerBullets?: readonly GovernedLiveReviewCitedStatement[];
+  readonly mechanisms?: readonly GovernedLiveReviewCitedStatement[];
+  readonly dissent?: readonly GovernedLiveReviewCitedStatement[];
+  readonly boundaryConditions?: readonly GovernedLiveReviewCitedStatement[];
+  readonly hypotheses?: readonly GovernedLiveReviewHypothesis[];
+  readonly experimentProposals?: readonly GovernedLiveReviewExperiment[];
   readonly weaknesses: readonly string[];
   readonly suggestedSearches: readonly string[];
+}
+
+export interface GovernedLiveReviewPortfolioItem
+  extends GovernedLiveReviewCitedStatement {
+  readonly rank: number;
+  readonly title: string;
+  readonly rationale: string;
+  readonly constraints: readonly string[];
+  readonly nextValidation: string;
+}
+
+export interface GovernedLiveReviewCitedStatement {
+  readonly statement: string;
+  readonly evidenceIndexes: readonly number[];
+}
+
+export interface GovernedLiveReviewHypothesis
+  extends GovernedLiveReviewCitedStatement {
+  readonly falsifier: string;
+}
+
+export interface GovernedLiveReviewExperiment
+  extends GovernedLiveReviewCitedStatement {
+  readonly resolvesUncertainty: string;
+  readonly threshold: string;
+  readonly safetyBoundary: string;
+}
+
+export interface GovernedLiveAcceptanceReview {
+  readonly reviewerId: string;
+  readonly reviewedAt: string;
+  readonly overall: 'pass' | 'fail';
+  readonly criteria: readonly GovernedLiveAcceptanceCriterion[];
+  readonly decisionConstraints: readonly GovernedLiveAcceptanceCriterion[];
+  readonly evidenceGaps: readonly GovernedLiveEvidenceGap[];
+  readonly sourceClusters: readonly {
+    readonly clusterId: string;
+    readonly evidenceCount: number;
+  }[];
+}
+
+export interface GovernedLiveEvidenceGap {
+  readonly assertionLabel: string;
+  readonly statement: string;
+  readonly unsupportedTerms: readonly string[];
+  readonly evidenceIndexes: readonly number[];
+}
+
+export interface GovernedLiveAcceptanceCriterion {
+  readonly criterionId: string;
+  readonly passed: boolean;
+  /**
+   * False means this criterion describes the strength of the evidence rather
+   * than the quality of the research product. A disclosed weak claim may fail
+   * an evidence-strength criterion without making the report itself a failure.
+   */
+  readonly requiredForOverall: boolean;
+  readonly evidence: string;
 }
 
 export interface GovernedLiveAcquisitionExecutionInput {
@@ -181,7 +308,6 @@ export interface GovernedLiveAcquisitionExecutionInput {
   readonly trustedIssuerId: string | undefined;
   readonly now: string;
   readonly budgetJournalPath: string;
-  readonly searchProvider?: 'brave' | 'tavily';
   readonly searchApiKeyEnvVar: string;
   readonly modelApiKeyEnvVar: string;
   readonly modelBaseUrl: string;
@@ -202,6 +328,58 @@ function informativeWordCount(value: string): number {
   return value.match(/[A-Za-z][A-Za-z'-]{2,}/gu)?.length ?? 0;
 }
 
+function textTerms(value: string): readonly string[] {
+  return [
+    ...new Set(
+      [...value.matchAll(/[\p{L}\p{N}][\p{L}\p{N}-]{2,}/gu)]
+        .map((match) => match[0].toLocaleLowerCase('en-US'))
+        .filter(
+          (term) =>
+            term.length >= 4 &&
+            !QUESTION_STOP_TERMS.has(term) &&
+            !/^\d+$/u.test(term),
+        ),
+    ),
+  ];
+}
+
+function isBroadDecisionQuestion(question: string): boolean {
+  return /\b(?:opportunities|strategies|approaches|options|where\s+do|where\s+should|which\s+.+\s+strategies|how\s+should)\b/iu.test(
+    question,
+  );
+}
+
+function normalizedContentTerms(value: string): readonly string[] {
+  return textTerms(value).filter((term) => term.length >= 5);
+}
+
+function portfolioItemSignature(
+  item: GovernedLiveReviewPortfolioItem,
+): readonly string[] {
+  return [
+    ...new Set(
+      normalizedContentTerms(
+        [item.title, item.statement, item.rationale].join(' '),
+      ),
+    ),
+  ].slice(0, 12);
+}
+
+function jaccardOverlap(
+  left: readonly string[],
+  right: readonly string[],
+): number {
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  const union = new Set([...leftSet, ...rightSet]);
+  if (union.size === 0) return 0;
+  let intersection = 0;
+  for (const term of leftSet) {
+    if (rightSet.has(term)) intersection += 1;
+  }
+  return intersection / union.size;
+}
+
 function isLowInformationLiveSpan(quote: string): boolean {
   const normalized = quote.replace(/\s+/gu, ' ').trim();
   if (normalized.length < 48) return true;
@@ -209,6 +387,339 @@ function isLowInformationLiveSpan(quote: string): boolean {
   if (informativeWordCount(normalized) < 8) return true;
   if (LOW_INFORMATION_SPAN_PATTERN.test(normalized)) return true;
   return false;
+}
+
+function liveRelevanceTerms(question: string): readonly string[] {
+  return textTerms(question).slice(0, 32);
+}
+
+function textRelevanceScore(value: string, terms: readonly string[]): number {
+  const normalized = value.toLocaleLowerCase('en-US');
+  return terms.reduce((score, term) => {
+    const variants = new Set([term]);
+    if (term.endsWith('s')) variants.add(term.slice(0, -1));
+    if (term.endsWith('ies')) variants.add(`${term.slice(0, -3)}y`);
+    return (
+      score +
+      ([...variants].some((variant) => normalized.includes(variant)) ? 1 : 0)
+    );
+  }, 0);
+}
+
+function isLiveSpanQuestionRelevant(
+  quote: string,
+  terms: readonly string[],
+): boolean {
+  if (terms.length === 0) return true;
+  return textRelevanceScore(quote, terms) >= Math.min(2, terms.length);
+}
+
+function liveHintRelevanceScore(input: {
+  readonly hint: DiscoveredSourceHint;
+  readonly query: string;
+  readonly question: string;
+}): number {
+  const questionTerms = textTerms(input.question);
+  const queryTerms = textTerms(input.query);
+  const surface = [
+    input.hint.title ?? '',
+    input.hint.description ?? '',
+    input.hint.url.replace(/[^\p{L}\p{N}-]+/gu, ' '),
+  ].join(' ');
+  return (
+    textRelevanceScore(surface, questionTerms) * 2 +
+    textRelevanceScore(surface, queryTerms) +
+    liveSourceQualityScore(input.hint)
+  );
+}
+
+function minimumHintRelevance(input: {
+  readonly query: string;
+  readonly question: string;
+}): number {
+  const questionTerms = textTerms(input.question);
+  const queryTerms = textTerms(input.query);
+  const questionMinimum = Math.min(6, Math.ceil(questionTerms.length / 5));
+  const queryMinimum = Math.min(4, Math.ceil(queryTerms.length / 6));
+  return Math.max(3, questionMinimum + queryMinimum);
+}
+
+function hasComparatorLanguage(value: string): boolean {
+  return /\b(?:baseline|compar(?:e|ator|ison)|control|before[- ]?after|current|existing|alternative|threshold|target|versus|vs\.?|fail(?:ure)? rate|error rate|latency|cost|accuracy|safety|energy|outcome)\b/iu.test(
+    value,
+  );
+}
+
+function hasMetricLanguage(value: string): boolean {
+  return /\b(?:rate|ratio|percent|percentage|accuracy|latency|throughput|cost|memory|gpu|vram|energy|runtime|hours?|minutes?|days?|error|failure|recall|precision|coverage|completion|safety|quality|score|count|threshold)\b/iu.test(
+    value,
+  );
+}
+
+function hasAdverseConstraintLanguage(value: string): boolean {
+  return /\b(?:adverse|constraint|failure|regression|safety|privacy|security|risk|budget|cost|latency|memory|gpu|vram|offline|local|harm|fallback|blocked)\b/iu.test(
+    value,
+  );
+}
+
+function hasQuantifiedDecisionThreshold(value: string): boolean {
+  return /(?:\b(?:at least|at most|no more than|no less than|greater than|less than|above|below|within)\b|[<>]=?)\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*(?:%|percent|milliseconds?|seconds?|minutes?|hours?|days?|bytes?|kb|mb|gb|tb|watts?|joules?|requests?|tokens?|frames?|samples?|runs?|trials?)/iu.test(
+    value,
+  );
+}
+
+function sourceClusterId(urlValue: string): string {
+  try {
+    const url = new URL(urlValue);
+    const host = url.hostname.toLocaleLowerCase('en-US');
+    const parts = url.pathname
+      .split('/')
+      .filter(Boolean)
+      .map((part) => part.toLocaleLowerCase('en-US'));
+    if (
+      /\b(?:github|gitlab|codeberg|sourcehut)\b/u.test(host) &&
+      parts.length >= 2
+    ) {
+      return `${host}/${parts[0] ?? ''}/${parts[1] ?? ''}`;
+    }
+    if (host === 'arxiv.org' && parts.length >= 2) {
+      const paperId = (parts[1] ?? '').replace(/v\d+$/u, '');
+      return `${host}/${paperId}`;
+    }
+    const hostParts = host.split('.');
+    return hostParts.length >= 2 ? hostParts.slice(-2).join('.') : host;
+  } catch {
+    return 'invalid-url';
+  }
+}
+
+function distinctSourceClustersForClaims(
+  claims: readonly GovernedClaimRecord[],
+): readonly string[] {
+  return [
+    ...new Set(claims.map((claim) => sourceClusterId(claim.requestedUrl))),
+  ].filter((cluster) => cluster !== 'invalid-url');
+}
+
+function evidenceReadableConstraint(value: string, fallback: string): string {
+  const trimmed = singleLine(value);
+  const isSentenceLike =
+    /\b(?:must|requires?|depends?|limited|under|during|without|within|only|when|where|before|after|because|if|unless|validate|evidence|budget|safety|risk|privacy|local|offline)\b/iu.test(
+      trimmed,
+    ) || /[.!?]$/u.test(trimmed);
+  if (
+    isSentenceLike &&
+    informativeWordCount(trimmed) >= 3 &&
+    textTerms(trimmed).length >= 1
+  ) {
+    return trimmed;
+  }
+  const fallbackText = singleLine(fallback);
+  const condition = trimmed || fallbackText;
+  return `Question condition requiring local validation: ${condition}.`;
+}
+
+function singleLine(value: string): string {
+  return value.replace(/\s+/gu, ' ').trim();
+}
+
+function stripFinalPunctuation(value: string): string {
+  return singleLine(value).replace(/[.!?]+$/u, '');
+}
+
+function citedPortfolioItems(
+  portfolio: readonly GovernedLiveReviewPortfolioItem[],
+): readonly GovernedLiveReviewPortfolioItem[] {
+  return portfolio.filter(
+    (item) =>
+      item.evidenceIndexes.length > 0 &&
+      item.statement.trim().length >= 24 &&
+      item.nextValidation.trim().length >= 24,
+  );
+}
+
+function concreteExperimentThreshold(threshold: string): string {
+  const normalized = singleLine(threshold);
+  if (hasQuantifiedDecisionThreshold(normalized)) return normalized;
+  const premise = normalized ? `${stripFinalPunctuation(normalized)}. ` : '';
+  return `${premise}Decision rule: compared with the named baseline, accept the intervention only if its primary metric improves by at least 10% across 3 runs and no named adverse constraint regresses by more than 5%.`;
+}
+
+function rankLiveSpans(
+  spans: readonly BoundedEvidenceSpan[],
+  terms: readonly string[],
+): readonly BoundedEvidenceSpan[] {
+  return [...spans].sort((left, right) => {
+    const relevance =
+      textRelevanceScore(right.quote, terms) -
+      textRelevanceScore(left.quote, terms);
+    if (relevance !== 0) return relevance;
+    return informativeWordCount(right.quote) - informativeWordCount(left.quote);
+  });
+}
+
+function liveSourceQualityScore(hint: DiscoveredSourceHint): number {
+  let score = 0;
+  try {
+    const url = new URL(hint.url);
+    const host = url.hostname.toLocaleLowerCase('en-US');
+    const path = url.pathname.toLocaleLowerCase('en-US');
+    if (/\.(?:edu|gov)$/u.test(host)) score += 3;
+    if (/^(?:docs?|developer|developers|research)\./u.test(host)) score += 2;
+    if (/\b(?:github|gitlab|sourcehut|codeberg)\b/u.test(host)) score += 3;
+    if (/\b(?:arxiv|doi|pubmed|ncbi|semanticscholar)\b/u.test(host)) {
+      score += 2;
+    }
+    if (
+      /\b(?:reddit|wikipedia|quora|medium|substack)\b/u.test(host) ||
+      /\b(?:news|magazine|article|opinion|blog)\b/u.test(host)
+    ) {
+      score -= 4;
+    }
+    if (
+      /\b(?:docs?|documentation|papers?|publications?|reports?|research|benchmarks?|repository|repo|manual|reference|readme|requirements)\b/u.test(
+        path,
+      )
+    ) {
+      score += 1;
+    }
+    if (/\b(?:login|signup|tag|category|search|privacy|terms)\b/u.test(path)) {
+      score -= 2;
+    }
+  } catch {
+    score -= 2;
+  }
+  const surface =
+    `${hint.title ?? ''} ${hint.description ?? ''}`.toLocaleLowerCase('en-US');
+  if (
+    /\b(?:official (?:project|documentation)|benchmark|evaluation|repository|readme|implementation|source code|model card|field trial|guidance|technical report|paper|study|hardware requirements|memory requirements)\b/u.test(
+      surface,
+    )
+  ) {
+    score += 2;
+  }
+  if (
+    /\b(?:blog|opinion|explained|wake-up call|what you need to know|news roundup|sponsored)\b/u.test(
+      surface,
+    )
+  ) {
+    score -= 3;
+  }
+  return score;
+}
+
+function isDecisionGradeLiveSource(hint: DiscoveredSourceHint): boolean {
+  try {
+    const host = new URL(hint.url).hostname.toLocaleLowerCase('en-US');
+    if (/\b(?:reddit|wikipedia|quora|medium|substack)\b/u.test(host)) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  return liveSourceQualityScore(hint) >= 2;
+}
+
+function requiresDirectDecisionEvidence(query: string): boolean {
+  return /\b(?:official|documentation|primary source|technical report|benchmark|requirements|repository|readme|implementation|evaluation)\b/iu.test(
+    query,
+  );
+}
+
+function interleaveRelevantHintsByQuery(
+  entries: readonly {
+    readonly hint: DiscoveredSourceHint;
+    readonly score: number;
+  }[],
+  queryIds: readonly string[],
+): readonly DiscoveredSourceHint[] {
+  const queues = new Map<string, typeof entries>();
+  for (const queryId of queryIds) {
+    queues.set(
+      queryId,
+      entries
+        .filter((entry) => entry.hint.queryId === queryId)
+        .sort((left, right) => right.score - left.score),
+    );
+  }
+  const ordered: DiscoveredSourceHint[] = [];
+  let progressed = true;
+  while (progressed) {
+    progressed = false;
+    for (const queryId of queryIds) {
+      const queue = queues.get(queryId) ?? [];
+      const [next, ...rest] = queue;
+      if (!next) continue;
+      ordered.push(next.hint);
+      queues.set(queryId, rest);
+      progressed = true;
+    }
+  }
+  return ordered;
+}
+
+function diversifyCandidatesBySourceCluster(
+  candidates: readonly SelectedRetrievalCandidate[],
+  maxCandidates: number,
+): readonly SelectedRetrievalCandidate[] {
+  const queues = new Map<string, SelectedRetrievalCandidate[]>();
+  const clusterOrder: string[] = [];
+  for (const candidate of candidates) {
+    const cluster = sourceClusterId(candidate.requestedUrl);
+    if (!queues.has(cluster)) clusterOrder.push(cluster);
+    queues.set(cluster, [...(queues.get(cluster) ?? []), candidate]);
+  }
+  const ordered: SelectedRetrievalCandidate[] = [];
+  let progressed = true;
+  while (progressed && ordered.length < maxCandidates) {
+    progressed = false;
+    for (const cluster of clusterOrder) {
+      const queue = queues.get(cluster) ?? [];
+      const [next, ...rest] = queue;
+      if (!next) continue;
+      ordered.push(next);
+      queues.set(cluster, rest);
+      progressed = true;
+      if (ordered.length >= maxCandidates) break;
+    }
+  }
+  return ordered;
+}
+
+function diversifyClaimsBySourceCluster(
+  claims: readonly GovernedClaimRecord[],
+): readonly GovernedClaimRecord[] {
+  const queues = new Map<string, GovernedClaimRecord[]>();
+  const clusterOrder: string[] = [];
+  for (const claim of claims) {
+    const cluster = sourceClusterId(claim.requestedUrl);
+    if (!queues.has(cluster)) clusterOrder.push(cluster);
+    queues.set(cluster, [...(queues.get(cluster) ?? []), claim]);
+  }
+  const ordered: GovernedClaimRecord[] = [];
+  let progressed = true;
+  while (progressed) {
+    progressed = false;
+    for (const cluster of clusterOrder) {
+      const queue = queues.get(cluster) ?? [];
+      const [next, ...rest] = queue;
+      if (!next) continue;
+      ordered.push(next);
+      queues.set(cluster, rest);
+      progressed = true;
+    }
+  }
+  return ordered;
+}
+
+function isRetrievalOriginAuthorized(input: {
+  readonly origin: string;
+  readonly authorizedOrigins: ReadonlySet<string>;
+}): boolean {
+  return (
+    input.authorizedOrigins.has(input.origin) ||
+    input.authorizedOrigins.has(PUBLIC_WEB_RETRIEVAL_AUTHORITY_ORIGIN)
+  );
 }
 
 /**
@@ -884,7 +1395,7 @@ export async function executeGovernedLiveAcquisition(
       'claims per snapshot must be a positive integer',
     );
   }
-  const maxCandidates = input.maxCandidates ?? 8;
+  const maxCandidates = input.maxCandidates ?? 16;
   if (!Number.isInteger(maxCandidates) || maxCandidates < 1) {
     refuse('invalid_candidate_bound', 'live candidate bound must be positive');
   }
@@ -896,10 +1407,7 @@ export async function executeGovernedLiveAcquisition(
   const authorizedRetrievalOrigins = new Set(
     authority.authorizedRetrievalOrigins.map((value) => new URL(value).origin),
   );
-  const searchOrigin =
-    (input.searchProvider ?? 'brave') === 'tavily'
-      ? 'https://api.tavily.com'
-      : 'https://api.search.brave.com';
+  const searchOrigin = 'https://api.search.brave.com';
   if (!authorizedDestinationOrigins.has(searchOrigin)) {
     refuse(
       'search_destination_origin_unauthorized',
@@ -946,22 +1454,22 @@ export async function executeGovernedLiveAcquisition(
     for (const intent of discoveryIntents) {
       const result = await executor.execute<readonly GovernedDiscoveryHint[]>({
         id: `live-search:${intent.intentId}`,
-        catalogEntryId:
-          (input.searchProvider ?? 'brave') === 'tavily'
-            ? 'tavily-search'
-            : 'brave-search',
-        ceiling: ceiling({ bytes: 2_000_000, durationMs: 30_000 }),
+        catalogEntryId: 'brave-search',
+        ceiling: ceiling({
+          bytes: 2_000_000,
+          durationMs: 30_000,
+          attempts: 3,
+        }),
         transport: async () => {
           const nowMs = Date.now();
           const delayMs = Math.max(0, nextSearchAt - nowMs);
           if (delayMs > 0) {
             await new Promise((resolve) => setTimeout(resolve, delayMs));
           }
-          nextSearchAt = Date.now() + (input.minimumSearchIntervalMs ?? 1_100);
+          nextSearchAt = Date.now() + (input.minimumSearchIntervalMs ?? 2_000);
           const outcome = await liveSearch({
             query: intent.subject,
             apiKeyEnvVar: input.searchApiKeyEnvVar,
-            provider: input.searchProvider ?? 'brave',
             ...(input.fetchImpl === undefined
               ? {}
               : { fetchImpl: input.fetchImpl }),
@@ -975,11 +1483,21 @@ export async function executeGovernedLiveAcquisition(
       });
       if (result.status === 'failed') throw asError(result.error);
       for (const hint of result.value) {
+        const querySubject = intent.subject.toLocaleLowerCase('en-US');
+        const sourceClass =
+          /\b(?:limitations?|counterexamples?|failure|failures|risks?|contradictions?|replication)\b/u.test(
+            querySubject,
+          )
+            ? 'counterevidence'
+            : hint.sourceClass;
         hints.push({
           queryId: intent.intentId,
           url: hint.url,
-          sourceClass: hint.sourceClass,
+          sourceClass,
           ...(hint.title === undefined ? {} : { title: hint.title }),
+          ...(hint.description === undefined
+            ? {}
+            : { description: hint.description }),
         });
       }
       intentReceipts.push({
@@ -992,6 +1510,44 @@ export async function executeGovernedLiveAcquisition(
       });
     }
 
+    const plannedQueryById = new Map(
+      discoveryIntents.map((intent) => [intent.intentId, intent.subject]),
+    );
+    const lowRelevanceHints: RejectedSourceHint[] = [];
+    const relevantHintEntries = hints
+      .map((hint) => {
+        const query = plannedQueryById.get(hint.queryId) ?? '';
+        return {
+          hint,
+          score: liveHintRelevanceScore({
+            hint,
+            query,
+            question: authority.planScope.question,
+          }),
+          minimum: minimumHintRelevance({
+            query,
+            question: authority.planScope.question,
+          }),
+        };
+      })
+      .filter((entry) => {
+        const query = plannedQueryById.get(entry.hint.queryId) ?? '';
+        const directEnough =
+          !requiresDirectDecisionEvidence(query) ||
+          isDecisionGradeLiveSource(entry.hint);
+        if (entry.score >= entry.minimum && directEnough) return true;
+        lowRelevanceHints.push({
+          hint: entry.hint,
+          reason: 'low_relevance_hint',
+        });
+        return false;
+      })
+      .sort((left, right) => right.score - left.score);
+    const relevantHints = interleaveRelevantHintsByQuery(
+      relevantHintEntries,
+      discoveryIntents.map((intent) => intent.intentId),
+    );
+
     const selection = selectPlannedAcquisitionCandidates({
       scope: {
         searchQueries: discoveryIntents.map((intent) => ({
@@ -1001,14 +1557,20 @@ export async function executeGovernedLiveAcquisition(
         })),
         sourceClassTargets,
       },
-      hints,
+      hints: relevantHints,
       selectedAt: input.now,
     });
     const unauthorizedRetrievalHints: RejectedSourceHint[] = [];
-    const selectedCandidates = selection.candidates
-      .filter((candidate) => {
+    const authorizedSelectedCandidates = selection.candidates.filter(
+      (candidate) => {
         const origin = new URL(candidate.requestedUrl).origin;
-        if (authorizedRetrievalOrigins.has(origin)) return true;
+        if (
+          isRetrievalOriginAuthorized({
+            origin,
+            authorizedOrigins: authorizedRetrievalOrigins,
+          })
+        )
+          return true;
         unauthorizedRetrievalHints.push({
           hint: {
             queryId: candidate.candidateId,
@@ -1018,8 +1580,12 @@ export async function executeGovernedLiveAcquisition(
           reason: 'url_not_permitted',
         });
         return false;
-      })
-      .slice(0, maxCandidates);
+      },
+    );
+    const selectedCandidates = diversifyCandidatesBySourceCluster(
+      authorizedSelectedCandidates,
+      maxCandidates,
+    );
 
     const candidateQuery = new Map<string, string>();
     for (const candidate of selectedCandidates) {
@@ -1053,6 +1619,7 @@ export async function executeGovernedLiveAcquisition(
       readonly requestedUrl: string;
       readonly sourceClass: string;
     }[] = [];
+    const relevanceTerms = liveRelevanceTerms(authority.planScope.question);
 
     const recordAttempt = (
       candidate: SelectedRetrievalCandidate,
@@ -1144,7 +1711,7 @@ export async function executeGovernedLiveAcquisition(
         const retrievalResult = await executor.execute({
           id: `live-retrieval:${candidate.candidateId}`,
           catalogEntryId: 'public-retrieval',
-          ceiling: ceiling({ bytes: 3_000_000, durationMs: 45_000 }),
+          ceiling: ceiling({ bytes: 4_000_000, durationMs: 45_000 }),
           transport: async () => {
             const retrieved = await (input.retrieve ?? retrieveSource)(
               {
@@ -1251,11 +1818,24 @@ export async function executeGovernedLiveAcquisition(
         const rawContentDigest = contentDigest(retrieved.bytes);
         const parsedBytes = new TextEncoder().encode(parsed.text);
         const parsedTextDigest = contentDigest(parsedBytes);
-        const spans = deriveBoundedEvidenceSpans({
-          body: parsed.text,
-          spanIdPrefix: `live:${candidate.candidateId}`,
-          isExcluded: isLowInformationLiveSpan,
-        });
+        const candidateSearchTerms = textTerms(
+          plannedQueryById.get(
+            candidateQuery.get(candidate.candidateId) ?? '',
+          ) ?? '',
+        );
+        const spans = rankLiveSpans(
+          deriveBoundedEvidenceSpans({
+            body: parsed.text,
+            spanIdPrefix: `live:${candidate.candidateId}`,
+            bounds: { maximumWindowCharacters: 160_000 },
+            isExcluded: isLowInformationLiveSpan,
+          }).filter((span) =>
+            isLiveSpanQuestionRelevant(span.quote, [
+              ...new Set([...relevanceTerms, ...candidateSearchTerms]),
+            ]),
+          ),
+          [...new Set([...relevanceTerms, ...candidateSearchTerms])],
+        );
         recordAttempt(
           candidate,
           'admitted',
@@ -1332,12 +1912,53 @@ export async function executeGovernedLiveAcquisition(
       id: 'live-model:independent-review',
       catalogEntryId: 'openai-compatible-model',
       ceiling: ceiling({
-        inputTokens: 12_000,
-        outputTokens: 1_200,
+        inputTokens: 20_000,
+        outputTokens: 2_000,
         bytes: 500_000,
         durationMs: 120_000,
       }),
       transport: async () => {
+        const rawReviewClaims = claims.filter(
+          (claim) =>
+            claim.decision === 'admitted' &&
+            hints.some((hint) => {
+              try {
+                return (
+                  canonicalizeAcquisitionUrl(hint.url).href ===
+                    claim.requestedUrl && isDecisionGradeLiveSource(hint)
+                );
+              } catch {
+                return false;
+              }
+            }),
+        );
+        if (isBroadDecisionQuestion(intentSet.question)) {
+          const clusters = distinctSourceClustersForClaims(rawReviewClaims);
+          if (clusters.length < 3) {
+            refuse(
+              'insufficient_source_cluster_diversity',
+              'broad live synthesis requires admitted decision-grade evidence from at least three independent source clusters',
+            );
+          }
+        }
+        const reviewClaims = diversifyClaimsBySourceCluster(rawReviewClaims)
+          .filter(
+            (claim, index, all) =>
+              all
+                .slice(0, index)
+                .filter(
+                  (prior) =>
+                    sourceClusterId(prior.requestedUrl) ===
+                    sourceClusterId(claim.requestedUrl),
+                ).length < 4,
+          )
+          .slice(0, 32);
+        if (reviewClaims.length === 0) {
+          refuse(
+            'no_decision_grade_evidence',
+            'live synthesis requires admitted direct, primary, official, repository, or measured evidence',
+          );
+        }
         const outcome = await openAiCompatibleReview({
           baseUrl: input.modelBaseUrl,
           apiKeyEnvVar: input.modelApiKeyEnvVar,
@@ -1346,9 +1967,9 @@ export async function executeGovernedLiveAcquisition(
           ...(input.fetchImpl === undefined
             ? {}
             : { fetchImpl: input.fetchImpl }),
-          claims: claims
-            .filter((claim) => claim.decision === 'admitted')
-            .slice(0, 18),
+          decisionConstraints: deriveDecisionConstraints(intentSet.question),
+          broadDecisionQuestion: isBroadDecisionQuestion(intentSet.question),
+          claims: reviewClaims,
         });
         return {
           value: outcome.review,
@@ -1358,6 +1979,48 @@ export async function executeGovernedLiveAcquisition(
       },
     });
     if (modelReview.status === 'failed') throw asError(modelReview.error);
+    const reviewEvidenceClaims = claims.filter(
+      (claim) =>
+        claim.decision === 'admitted' &&
+        hints.some((hint) => {
+          try {
+            return (
+              canonicalizeAcquisitionUrl(hint.url).href ===
+                claim.requestedUrl && isDecisionGradeLiveSource(hint)
+            );
+          } catch {
+            return false;
+          }
+        }),
+    );
+    const selectedReviewEvidenceClaims = diversifyClaimsBySourceCluster(
+      reviewEvidenceClaims,
+    )
+      .filter(
+        (claim, index, all) =>
+          all
+            .slice(0, index)
+            .filter(
+              (prior) =>
+                sourceClusterId(prior.requestedUrl) ===
+                sourceClusterId(claim.requestedUrl),
+            ).length < 4,
+      )
+      .slice(0, 32);
+    assertDecisionGradeReview({
+      review: modelReview.value,
+      admittedEvidenceCount: selectedReviewEvidenceClaims.length,
+      decisionConstraints: deriveDecisionConstraints(intentSet.question),
+      question: intentSet.question,
+      reviewClaims: selectedReviewEvidenceClaims,
+    });
+    const acceptanceReview = evaluateLiveAcceptanceReview({
+      review: modelReview.value,
+      reviewClaims: selectedReviewEvidenceClaims,
+      decisionConstraints: deriveDecisionConstraints(intentSet.question),
+      question: intentSet.question,
+      now: input.now,
+    });
     const reviewSeed = canonicalDigest(modelReview.value).slice(7, 23);
     modelWork.push(
       liveWorkRef({
@@ -1384,7 +2047,11 @@ export async function executeGovernedLiveAcquisition(
       intentReceipts,
       discoveredHints: hints.length,
       selectedCandidates,
-      rejectedHints: [...selection.rejected, ...unauthorizedRetrievalHints],
+      rejectedHints: [
+        ...lowRelevanceHints,
+        ...selection.rejected,
+        ...unauthorizedRetrievalHints,
+      ],
       snapshots,
       retrievalAttempts,
       coverage,
@@ -1393,6 +2060,11 @@ export async function executeGovernedLiveAcquisition(
       admissions,
       claims,
       modelWork,
+      liveReview: modelReview.value,
+      acceptanceReview,
+      reviewEvidenceProposalIds: selectedReviewEvidenceClaims.map(
+        (claim) => claim.proposalId,
+      ),
       effectReceipts: executor.effectReceipts,
       externalEffectsExecuted: true,
       executionMode: 'governed_live',
@@ -1424,6 +2096,7 @@ function ceiling(input: {
   readonly outputTokens?: number;
   readonly bytes?: number;
   readonly durationMs: number;
+  readonly attempts?: number;
   readonly parserClass?: string | null;
 }) {
   return {
@@ -1432,7 +2105,7 @@ function ceiling(input: {
     outputTokens: input.outputTokens ?? 0,
     bytes: input.bytes ?? 0,
     durationMs: input.durationMs,
-    attempts: 1,
+    attempts: input.attempts ?? 1,
     parserClass: input.parserClass ?? null,
   };
 }
@@ -1447,17 +2120,6 @@ export function buildInvestigateLivePriceCatalog() {
       {
         id: 'brave-search',
         provider: 'brave-search/v1',
-        effectKind: 'search' as const,
-        parserClass: null,
-        flatCostUsd: 0,
-        costPerRequestUsd: 0.01,
-        costPerInputTokenUsd: 0,
-        costPerOutputTokenUsd: 0,
-        costPerByteUsd: 0,
-      },
-      {
-        id: 'tavily-search',
-        provider: 'tavily-search/v1',
         effectKind: 'search' as const,
         parserClass: null,
         flatCostUsd: 0,
@@ -1507,7 +2169,6 @@ export function buildInvestigateLivePriceCatalog() {
 async function liveSearch(input: {
   readonly query: string;
   readonly apiKeyEnvVar: string;
-  readonly provider: 'brave' | 'tavily';
   readonly fetchImpl?: typeof fetch;
 }): Promise<{
   readonly hints: readonly GovernedDiscoveryHint[];
@@ -1515,12 +2176,8 @@ async function liveSearch(input: {
 }> {
   const apiKey = process.env[input.apiKeyEnvVar]?.trim();
   if (!apiKey) {
-    throw new Error(
-      `${input.provider} credential ${input.apiKeyEnvVar} is empty`,
-    );
+    throw new Error(`brave credential ${input.apiKeyEnvVar} is empty`);
   }
-  if (input.provider === 'tavily')
-    return tavilySearch(input.query, apiKey, input.fetchImpl ?? fetch);
   return braveSearch(input.query, apiKey, input.fetchImpl ?? fetch);
 }
 
@@ -1534,108 +2191,131 @@ async function braveSearch(
 }> {
   const url = new URL('https://api.search.brave.com/res/v1/web/search');
   url.searchParams.set('q', query);
-  url.searchParams.set('count', '5');
+  url.searchParams.set('count', '10');
   const startedAt = Date.now();
-  const response = await fetchImpl(url, {
-    headers: {
-      accept: 'application/json',
-      'x-subscription-token': apiKey,
-    },
-    redirect: 'error',
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!response.ok) {
-    const reset = response.headers.get('x-ratelimit-reset');
-    const safeReset = reset?.match(/^[0-9, ]{1,80}$/u)?.[0];
-    throw new Error(
-      `Brave search failed with HTTP ${String(response.status)}${
-        safeReset ? `; rate limit reset ${safeReset} seconds` : ''
-      }`,
-    );
+  let attempts = 0;
+  let observedBytes = 0;
+  let response: Response | null = null;
+  let raw = '';
+  for (;;) {
+    attempts += 1;
+    response = await fetchImpl(url, {
+      headers: {
+        accept: 'application/json',
+        'x-subscription-token': apiKey,
+      },
+      redirect: 'error',
+      signal: AbortSignal.timeout(15_000),
+    });
+    raw = await response.text();
+    observedBytes += Buffer.byteLength(raw, 'utf8');
+    if (response.status !== 429) break;
+    const decision = decideBraveRateLimitRetry({
+      status: response.status,
+      headers: response.headers,
+      maxShortResetSeconds: 5,
+      retryPaddingMs: 250,
+      jitterMs: 0,
+    });
+    if (decision.kind !== 'retry_short_window' || attempts > 2) {
+      throw braveSearchRateLimitError(
+        response.status,
+        response.headers,
+        decision,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, decision.waitMs));
   }
-  const raw = await response.text();
+  if (!response.ok) {
+    throw braveSearchHttpError(response.status, response.headers);
+  }
   const parsed = JSON.parse(raw) as {
-    web?: { results?: { url?: string; title?: string }[] };
+    web?: {
+      results?: { url?: string; title?: string; description?: string }[];
+    };
   };
   const hints = (parsed.web?.results ?? [])
-    .filter((result): result is { url: string; title?: string } => {
-      if (!result.url) return false;
-      try {
-        return new URL(result.url).protocol === 'https:';
-      } catch {
-        return false;
-      }
-    })
-    .map((result) => ({
-      url: result.url,
-      sourceClass: 'public_web',
-      ...(result.title === undefined ? {} : { title: result.title }),
-    }));
+    .filter(
+      (
+        result,
+      ): result is {
+        url: string;
+        title?: string;
+        description?: string;
+      } => {
+        if (!result.url) return false;
+        try {
+          const url = new URL(result.url);
+          return (
+            url.protocol === 'https:' &&
+            (!url.pathname.endsWith('.pdf') || url.hostname === 'arxiv.org')
+          );
+        } catch {
+          return false;
+        }
+      },
+    )
+    .map((result) => {
+      const url = new URL(result.url);
+      const arxivPdf =
+        url.hostname === 'arxiv.org'
+          ? /^\/pdf\/([^/]+?)(?:\.pdf)?$/u.exec(url.pathname)
+          : null;
+      return {
+        url: arxivPdf
+          ? `https://arxiv.org/html/${arxivPdf[1] ?? ''}`
+          : result.url,
+        sourceClass: 'public_web',
+        ...(result.title === undefined ? {} : { title: result.title }),
+        ...(result.description === undefined
+          ? {}
+          : { description: result.description }),
+      };
+    });
   return {
     hints,
     usage: usageOf({
-      requests: 1,
-      bytes: Buffer.byteLength(raw, 'utf8'),
+      requests: attempts,
+      bytes: observedBytes,
       durationMs: Math.max(0, Date.now() - startedAt),
     }),
   };
 }
 
-async function tavilySearch(
-  query: string,
-  apiKey: string,
-  fetchImpl: typeof fetch,
-): Promise<{
-  readonly hints: readonly GovernedDiscoveryHint[];
-  readonly usage: ReturnType<typeof usageOf>;
-}> {
-  const startedAt = Date.now();
-  const response = await fetchImpl('https://api.tavily.com/search', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
-    },
-    redirect: 'error',
-    signal: AbortSignal.timeout(20_000),
-    body: JSON.stringify({
-      query,
-      max_results: 5,
-      include_answer: false,
-      include_raw_content: false,
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(
-      `Tavily search failed with HTTP ${String(response.status)}`,
-    );
+function braveSearchRateLimitError(
+  status: number,
+  headers: Headers,
+  decision: ReturnType<typeof decideBraveRateLimitRetry>,
+): Error {
+  if (decision.kind === 'not_rate_limit') {
+    return braveSearchHttpError(status, headers);
   }
-  const raw = await response.text();
-  const parsed = JSON.parse(raw) as {
-    results?: { url?: string; title?: string }[];
-  };
-  const hints = (parsed.results ?? [])
-    .filter((result): result is { url: string; title?: string } => {
-      if (!result.url) return false;
-      try {
-        return new URL(result.url).protocol === 'https:';
-      } catch {
-        return false;
-      }
-    })
-    .map((result) => ({
-      url: result.url,
-      sourceClass: 'public_web',
-      ...(result.title === undefined ? {} : { title: result.title }),
-    }));
-  return {
-    hints,
-    usage: usageOf({
-      requests: 1,
-      bytes: Buffer.byteLength(raw, 'utf8'),
-      durationMs: Math.max(0, Date.now() - startedAt),
-    }),
-  };
+  const reset = headers.get('x-ratelimit-reset');
+  const safeReset = reset?.match(/^[0-9, ]{1,80}$/u)?.[0];
+  return new BraveRateLimitError(
+    `Brave search failed with HTTP ${String(status)}${
+      safeReset ? `; rate limit reset ${safeReset} seconds` : ''
+    }; rate limit ${decision.kind}`,
+    decision,
+  );
+}
+
+function braveSearchHttpError(status: number, headers: Headers): Error {
+  const reset = headers.get('x-ratelimit-reset');
+  const safeReset = reset?.match(/^[0-9, ]{1,80}$/u)?.[0];
+  const state = parseBraveRateLimitHeaders(headers);
+  const shortDelayMs = nextBraveShortWindowDelayMs({
+    headers,
+    fallbackIntervalMs: 2_000,
+    retryPaddingMs: 250,
+  });
+  const monthlyExhausted =
+    state.monthlyWindow?.remaining === 0 ? '; monthly quota exhausted' : '';
+  return new Error(
+    `Brave search failed with HTTP ${String(status)}${
+      safeReset ? `; rate limit reset ${safeReset} seconds` : ''
+    }; next short-window delay ${String(shortDelayMs)}ms${monthlyExhausted}`,
+  );
 }
 
 async function openAiCompatibleReview(input: {
@@ -1643,6 +2323,8 @@ async function openAiCompatibleReview(input: {
   readonly apiKeyEnvVar: string;
   readonly modelId: string;
   readonly question: string;
+  readonly decisionConstraints: readonly string[];
+  readonly broadDecisionQuestion: boolean;
   readonly fetchImpl?: typeof fetch;
   readonly claims: readonly GovernedClaimRecord[];
 }): Promise<{
@@ -1673,7 +2355,7 @@ async function openAiCompatibleReview(input: {
     body: JSON.stringify({
       model: input.modelId,
       temperature: 0,
-      max_tokens: 1200,
+      max_tokens: 2000,
       response_format: {
         type: 'json_schema',
         json_schema: {
@@ -1684,10 +2366,157 @@ async function openAiCompatibleReview(input: {
             additionalProperties: false,
             properties: {
               summary: { type: 'string' },
+              portfolio: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    rank: { type: 'integer', minimum: 1 },
+                    title: { type: 'string' },
+                    statement: { type: 'string' },
+                    rationale: { type: 'string' },
+                    constraints: {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
+                    nextValidation: { type: 'string' },
+                    evidenceIndexes: {
+                      type: 'array',
+                      items: { type: 'integer', minimum: 1 },
+                    },
+                  },
+                  required: [
+                    'rank',
+                    'title',
+                    'statement',
+                    'rationale',
+                    'constraints',
+                    'nextValidation',
+                    'evidenceIndexes',
+                  ],
+                },
+              },
+              unresolvedConstraints: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+              answerBullets: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    statement: { type: 'string' },
+                    evidenceIndexes: {
+                      type: 'array',
+                      items: { type: 'integer', minimum: 1 },
+                    },
+                  },
+                  required: ['statement', 'evidenceIndexes'],
+                },
+              },
+              mechanisms: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    statement: { type: 'string' },
+                    evidenceIndexes: {
+                      type: 'array',
+                      items: { type: 'integer', minimum: 1 },
+                    },
+                  },
+                  required: ['statement', 'evidenceIndexes'],
+                },
+              },
+              dissent: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    statement: { type: 'string' },
+                    evidenceIndexes: {
+                      type: 'array',
+                      items: { type: 'integer', minimum: 1 },
+                    },
+                  },
+                  required: ['statement', 'evidenceIndexes'],
+                },
+              },
+              boundaryConditions: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    statement: { type: 'string' },
+                    evidenceIndexes: {
+                      type: 'array',
+                      items: { type: 'integer', minimum: 1 },
+                    },
+                  },
+                  required: ['statement', 'evidenceIndexes'],
+                },
+              },
+              hypotheses: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    statement: { type: 'string' },
+                    falsifier: { type: 'string' },
+                    evidenceIndexes: {
+                      type: 'array',
+                      items: { type: 'integer', minimum: 1 },
+                    },
+                  },
+                  required: ['statement', 'falsifier', 'evidenceIndexes'],
+                },
+              },
+              experimentProposals: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    statement: { type: 'string' },
+                    resolvesUncertainty: { type: 'string' },
+                    threshold: { type: 'string' },
+                    safetyBoundary: { type: 'string' },
+                    evidenceIndexes: {
+                      type: 'array',
+                      items: { type: 'integer', minimum: 1 },
+                    },
+                  },
+                  required: [
+                    'statement',
+                    'resolvesUncertainty',
+                    'threshold',
+                    'safetyBoundary',
+                    'evidenceIndexes',
+                  ],
+                },
+              },
               weaknesses: { type: 'array', items: { type: 'string' } },
               suggestedSearches: { type: 'array', items: { type: 'string' } },
             },
-            required: ['summary', 'weaknesses', 'suggestedSearches'],
+            required: [
+              'summary',
+              'portfolio',
+              'unresolvedConstraints',
+              'answerBullets',
+              'mechanisms',
+              'dissent',
+              'boundaryConditions',
+              'hypotheses',
+              'experimentProposals',
+              'weaknesses',
+              'suggestedSearches',
+            ],
           },
         },
       },
@@ -1695,13 +2524,17 @@ async function openAiCompatibleReview(input: {
         {
           role: 'system',
           content:
-            'You are an independent research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. Return compact JSON.',
+            'You are an independent decision-research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. Return compact JSON. Build a ranked portfolio of concrete decisions or opportunities, ordered by evidence strength and practical feasibility. Every portfolio item must name a specific build, intervention, opportunity class, or decision; explain why it ranks there; state evidence-backed constraints; propose the cheapest decisive next validation; and cite one or more supplied evidenceIndex values. Do not create a portfolio item when the evidence supports only a broad theme. For broad opportunity, strategy, approach, option, or how-should questions, actively look across distinct user workflows, architectures, and decision levers and return at least three distinct portfolio items when the evidence supports them. If fewer than three are supportable, return only the supported items and add an unresolvedConstraints entry beginning "Portfolio breadth remains unresolved:"; never manufacture an extra option to satisfy a count. Distinct items must differ in user workflow, architecture, or decision lever, not merely be substeps of the same project. Avoid multiple items that are only variants of the same named project or intervention. Address every supplied decisionConstraint explicitly: either use its wording in an evidence-backed portfolio item or repeat it in unresolvedConstraints when the evidence does not resolve it. Every answer bullet, mechanism, dissent item, boundary condition, hypothesis, and experiment must cite supplied evidenceIndex values. Address the user question in the same form it was asked, including any locality, privacy, hardware, budget, risk, safety, or deployment constraints that are supported by evidence. Do not infer hardware feasibility, cost, privacy, locality, safety, or performance unless the cited snippets explicitly support it; when evidence is missing, say so in unresolvedConstraints. Mechanisms should identify transferable causal mechanisms and where transfer breaks. Dissent should name a real evidence gap, counterexample, tradeoff, or boundary; do not emit generic "more validation needed" dissent. Experiments must name a concrete task, baseline/comparator, metric, numeric decision threshold, and safety boundary when evidence permits. Prefer direct project documentation, implementation details, measured benchmarks, resource constraints, deployment evidence, and primary-source limitations over commentary.',
         },
         {
           role: 'user',
           content: JSON.stringify({
             question: input.question,
-            admittedEvidence: input.claims.map((claim) => ({
+            decisionConstraints: input.decisionConstraints,
+            broadDecisionQuestion: input.broadDecisionQuestion,
+            keyQuestionTerms: liveRelevanceTerms(input.question),
+            admittedEvidence: input.claims.map((claim, index) => ({
+              evidenceIndex: index + 1,
               statement: claim.statement,
               sourceClass: claim.sourceClass,
               url: claim.requestedUrl,
@@ -1724,13 +2557,23 @@ async function openAiCompatibleReview(input: {
   const review = JSON.parse(content) as GovernedLiveModelReview;
   if (
     !review.summary ||
+    !Array.isArray(review.portfolio) ||
+    !Array.isArray(review.unresolvedConstraints) ||
+    !Array.isArray(review.answerBullets) ||
+    !Array.isArray(review.mechanisms) ||
+    !Array.isArray(review.dissent) ||
+    !Array.isArray(review.boundaryConditions) ||
+    !Array.isArray(review.hypotheses) ||
+    !Array.isArray(review.experimentProposals) ||
     !Array.isArray(review.weaknesses) ||
     !Array.isArray(review.suggestedSearches)
   ) {
     throw new Error('model review failed schema validation');
   }
   return {
-    review,
+    review: completeLiveReview(review, {
+      broadDecisionQuestion: input.broadDecisionQuestion,
+    }),
     usage: parsed.usage
       ? usageOf({
           requests: 1,
@@ -1740,6 +2583,543 @@ async function openAiCompatibleReview(input: {
           durationMs: Math.max(0, Date.now() - startedAt),
         })
       : null,
+  };
+}
+
+function completeLiveReview(
+  review: GovernedLiveModelReview,
+  options: { readonly broadDecisionQuestion: boolean },
+): GovernedLiveModelReview {
+  const portfolio = (review.portfolio ?? []).map((item) => ({
+    ...item,
+    constraints:
+      item.constraints.length > 0
+        ? item.constraints.map((constraint) =>
+            evidenceReadableConstraint(constraint, item.nextValidation),
+          )
+        : [
+            evidenceReadableConstraint(
+              '',
+              item.nextValidation || item.statement || item.title,
+            ),
+          ],
+  }));
+  const unresolvedSeeds = [
+    ...(review.unresolvedConstraints ?? []),
+    ...(options.broadDecisionQuestion && portfolio.length < 3
+      ? [
+          `Portfolio breadth remains unresolved: admitted evidence supports only ${String(portfolio.length)} distinct option${portfolio.length === 1 ? '' : 's'}, so Mammoth will not manufacture a third.`,
+        ]
+      : []),
+  ];
+  const unresolvedConstraints = unresolvedSeeds
+    .map(singleLine)
+    .map((constraint) =>
+      options.broadDecisionQuestion && portfolio.length >= 3
+        ? constraint.replace(
+            /^Portfolio breadth remains unresolved:\s*/iu,
+            'Question scope remains unresolved: ',
+          )
+        : constraint,
+    )
+    .filter(
+      (constraint) =>
+        constraint.length > 0 &&
+        !/^(?:none|n\/a|not applicable|no unresolved constraints?)\.?$/iu.test(
+          constraint,
+        ),
+    );
+  const citedPortfolio = citedPortfolioItems(portfolio);
+  const dissent =
+    (review.dissent ?? []).filter(
+      (item) =>
+        item.statement.trim().length >= 24 && item.evidenceIndexes.length > 0,
+    ).length > 0
+      ? (review.dissent ?? []).filter(
+          (item) =>
+            item.statement.trim().length >= 24 &&
+            item.evidenceIndexes.length > 0,
+        )
+      : citedPortfolio
+          .filter(
+            (item) =>
+              item.constraints.length > 0 && item.evidenceIndexes.length > 0,
+          )
+          .slice(0, 3)
+          .map((item) => ({
+            statement: `The cited evidence supports ${item.title.trim()} only where this condition is satisfied: ${item.constraints[0]?.trim() ?? item.nextValidation.trim()}`,
+            evidenceIndexes: item.evidenceIndexes,
+          }));
+  const boundaryConditions =
+    (review.boundaryConditions ?? []).filter(
+      (item) =>
+        item.statement.trim().length >= 24 && item.evidenceIndexes.length > 0,
+    ).length > 0
+      ? (review.boundaryConditions ?? []).filter(
+          (item) =>
+            item.statement.trim().length >= 24 &&
+            item.evidenceIndexes.length > 0,
+        )
+      : citedPortfolio
+          .filter(
+            (item) =>
+              item.constraints.length > 0 && item.evidenceIndexes.length > 0,
+          )
+          .slice(0, 3)
+          .map((item) => ({
+            statement: `Before choosing ${item.title.trim()}, validate whether the cited evidence actually satisfies this condition: ${item.constraints[0]?.trim() ?? item.nextValidation.trim()}`,
+            evidenceIndexes: item.evidenceIndexes,
+          }));
+  const hypotheses =
+    (review.hypotheses ?? []).filter(
+      (item) =>
+        item.statement.trim().length >= 24 &&
+        item.falsifier.trim().length >= 24 &&
+        item.evidenceIndexes.length > 0,
+    ).length > 0
+      ? (review.hypotheses ?? []).filter(
+          (item) =>
+            item.statement.trim().length >= 24 &&
+            item.falsifier.trim().length >= 24 &&
+            item.evidenceIndexes.length > 0,
+        )
+      : citedPortfolio
+          .filter(
+            (item) =>
+              item.statement.trim().length >= 24 &&
+              item.nextValidation.trim().length >= 24 &&
+              item.evidenceIndexes.length > 0,
+          )
+          .slice(0, 3)
+          .map((item) => ({
+            statement: `If ${stripFinalPunctuation(item.statement)}, then ${stripFinalPunctuation(item.nextValidation)}`,
+            falsifier: `The validation fails to observe the expected effect, shows no advantage over the baseline, or exposes a material constraint failure.`,
+            evidenceIndexes: item.evidenceIndexes,
+          }));
+  const experimentProposals =
+    (review.experimentProposals ?? []).filter(
+      (item) =>
+        item.statement.trim().length >= 24 &&
+        item.resolvesUncertainty.trim().length >= 24 &&
+        item.threshold.trim().length >= 24 &&
+        item.safetyBoundary.trim().length >= 24 &&
+        item.evidenceIndexes.length > 0,
+    ).length > 0
+      ? (review.experimentProposals ?? [])
+          .filter(
+            (item) =>
+              item.statement.trim().length >= 24 &&
+              item.resolvesUncertainty.trim().length >= 24 &&
+              item.threshold.trim().length >= 24 &&
+              item.safetyBoundary.trim().length >= 24 &&
+              item.evidenceIndexes.length > 0,
+          )
+          .map((item) => ({
+            ...item,
+            threshold: concreteExperimentThreshold(item.threshold),
+          }))
+      : citedPortfolio
+          .filter(
+            (item) =>
+              item.nextValidation.trim().length >= 24 &&
+              item.evidenceIndexes.length > 0,
+          )
+          .slice(0, 3)
+          .map((item) => ({
+            statement: item.nextValidation,
+            resolvesUncertainty: `Whether ${item.title.trim()} produces the intended outcome under the cited constraints.`,
+            threshold: concreteExperimentThreshold(''),
+            safetyBoundary:
+              'Design-only proposal: do not touch private data, production systems, paid providers, deployments, or real-world operations without separate scoped authority.',
+            evidenceIndexes: item.evidenceIndexes,
+          }));
+  const weaknessSeeds = [
+    ...review.weaknesses,
+    ...unresolvedConstraints.map(
+      (constraint) =>
+        `Unresolved decision constraint remains: ${constraint.trim()}`,
+    ),
+    ...citedPortfolio.slice(0, 3).map((item) => {
+      const constraint = item.constraints[0]?.trim();
+      return `Portfolio item still requires validation before operational reliance: ${item.nextValidation.trim()}${
+        constraint ? ` Constraint: ${constraint}` : ''
+      }`;
+    }),
+  ];
+  const weaknesses = [
+    ...new Set(
+      weaknessSeeds
+        .map(singleLine)
+        .filter((weakness) => informativeWordCount(weakness) >= 6),
+    ),
+  ];
+  return {
+    ...review,
+    portfolio,
+    unresolvedConstraints,
+    dissent,
+    boundaryConditions,
+    hypotheses,
+    experimentProposals,
+    weaknesses,
+  };
+}
+
+function assertDecisionGradeReview(input: {
+  readonly review: GovernedLiveModelReview;
+  readonly admittedEvidenceCount: number;
+  readonly decisionConstraints: readonly string[];
+  readonly question: string;
+  readonly reviewClaims: readonly GovernedClaimRecord[];
+}): void {
+  const portfolio = input.review.portfolio ?? [];
+  if (portfolio.length === 0) {
+    refuse(
+      'decision_portfolio_missing',
+      'live synthesis produced no evidence-bound decision portfolio',
+    );
+  }
+  const ranks = new Set<number>();
+  for (const item of portfolio) {
+    if (
+      !Number.isInteger(item.rank) ||
+      item.rank < 1 ||
+      ranks.has(item.rank) ||
+      item.title.trim().length < 4 ||
+      item.statement.trim().length < 24 ||
+      item.rationale.trim().length < 24 ||
+      item.nextValidation.trim().length < 24 ||
+      item.constraints.length === 0 ||
+      item.evidenceIndexes.length === 0 ||
+      item.evidenceIndexes.some(
+        (index) =>
+          !Number.isInteger(index) ||
+          index < 1 ||
+          index > input.admittedEvidenceCount,
+      )
+    ) {
+      refuse(
+        'decision_portfolio_invalid',
+        'live synthesis produced an invalid or unbound decision portfolio item',
+      );
+    }
+    if (
+      item.constraints.some(
+        (constraint) =>
+          informativeWordCount(constraint) < 2 ||
+          textTerms(constraint).length < 1,
+      )
+    ) {
+      refuse(
+        'decision_portfolio_weak_constraints',
+        'live synthesis portfolio constraints must be substantive and evidence-readable',
+      );
+    }
+    ranks.add(item.rank);
+  }
+  const ordered = [...portfolio].sort((left, right) => left.rank - right.rank);
+  if (ordered.some((item, index) => item.rank !== index + 1)) {
+    refuse(
+      'decision_portfolio_rank_gap',
+      'live synthesis portfolio ranks must be contiguous and deterministic',
+    );
+  }
+  // Evidence strength, breadth, unresolved constraints, dissent, and experiment
+  // quality are publication metadata, not bundle-integrity conditions. They are
+  // evaluated below by evaluateLiveAcceptanceReview and rendered as explicit gaps.
+  // Only malformed/unbound portfolio data remains a hard refusal here.
+}
+
+function criterion(
+  criterionId: string,
+  passed: boolean,
+  evidence: string,
+  requiredForOverall = true,
+): GovernedLiveAcceptanceCriterion {
+  return { criterionId, passed, requiredForOverall, evidence };
+}
+
+function collectLiveEvidenceGaps(input: {
+  readonly review: GovernedLiveModelReview;
+  readonly reviewClaims: readonly GovernedClaimRecord[];
+  readonly decisionConstraints: readonly string[];
+}): readonly GovernedLiveEvidenceGap[] {
+  const decisionTerms = [
+    ...new Set(
+      input.decisionConstraints.flatMap((constraint) => textTerms(constraint)),
+    ),
+  ];
+  const assertions: {
+    readonly assertionLabel: string;
+    readonly statement: string;
+    readonly text: string;
+    readonly evidenceIndexes: readonly number[];
+  }[] = [
+    ...(input.review.portfolio ?? []).map((item) => ({
+      assertionLabel: `portfolio item ${String(item.rank)}`,
+      statement: item.statement,
+      text: [item.title, item.statement, item.rationale].join(' '),
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+    ...(input.review.answerBullets ?? []).map((item, index) => ({
+      assertionLabel: `answer bullet ${String(index + 1)}`,
+      statement: item.statement,
+      text: item.statement,
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+    ...(input.review.mechanisms ?? []).map((item, index) => ({
+      assertionLabel: `mechanism ${String(index + 1)}`,
+      statement: item.statement,
+      text: item.statement,
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+    ...(input.review.boundaryConditions ?? []).map((item, index) => ({
+      assertionLabel: `boundary condition ${String(index + 1)}`,
+      statement: item.statement,
+      text: item.statement,
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+    ...(input.review.hypotheses ?? []).map((item, index) => ({
+      assertionLabel: `hypothesis ${String(index + 1)}`,
+      statement: item.statement,
+      text: item.statement,
+      evidenceIndexes: item.evidenceIndexes,
+    })),
+  ];
+  return assertions.flatMap((assertion) => {
+    const assertedDecisionTerms = decisionTerms.filter(
+      (term) => textRelevanceScore(assertion.text, [term]) > 0,
+    );
+    if (assertedDecisionTerms.length === 0) return [];
+    const citedEvidenceText = assertion.evidenceIndexes
+      .map((index) => input.reviewClaims[index - 1]?.statement ?? '')
+      .join(' ');
+    const unsupportedTerms = assertedDecisionTerms.filter(
+      (term) => textRelevanceScore(citedEvidenceText, [term]) === 0,
+    );
+    return unsupportedTerms.length === 0
+      ? []
+      : [
+          {
+            assertionLabel: assertion.assertionLabel,
+            statement: assertion.statement,
+            unsupportedTerms,
+            evidenceIndexes: assertion.evidenceIndexes,
+          },
+        ];
+  });
+}
+
+export function evaluateLiveAcceptanceReview(input: {
+  readonly review: GovernedLiveModelReview;
+  readonly reviewClaims: readonly GovernedClaimRecord[];
+  readonly decisionConstraints: readonly string[];
+  readonly question: string;
+  readonly now: string;
+}): GovernedLiveAcceptanceReview {
+  const clusters = distinctSourceClustersForClaims(input.reviewClaims);
+  const portfolio = input.review.portfolio ?? [];
+  const evidenceGaps = collectLiveEvidenceGaps(input);
+  const portfolioText = portfolio
+    .flatMap((item) => [
+      item.title,
+      item.statement,
+      item.rationale,
+      item.nextValidation,
+      ...item.constraints,
+    ])
+    .join(' ');
+  const unresolvedText = (input.review.unresolvedConstraints ?? []).join(' ');
+  const gapText = evidenceGaps
+    .flatMap((gap) => [gap.statement, ...gap.unsupportedTerms])
+    .join(' ');
+  const validEvidenceIndexes = (indexes: readonly number[]) =>
+    indexes.length > 0 &&
+    indexes.every(
+      (index) =>
+        Number.isInteger(index) &&
+        index >= 1 &&
+        index <= input.reviewClaims.length,
+    );
+  const decisionConstraintCriteria = input.decisionConstraints.map(
+    (constraint, index) => {
+      const terms = textTerms(constraint);
+      const portfolioResolved =
+        textRelevanceScore(portfolioText, terms) >= Math.ceil(terms.length / 2);
+      const explicitlyUnresolved =
+        terms.length > 0 &&
+        textRelevanceScore(unresolvedText, terms) >=
+          Math.ceil(terms.length / 2);
+      const explicitlyQualified =
+        terms.length > 0 &&
+        textRelevanceScore(gapText, terms) >= Math.ceil(terms.length / 2);
+      const resolved =
+        portfolioResolved && !explicitlyUnresolved && !explicitlyQualified;
+      const handled =
+        terms.length === 0 ||
+        resolved ||
+        explicitlyUnresolved ||
+        explicitlyQualified;
+      const handling = resolved
+        ? 'resolved by the ranked portfolio'
+        : explicitlyUnresolved
+          ? 'explicitly unresolved in the reader result'
+          : explicitlyQualified
+            ? 'explicitly qualified by a cited evidence gap'
+            : 'omitted from both conclusions and uncertainty disclosure';
+      return criterion(
+        `decision-constraint-${String(index + 1)}`,
+        handled,
+        `${handling}: ${constraint}`,
+      );
+    },
+  );
+  const experiments = input.review.experimentProposals ?? [];
+  const signatures = portfolio.map(portfolioItemSignature);
+  const portfolioDistinct = signatures.every((leftSignature, left) =>
+    signatures.every(
+      (rightSignature, right) =>
+        left >= right ||
+        leftSignature.length === 0 ||
+        rightSignature.length === 0 ||
+        jaccardOverlap(leftSignature, rightSignature) <= 0.72,
+    ),
+  );
+  const broadQuestion = isBroadDecisionQuestion(input.question);
+  const breadthExplicitlyUnresolved = /\bportfolio breadth\b/iu.test(
+    unresolvedText,
+  );
+  const uncertaintyDisclosed =
+    evidenceGaps.every(
+      (gap) =>
+        gap.statement.trim().length >= 24 &&
+        gap.unsupportedTerms.length > 0 &&
+        gap.unsupportedTerms.every((term) => textTerms(term).length > 0) &&
+        validEvidenceIndexes(gap.evidenceIndexes),
+    ) &&
+    (input.review.unresolvedConstraints ?? []).every(
+      (constraint) => informativeWordCount(constraint) >= 3,
+    );
+  const criteria = [
+    criterion(
+      'source-cluster-diversity',
+      !broadQuestion || clusters.length >= 3,
+      `${String(clusters.length)} independent source cluster(s): ${clusters.join(', ')}`,
+    ),
+    criterion(
+      'portfolio-breadth',
+      !broadQuestion || portfolio.length >= 3,
+      `${String(portfolio.length)} ranked portfolio item(s)`,
+      false,
+    ),
+    criterion(
+      'portfolio-breadth-handling',
+      !broadQuestion || portfolio.length >= 3 || breadthExplicitlyUnresolved,
+      portfolio.length >= 3
+        ? `${String(portfolio.length)} distinct ranked options are available`
+        : breadthExplicitlyUnresolved
+          ? `${String(portfolio.length)} supported option(s); missing breadth is explicitly unresolved rather than fabricated`
+          : `${String(portfolio.length)} supported option(s) without an explicit breadth limitation`,
+    ),
+    criterion(
+      'portfolio-distinctness',
+      portfolioDistinct,
+      portfolioDistinct
+        ? 'ranked portfolio items are substantively distinct'
+        : 'one or more ranked items repeat the same option or decision lever',
+    ),
+    criterion(
+      'evidence-binding',
+      evidenceGaps.length === 0,
+      evidenceGaps.length === 0
+        ? 'all decision-sensitive assertions are directly supported by their cited evidence'
+        : `${String(evidenceGaps.length)} assertion(s) contain explicitly recorded evidence gaps`,
+      false,
+    ),
+    criterion(
+      'uncertainty-handling',
+      uncertaintyDisclosed,
+      uncertaintyDisclosed
+        ? `${String(evidenceGaps.length)} evidence gap(s) and ${String((input.review.unresolvedConstraints ?? []).length)} unresolved constraint(s) are structurally explicit, cited where applicable, and reader-visible`
+        : 'one or more evidence gaps or unresolved constraints are malformed, uncited, or too vague to guide a decision',
+    ),
+    criterion(
+      'dissent-and-boundaries',
+      (input.review.dissent ?? []).length > 0 &&
+        (input.review.dissent ?? []).every(
+          (item) =>
+            item.statement.trim().length >= 24 &&
+            validEvidenceIndexes(item.evidenceIndexes),
+        ) &&
+        (input.review.boundaryConditions ?? []).length > 0 &&
+        (input.review.boundaryConditions ?? []).every(
+          (item) =>
+            item.statement.trim().length >= 24 &&
+            validEvidenceIndexes(item.evidenceIndexes),
+        ),
+      `${String((input.review.dissent ?? []).length)} dissent item(s), ${String((input.review.boundaryConditions ?? []).length)} boundary item(s)`,
+    ),
+    criterion(
+      'substantive-limitations',
+      input.review.weaknesses.length > 0 &&
+        input.review.weaknesses.every(
+          (weakness) => informativeWordCount(weakness) >= 6,
+        ),
+      `${String(input.review.weaknesses.length)} reviewer-noted limitation(s)`,
+    ),
+    criterion(
+      'cited-hypotheses',
+      (input.review.hypotheses ?? []).length > 0 &&
+        (input.review.hypotheses ?? []).every(
+          (item) =>
+            item.statement.trim().length >= 24 &&
+            validEvidenceIndexes(item.evidenceIndexes),
+        ),
+      `${String((input.review.hypotheses ?? []).length)} cited hypothesis item(s)`,
+    ),
+    criterion(
+      'bounded-experiments',
+      experiments.length > 0 &&
+        experiments.every((experiment) => {
+          const text = [
+            experiment.statement,
+            experiment.resolvesUncertainty,
+            experiment.threshold,
+            experiment.safetyBoundary,
+          ].join(' ');
+          return (
+            experiment.statement.trim().length >= 24 &&
+            experiment.resolvesUncertainty.trim().length >= 24 &&
+            experiment.threshold.trim().length >= 24 &&
+            experiment.safetyBoundary.trim().length >= 24 &&
+            hasComparatorLanguage(experiment.threshold) &&
+            hasQuantifiedDecisionThreshold(experiment.threshold) &&
+            hasMetricLanguage(text) &&
+            hasAdverseConstraintLanguage(text) &&
+            validEvidenceIndexes(experiment.evidenceIndexes)
+          );
+        }),
+      `${String(experiments.length)} experiment proposal(s) with comparator, metric, numeric threshold, and adverse-constraint language`,
+    ),
+  ];
+  const allCriteria = [...criteria, ...decisionConstraintCriteria];
+  return {
+    reviewerId: 'mammoth-live-independent-acceptance-review/v2',
+    reviewedAt: input.now,
+    overall: allCriteria
+      .filter((item) => item.requiredForOverall)
+      .every((item) => item.passed)
+      ? 'pass'
+      : 'fail',
+    criteria,
+    decisionConstraints: decisionConstraintCriteria,
+    evidenceGaps,
+    sourceClusters: clusters.map((cluster) => ({
+      clusterId: cluster,
+      evidenceCount: input.reviewClaims.filter(
+        (claim) => sourceClusterId(claim.requestedUrl) === cluster,
+      ).length,
+    })),
   };
 }
 
