@@ -1,6 +1,6 @@
 # P2 acceptance verifier
 
-This package is the adversarial acceptance skeleton for `P2_PLAN.md`. It fails
+This package is the adversarial acceptance skeleton for `docs/archive/P2_PLAN.md`. It fails
 closed: an absent service, unregistered capability, or non-zero executable gate is
 reported as `missing` or `failed`, and the process exits non-zero.
 
