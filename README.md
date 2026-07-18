@@ -130,8 +130,8 @@ Postgres/CAS authority with forward-only migrations, leased task queues,
 provider-idempotent side-effect receipts, multi-dimensional budgets, isolated
 research cells with blind review and preserved dissent, and deterministic
 multi-cell topology planning. The historical ledger of delivered checkpoints
-(P0 through P9) lives in [MVP_PLAN.md](MVP_PLAN.md) and
-[POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md).
+(P0 through P9) lives in [docs/archive/MVP_PLAN.md](docs/archive/MVP_PLAN.md)
+and [docs/archive/POST_MVP_ROADMAP.md](docs/archive/POST_MVP_ROADMAP.md).
 
 ## Current product boundary
 
@@ -211,19 +211,18 @@ and `test` scripts, which root commands run recursively.
 
 ## Documentation
 
-- [MVP_PLAN.md](MVP_PLAN.md) — the completed MVP contract
 - [CORE_THESIS.md](CORE_THESIS.md) — governing product authority
 - [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md) — current outcome-based roadmap
 - [CURRENT_PRODUCT_AUDIT.md](CURRENT_PRODUCT_AUDIT.md) — evidence-backed
   boundary and stocktake
-- [POST_MVP_ROADMAP.md](POST_MVP_ROADMAP.md) — historical P1-P9 delivery train
 - [ARCHITECTURE.md](ARCHITECTURE.md) — system architecture
 - [docs/adr/0001-local-durable-runtime.md](docs/adr/0001-local-durable-runtime.md)
   — MVP topology limits and the production adapter boundary
 - [docs/OBSERVATORY.md](docs/OBSERVATORY.md) — the read-only visualization
   contract
-- [ADVERSARIAL_ANALYSIS.md](ADVERSARIAL_ANALYSIS.md) and
-  [ADVERSARIAL_ANALYSIS_POST_P8.md](ADVERSARIAL_ANALYSIS_POST_P8.md) — blind
-  product critiques, preserved
+- [docs/archive/](docs/archive/README.md) — immutable historical delivery
+  evidence: the completed MVP contract, the P2-P9 phase plans, the historical
+  P1-P9 delivery train, superseded theses, and preserved blind adversarial
+  critiques
 - [AGENTS.md](AGENTS.md) and [LOOP.md](LOOP.md) — how autonomous workers
   operate in this repository
