@@ -912,3 +912,40 @@ investigate-preview.test.ts`, and `pnpm format:check` passed locally. No
   USD `9.668333129999` under the USD 15 ceiling. Brave/OpenRouter only; no
   Tavily credential was read or used. Predicates 9/10 remain incomplete and
   11/12 remain blocked; no merge, tag, release, or deploy occurred.
+
+## 2026-07-17 — V52 qualified product acceptance
+
+- **Revised product gate:** commit `d533620` separates evidentiary certainty
+  from reader-product quality. Unsupported inferences remain explicit evidence
+  gaps and cannot become established claims, while a report may pass when it
+  exposes those gaps, preserves useful cited evidence, addresses every decision
+  constraint, and proposes a bounded falsifiable experiment. Portfolio breadth
+  is satisfied by three distinct supported options or an honest unresolved-
+  breadth disclosure; it never manufactures a third option.
+- **Unrelated holdouts:** all four cross-domain outcome cases passed (world
+  models, CRDT field synchronization, urban heat policy, and orchard
+  pollination), including plan differentiation and leakage/hardcoding checks.
+  The arbitrary mountain-hut governed end-to-end positive and refusal paths
+  also passed.
+- **Exact-head gate before effects:** GitHub Actions run `29630366943` passed
+  static analysis, tests, build, foundation, P2-P4, P5-P7, P8-P9, and the
+  aggregate gate at exact head `d5336202e84495f8e8999d01923063d033be13a0`.
+- **Final live result:** V52 run `run:c6a59d9e42b39b0a` completed through the
+  normal governed Brave/OpenRouter path with 16 snapshots, 43 admitted claims,
+  one rejected claim, 14 independent source clusters, three distinct ranked
+  options, seven explicit evidence gaps, three unresolved constraints, and one
+  experiment with a comparator, metric, numeric threshold, and adverse stop
+  boundary. The independent v2 acceptance review returned `overall: pass`; the
+  reader status is `accepted with qualifications` rather than falsely certain.
+- **Manual-read correction before merge:** the preserved report correctly
+  records that `consumer` remains unsupported, but the acceptance explanation
+  could still call the corresponding decision constraint resolved when the same
+  wording appeared in the portfolio. The follow-up makes a matching evidence
+  gap take precedence and classifies that constraint as explicitly qualified.
+  It also renames model-supplied `Portfolio breadth remains unresolved` wording
+  to `Question scope remains unresolved` whenever three distinct options exist,
+  avoiding a contradiction in otherwise accepted reports. Both corrections are
+  deterministic and require no additional paid provider run.
+- **Spend:** V52 settled USD `0.18006281`; aggregate governed spend is USD
+  `5.511729680001`, leaving USD `9.488270319999` under the USD 15 ceiling.
+  Brave/OpenRouter only; Tavily was unset and not used.

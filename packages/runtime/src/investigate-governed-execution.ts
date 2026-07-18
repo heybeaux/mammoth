@@ -2614,6 +2614,14 @@ function completeLiveReview(
   ];
   const unresolvedConstraints = unresolvedSeeds
     .map(singleLine)
+    .map((constraint) =>
+      options.broadDecisionQuestion && portfolio.length >= 3
+        ? constraint.replace(
+            /^Portfolio breadth remains unresolved:\s*/iu,
+            'Question scope remains unresolved: ',
+          )
+        : constraint,
+    )
     .filter(
       (constraint) =>
         constraint.length > 0 &&
@@ -2945,7 +2953,8 @@ export function evaluateLiveAcceptanceReview(input: {
       const explicitlyQualified =
         terms.length > 0 &&
         textRelevanceScore(gapText, terms) >= Math.ceil(terms.length / 2);
-      const resolved = portfolioResolved && !explicitlyUnresolved;
+      const resolved =
+        portfolioResolved && !explicitlyUnresolved && !explicitlyQualified;
       const handled =
         terms.length === 0 ||
         resolved ||

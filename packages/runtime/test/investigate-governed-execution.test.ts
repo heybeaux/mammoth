@@ -476,6 +476,7 @@ describe('governed acquisition execution', () => {
                         },
                       ],
                       unresolvedConstraints: [
+                        'Portfolio breadth remains unresolved: the admitted evidence does not establish clinical outcome safety.',
                         'No admitted field trial establishes clinical outcome safety.',
                       ],
                       answerBullets: [
@@ -637,6 +638,12 @@ describe('governed acquisition execution', () => {
     );
     expect(bundle.files['reader/report.md']).toContain(
       '## Proposed experiments',
+    );
+    expect(bundle.files['reader/report.md']).toContain(
+      'Question scope remains unresolved: the admitted evidence does not establish clinical outcome safety.',
+    );
+    expect(bundle.files['reader/report.md']).not.toContain(
+      'Portfolio breadth remains unresolved: the admitted evidence does not establish clinical outcome safety.',
     );
     expect(bundle.files['audit/acceptance-review.json']).toContain(
       '"overall": "pass"',
@@ -826,9 +833,6 @@ describe('governed acquisition execution', () => {
             evidenceIndexes: [1],
           },
         ],
-        unresolvedConstraints: [
-          'Consumer GPU is not defined by the admitted source and remains unresolved.',
-        ],
         answerBullets: [
           {
             statement:
@@ -896,7 +900,10 @@ describe('governed acquisition execution', () => {
       ),
     ).toMatchObject({ passed: true, requiredForOverall: true });
     expect(review.evidenceGaps.length).toBeGreaterThan(0);
-    expect(review.decisionConstraints[0]).toMatchObject({ passed: true });
+    expect(review.decisionConstraints[0]).toMatchObject({
+      passed: true,
+      evidence: 'explicitly qualified by a cited evidence gap: consumer GPU',
+    });
   });
 
   it('is deterministic for a fixed clock and catalog', () => {
