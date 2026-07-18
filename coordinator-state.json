@@ -1,22 +1,18 @@
 {
   "schemaVersion": "1.0.0",
-  "updatedAt": "2026-07-17T20:42:25Z",
+  "updatedAt": "2026-07-18T05:30:20Z",
   "owner": "mammoth-core-loop-coordinator-v11",
-  "branch": "fix/core-live-brave-rate-limit-v6",
-  "head": "c558ea3ea799d08810a1273d9db69cd0788af32b",
+  "branch": "main",
+  "head": "bf7f61cf16a6cf1c14930c7af4ef41485ec28f2a",
   "pr": "https://github.com/heybeaux/mammoth/pull/146",
-  "status": "blocked",
-  "currentPredicate": "Predicates 9/10 remain unproved after v43/v44 governed live probes and independent read-only review; predicates 1-8 remain proved; predicates 11/12 remain blocked.",
-  "blockedReason": "Three materially distinct strategies were tried in this continuation (architectural acceptance/source-diversity gates, false-unresolved decision-constraint repair, and substitute governed holdout). Fresh generated outputs still fail product acceptance: remote-clinic failed closed, v44 substitute failed closed, and independent reviewer rejected v43 generated reports for unresolved decision constraints and templated experiment thresholds.",
-  "assignment": "Architectural repair before further paid reruns: independent pass/fail review artifact, generic source diversity/admission, evidence-derived experiments, real contradiction/dissent and transfer boundaries, fail-closed decision-constraint resolution.",
-  "provedPredicates": [1, 2, 3, 4, 5, 6, 7, 8],
-  "unprovedPredicates": [9, 10, 11, 12],
-  "latestVerifiedHead": "c558ea3ea799d08810a1273d9db69cd0788af32b",
-  "latestRemotePrHead": "c558ea3ea799d08810a1273d9db69cd0788af32b",
-  "worktreeTrackedDiff": "clean at takeover; untracked live artifacts and workspace bootstrap files preserved and not staged",
-  "exactHeadCi": {
-    "head": "c558ea3ea799d08810a1273d9db69cd0788af32b",
-    "run": "29611685579",
+  "status": "release_wait",
+  "currentPredicate": "Predicates 1-11 are proved. Predicate 12 is complete except the no-Friday tag/release calendar boundary; local time at receipt preparation was still Friday 2026-07-17 PDT.",
+  "provedPredicates": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+  "pendingPredicates": [12],
+  "latestVerifiedHead": "bf7f61cf16a6cf1c14930c7af4ef41485ec28f2a",
+  "freshMainCi": {
+    "head": "bf7f61cf16a6cf1c14930c7af4ef41485ec28f2a",
+    "run": "29630897099",
     "status": "success",
     "completedSuccess": [
       "static",
@@ -26,51 +22,31 @@
       "p2-p4",
       "p5-p7",
       "p8-p9",
-      "verify",
-      "CodeRabbit"
+      "verify"
     ],
-    "checkedAt": "2026-07-17T20:42:25Z"
+    "checkedAt": "2026-07-18T05:30:20Z"
   },
-  "processQuiescence": "ps scan at takeover found no other command containing /private/tmp/mammoth-core-loop-v6 besides the scan itself",
-  "prohibitedActions": [
-    "Tavily credential/source/use",
-    "tag",
-    "release",
-    "deploy",
-    "merge before predicates 9/10 and independent review pass"
-  ],
-  "spend": {
+  "finalAcceptance": {
+    "runId": "run:c6a59d9e42b39b0a",
+    "sourceDirectory": "evals/live/mammoth-core-loop-v52/world-model-final",
+    "finalReport": "/Users/beauxwalton/.openclaw/agents/scout/workspace/delivery/mammoth-core-loop/final/report.md",
+    "finalAuditBundle": "/Users/beauxwalton/.openclaw/agents/scout/workspace/delivery/mammoth-core-loop/final/audit-bundle",
+    "acceptanceReview": "/Users/beauxwalton/.openclaw/agents/scout/workspace/delivery/mammoth-core-loop/final/audit-bundle/audit/acceptance-review.json",
+    "acceptanceOverall": "pass",
+    "reviewer": "mammoth-live-independent-acceptance-review/v2",
+    "readerStatus": "accepted with qualifications"
+  },
+  "budget": {
     "ceilingUsd": 15,
-    "knownContinuationSpendUsdV34ToV39": 2.440757400001,
-    "knownContinuationSpendUsdV42": 0.68021224,
-    "knownContinuationSpendUsdV43": 0.6802017100000001,
-    "knownContinuationSpendUsdV44": 0.1700492,
-    "knownContinuationEffectiveSpendUsd": 3.971220550001,
-    "remainingUsd": 11.028779449999,
-    "note": "v40/v41 were invocation/path setup failures with no provider settlement; v42/v43/v44 per-run journals are preserved under evals/live and the aggregate carry-forward journals record the recomputed ceiling before new effects."
+    "aggregateSpentUsd": 5.511729680001,
+    "remainingUsd": 9.488270319999,
+    "authorizedProviders": ["Brave Search", "OpenRouter"],
+    "forbiddenProvidersNotUsed": ["Tavily"]
   },
-  "latestRepairCheckpoint": {
-    "status": "pushed",
-    "summary": "Added live acceptance-review artifact with explicit pass/fail criteria, broad-question source-cluster diversity, diversified review evidence, stricter experiment metric/comparator/threshold/adverse-constraint gates, and fail-closed explicitly unresolved decision constraints.",
-    "localVerification": [
-      "pnpm --filter @mammoth/runtime typecheck",
-      "pnpm --filter @mammoth/runtime test -- investigate-governed-execution.test.ts investigate-preview.test.ts",
-      "pnpm format:check"
-    ],
-    "effectsUsed": "none for code repair; governed Brave/OpenRouter effects only for v42-v44 probes after recomputing carry-forward spend"
-  },
-  "latestRuns": {
-    "v42": "all four failed closed on generated decision constraints after initial acceptance-gate repair",
-    "v43": "grid-battery, heritage-HVAC, and world-model exited 0; remote-clinic failed closed; independent review FAIL",
-    "v44": "substitute rural-school-air holdout failed closed on unresolved wildfire-smoke-exposure constraint"
-  },
-  "independentReview": {
-    "reviewer": "019f71cf-5060-7661-93f7-22e1585add4e",
-    "overall": "fail",
-    "summary": "Internal acceptance artifacts marked some v43 runs pass, but product-level review rejected them for unresolved decision constraints and templated experiment thresholds."
-  },
-  "requiredEndArtifacts": [
-    "/Users/beauxwalton/.openclaw/agents/scout/workspace/delivery/mammoth-core-loop/operator report",
-    "/Users/beauxwalton/.openclaw/agents/scout/workspace/delivery/mammoth-core-loop/best fresh generated reader report plus audit/manifest references"
-  ]
+  "release": {
+    "status": "blocked_until_saturday_pdt",
+    "earliestAuthorizedLocalDate": "2026-07-18",
+    "intendedTag": "v1.0.0-core-thesis",
+    "note": "No tag, release, or deployment was performed while local time remained Friday 2026-07-17 PDT."
+  }
 }
