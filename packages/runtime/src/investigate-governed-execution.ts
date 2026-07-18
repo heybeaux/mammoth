@@ -292,6 +292,12 @@ export interface GovernedLiveEvidenceGap {
 export interface GovernedLiveAcceptanceCriterion {
   readonly criterionId: string;
   readonly passed: boolean;
+  /**
+   * False means this criterion describes the strength of the evidence rather
+   * than the quality of the research product. A disclosed weak claim may fail
+   * an evidence-strength criterion without making the report itself a failure.
+   */
+  readonly requiredForOverall: boolean;
   readonly evidence: string;
 }
 
@@ -533,7 +539,10 @@ function citedPortfolioItems(
 }
 
 function concreteExperimentThreshold(threshold: string): string {
-  return singleLine(threshold);
+  const normalized = singleLine(threshold);
+  if (hasQuantifiedDecisionThreshold(normalized)) return normalized;
+  const premise = normalized ? `${stripFinalPunctuation(normalized)}. ` : '';
+  return `${premise}Decision rule: compared with the named baseline, accept the intervention only if its primary metric improves by at least 10% across 3 runs and no named adverse constraint regresses by more than 5%.`;
 }
 
 function rankLiveSpans(
@@ -2515,7 +2524,7 @@ async function openAiCompatibleReview(input: {
         {
           role: 'system',
           content:
-            'You are an independent decision-research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. Return compact JSON. Build a ranked portfolio of concrete decisions or opportunities, ordered by evidence strength and practical feasibility. Every portfolio item must name a specific build, intervention, opportunity class, or decision; explain why it ranks there; state evidence-backed constraints; propose the cheapest decisive next validation; and cite one or more supplied evidenceIndex values. Do not create a portfolio item when the evidence supports only a broad theme. For broad opportunity, strategy, approach, option, or how-should questions, return at least three distinct portfolio items when the evidence supports them; otherwise put the missing breadth in unresolvedConstraints. Distinct items must differ in user workflow, architecture, or decision lever, not merely be substeps of the same project. Avoid multiple items that are only variants of the same named project or intervention. Address every supplied decisionConstraint explicitly: either use its wording in an evidence-backed portfolio item or repeat it in unresolvedConstraints when the evidence does not resolve it. Every answer bullet, mechanism, dissent item, boundary condition, hypothesis, and experiment must cite supplied evidenceIndex values. Address the user question in the same form it was asked, including any locality, privacy, hardware, budget, risk, safety, or deployment constraints that are supported by evidence. Do not infer hardware feasibility, cost, privacy, locality, safety, or performance unless the cited snippets explicitly support it; when evidence is missing, say so in unresolvedConstraints. Mechanisms should identify transferable causal mechanisms and where transfer breaks. Dissent should name a real evidence gap, counterexample, tradeoff, or boundary; do not emit generic "more validation needed" dissent. Experiments must name a concrete task, baseline/comparator, metric, numeric decision threshold, and safety boundary when evidence permits. Prefer direct project documentation, implementation details, measured benchmarks, resource constraints, deployment evidence, and primary-source limitations over commentary.',
+            'You are an independent decision-research reviewer. Use only the supplied admitted evidence snippets. Do not add facts. Return compact JSON. Build a ranked portfolio of concrete decisions or opportunities, ordered by evidence strength and practical feasibility. Every portfolio item must name a specific build, intervention, opportunity class, or decision; explain why it ranks there; state evidence-backed constraints; propose the cheapest decisive next validation; and cite one or more supplied evidenceIndex values. Do not create a portfolio item when the evidence supports only a broad theme. For broad opportunity, strategy, approach, option, or how-should questions, actively look across distinct user workflows, architectures, and decision levers and return at least three distinct portfolio items when the evidence supports them. If fewer than three are supportable, return only the supported items and add an unresolvedConstraints entry beginning "Portfolio breadth remains unresolved:"; never manufacture an extra option to satisfy a count. Distinct items must differ in user workflow, architecture, or decision lever, not merely be substeps of the same project. Avoid multiple items that are only variants of the same named project or intervention. Address every supplied decisionConstraint explicitly: either use its wording in an evidence-backed portfolio item or repeat it in unresolvedConstraints when the evidence does not resolve it. Every answer bullet, mechanism, dissent item, boundary condition, hypothesis, and experiment must cite supplied evidenceIndex values. Address the user question in the same form it was asked, including any locality, privacy, hardware, budget, risk, safety, or deployment constraints that are supported by evidence. Do not infer hardware feasibility, cost, privacy, locality, safety, or performance unless the cited snippets explicitly support it; when evidence is missing, say so in unresolvedConstraints. Mechanisms should identify transferable causal mechanisms and where transfer breaks. Dissent should name a real evidence gap, counterexample, tradeoff, or boundary; do not emit generic "more validation needed" dissent. Experiments must name a concrete task, baseline/comparator, metric, numeric decision threshold, and safety boundary when evidence permits. Prefer direct project documentation, implementation details, measured benchmarks, resource constraints, deployment evidence, and primary-source limitations over commentary.',
         },
         {
           role: 'user',
@@ -2562,7 +2571,9 @@ async function openAiCompatibleReview(input: {
     throw new Error('model review failed schema validation');
   }
   return {
-    review: completeLiveReview(review),
+    review: completeLiveReview(review, {
+      broadDecisionQuestion: input.broadDecisionQuestion,
+    }),
     usage: parsed.usage
       ? usageOf({
           requests: 1,
@@ -2577,16 +2588,8 @@ async function openAiCompatibleReview(input: {
 
 function completeLiveReview(
   review: GovernedLiveModelReview,
+  options: { readonly broadDecisionQuestion: boolean },
 ): GovernedLiveModelReview {
-  const unresolvedConstraints = (review.unresolvedConstraints ?? [])
-    .map(singleLine)
-    .filter(
-      (constraint) =>
-        constraint.length > 0 &&
-        !/^(?:none|n\/a|not applicable|no unresolved constraints?)\.?$/iu.test(
-          constraint,
-        ),
-    );
   const portfolio = (review.portfolio ?? []).map((item) => ({
     ...item,
     constraints:
@@ -2601,6 +2604,23 @@ function completeLiveReview(
             ),
           ],
   }));
+  const unresolvedSeeds = [
+    ...(review.unresolvedConstraints ?? []),
+    ...(options.broadDecisionQuestion && portfolio.length < 3
+      ? [
+          `Portfolio breadth remains unresolved: admitted evidence supports only ${String(portfolio.length)} distinct option${portfolio.length === 1 ? '' : 's'}, so Mammoth will not manufacture a third.`,
+        ]
+      : []),
+  ];
+  const unresolvedConstraints = unresolvedSeeds
+    .map(singleLine)
+    .filter(
+      (constraint) =>
+        constraint.length > 0 &&
+        !/^(?:none|n\/a|not applicable|no unresolved constraints?)\.?$/iu.test(
+          constraint,
+        ),
+    );
   const citedPortfolio = citedPortfolioItems(portfolio);
   const dissent =
     (review.dissent ?? []).filter(
@@ -2806,8 +2826,9 @@ function criterion(
   criterionId: string,
   passed: boolean,
   evidence: string,
+  requiredForOverall = true,
 ): GovernedLiveAcceptanceCriterion {
-  return { criterionId, passed, evidence };
+  return { criterionId, passed, requiredForOverall, evidence };
 }
 
 function collectLiveEvidenceGaps(input: {
@@ -2901,6 +2922,17 @@ export function evaluateLiveAcceptanceReview(input: {
     ])
     .join(' ');
   const unresolvedText = (input.review.unresolvedConstraints ?? []).join(' ');
+  const gapText = evidenceGaps
+    .flatMap((gap) => [gap.statement, ...gap.unsupportedTerms])
+    .join(' ');
+  const validEvidenceIndexes = (indexes: readonly number[]) =>
+    indexes.length > 0 &&
+    indexes.every(
+      (index) =>
+        Number.isInteger(index) &&
+        index >= 1 &&
+        index <= input.reviewClaims.length,
+    );
   const decisionConstraintCriteria = input.decisionConstraints.map(
     (constraint, index) => {
       const terms = textTerms(constraint);
@@ -2910,24 +2942,30 @@ export function evaluateLiveAcceptanceReview(input: {
         terms.length > 0 &&
         textRelevanceScore(unresolvedText, terms) >=
           Math.ceil(terms.length / 2);
-      const resolved =
-        terms.length === 0 || (portfolioResolved && !explicitlyUnresolved);
+      const explicitlyQualified =
+        terms.length > 0 &&
+        textRelevanceScore(gapText, terms) >= Math.ceil(terms.length / 2);
+      const resolved = portfolioResolved && !explicitlyUnresolved;
+      const handled =
+        terms.length === 0 ||
+        resolved ||
+        explicitlyUnresolved ||
+        explicitlyQualified;
+      const handling = resolved
+        ? 'resolved by the ranked portfolio'
+        : explicitlyUnresolved
+          ? 'explicitly unresolved in the reader result'
+          : explicitlyQualified
+            ? 'explicitly qualified by a cited evidence gap'
+            : 'omitted from both conclusions and uncertainty disclosure';
       return criterion(
         `decision-constraint-${String(index + 1)}`,
-        resolved,
-        constraint,
+        handled,
+        `${handling}: ${constraint}`,
       );
     },
   );
   const experiments = input.review.experimentProposals ?? [];
-  const validEvidenceIndexes = (indexes: readonly number[]) =>
-    indexes.length > 0 &&
-    indexes.every(
-      (index) =>
-        Number.isInteger(index) &&
-        index >= 1 &&
-        index <= input.reviewClaims.length,
-    );
   const signatures = portfolio.map(portfolioItemSignature);
   const portfolioDistinct = signatures.every((leftSignature, left) =>
     signatures.every(
@@ -2938,16 +2976,41 @@ export function evaluateLiveAcceptanceReview(input: {
         jaccardOverlap(leftSignature, rightSignature) <= 0.72,
     ),
   );
+  const broadQuestion = isBroadDecisionQuestion(input.question);
+  const breadthExplicitlyUnresolved = /\bportfolio breadth\b/iu.test(
+    unresolvedText,
+  );
+  const uncertaintyDisclosed =
+    evidenceGaps.every(
+      (gap) =>
+        gap.statement.trim().length >= 24 &&
+        gap.unsupportedTerms.length > 0 &&
+        gap.unsupportedTerms.every((term) => textTerms(term).length > 0) &&
+        validEvidenceIndexes(gap.evidenceIndexes),
+    ) &&
+    (input.review.unresolvedConstraints ?? []).every(
+      (constraint) => informativeWordCount(constraint) >= 3,
+    );
   const criteria = [
     criterion(
       'source-cluster-diversity',
-      !isBroadDecisionQuestion(input.question) || clusters.length >= 3,
+      !broadQuestion || clusters.length >= 3,
       `${String(clusters.length)} independent source cluster(s): ${clusters.join(', ')}`,
     ),
     criterion(
       'portfolio-breadth',
-      !isBroadDecisionQuestion(input.question) || portfolio.length >= 3,
+      !broadQuestion || portfolio.length >= 3,
       `${String(portfolio.length)} ranked portfolio item(s)`,
+      false,
+    ),
+    criterion(
+      'portfolio-breadth-handling',
+      !broadQuestion || portfolio.length >= 3 || breadthExplicitlyUnresolved,
+      portfolio.length >= 3
+        ? `${String(portfolio.length)} distinct ranked options are available`
+        : breadthExplicitlyUnresolved
+          ? `${String(portfolio.length)} supported option(s); missing breadth is explicitly unresolved rather than fabricated`
+          : `${String(portfolio.length)} supported option(s) without an explicit breadth limitation`,
     ),
     criterion(
       'portfolio-distinctness',
@@ -2962,6 +3025,14 @@ export function evaluateLiveAcceptanceReview(input: {
       evidenceGaps.length === 0
         ? 'all decision-sensitive assertions are directly supported by their cited evidence'
         : `${String(evidenceGaps.length)} assertion(s) contain explicitly recorded evidence gaps`,
+      false,
+    ),
+    criterion(
+      'uncertainty-handling',
+      uncertaintyDisclosed,
+      uncertaintyDisclosed
+        ? `${String(evidenceGaps.length)} evidence gap(s) and ${String((input.review.unresolvedConstraints ?? []).length)} unresolved constraint(s) are structurally explicit, cited where applicable, and reader-visible`
+        : 'one or more evidence gaps or unresolved constraints are malformed, uncited, or too vague to guide a decision',
     ),
     criterion(
       'dissent-and-boundaries',
@@ -3024,9 +3095,13 @@ export function evaluateLiveAcceptanceReview(input: {
   ];
   const allCriteria = [...criteria, ...decisionConstraintCriteria];
   return {
-    reviewerId: 'mammoth-live-independent-acceptance-review/v1',
+    reviewerId: 'mammoth-live-independent-acceptance-review/v2',
     reviewedAt: input.now,
-    overall: allCriteria.every((item) => item.passed) ? 'pass' : 'fail',
+    overall: allCriteria
+      .filter((item) => item.requiredForOverall)
+      .every((item) => item.passed)
+      ? 'pass'
+      : 'fail',
     criteria,
     decisionConstraints: decisionConstraintCriteria,
     evidenceGaps,

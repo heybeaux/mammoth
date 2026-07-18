@@ -416,6 +416,7 @@ export function planInvestigation(questionInput: string): InvestigationPreview {
         `${constraintQuery || implementationQuery || sourceTopic || primary} official project documentation`,
         `${subjectConstraintFocus} ${deliveryConstraintFocus} ${resourceConstraintFocus} repository readme implementation`,
         `${subjectConstraintFocus} ${lateConstraintFocus} github repository readme implementation`,
+        `${subjectConstraintFocus} ${deliveryConstraintFocus} distinct implementation categories alternative projects comparison`,
         `${subjectConstraintFocus} ${deliveryConstraintFocus} practical applications use cases local deployment`,
         `${subjectConstraintFocus} ${deliveryConstraintFocus} privacy local deployment architecture`,
         `${resourceConstraintFocus || secondary} fixed compute budget benchmark comparison`,

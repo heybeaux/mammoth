@@ -665,6 +665,32 @@ describe('governed acquisition execution', () => {
     ) {
       throw new Error('live fixture did not produce review artifacts');
     }
+    const qualifiedEvidenceGaps = [
+      {
+        assertionLabel: 'portfolio item 1',
+        statement: firstPortfolioItem.statement,
+        unsupportedTerms: ['consumer'],
+        evidenceIndexes: firstPortfolioItem.evidenceIndexes,
+      },
+      {
+        assertionLabel: 'mechanism 1',
+        statement: firstMechanism.statement,
+        unsupportedTerms: ['private'],
+        evidenceIndexes: firstMechanism.evidenceIndexes,
+      },
+      {
+        assertionLabel: 'boundary condition 1',
+        statement: firstBoundary.statement,
+        unsupportedTerms: ['private'],
+        evidenceIndexes: firstBoundary.evidenceIndexes,
+      },
+      {
+        assertionLabel: 'hypothesis 1',
+        statement: firstHypothesis.statement,
+        unsupportedTerms: ['private'],
+        evidenceIndexes: firstHypothesis.evidenceIndexes,
+      },
+    ];
     const partialBundle = composeGovernedInvestigationBundle({
       plan,
       intentSet,
@@ -675,32 +701,7 @@ describe('governed acquisition execution', () => {
         acceptanceReview: {
           ...acceptanceReview,
           overall: 'fail',
-          evidenceGaps: [
-            {
-              assertionLabel: 'portfolio item 1',
-              statement: firstPortfolioItem.statement,
-              unsupportedTerms: ['consumer'],
-              evidenceIndexes: firstPortfolioItem.evidenceIndexes,
-            },
-            {
-              assertionLabel: 'mechanism 1',
-              statement: firstMechanism.statement,
-              unsupportedTerms: ['private'],
-              evidenceIndexes: firstMechanism.evidenceIndexes,
-            },
-            {
-              assertionLabel: 'boundary condition 1',
-              statement: firstBoundary.statement,
-              unsupportedTerms: ['private'],
-              evidenceIndexes: firstBoundary.evidenceIndexes,
-            },
-            {
-              assertionLabel: 'hypothesis 1',
-              statement: firstHypothesis.statement,
-              unsupportedTerms: ['private'],
-              evidenceIndexes: firstHypothesis.evidenceIndexes,
-            },
-          ],
+          evidenceGaps: qualifiedEvidenceGaps,
         },
       },
     });
@@ -724,6 +725,23 @@ describe('governed acquisition execution', () => {
     );
     expect(partialBundle.files['reader/report.md']).toContain(
       '**Suggestive hypothesis:**',
+    );
+    const qualifiedBundle = composeGovernedInvestigationBundle({
+      plan,
+      intentSet,
+      release,
+      now: NOW,
+      execution: {
+        ...execution,
+        acceptanceReview: {
+          ...acceptanceReview,
+          overall: 'pass',
+          evidenceGaps: qualifiedEvidenceGaps,
+        },
+      },
+    });
+    expect(qualifiedBundle.files['reader/report.md']).toContain(
+      '**Research status: accepted with qualifications.**',
     );
   });
 
@@ -771,6 +789,114 @@ describe('governed acquisition execution', () => {
     );
     expect(gap?.unsupportedTerms).toContain('consumer');
     expect(gap?.evidenceIndexes).toEqual([1]);
+  });
+
+  it('accepts an honest qualified result without upgrading a suggestive claim', () => {
+    const review = evaluateLiveAcceptanceReview({
+      question: 'Can this world-model implementation run on a consumer GPU?',
+      decisionConstraints: ['consumer GPU'],
+      now: NOW,
+      reviewClaims: [
+        {
+          proposalId: 'claim:single-gpu-qualified',
+          statement: 'The implementation runs on a single GPU.',
+          candidateId: 'candidate:single-gpu-qualified',
+          requestedUrl: 'https://example.test/model-card-qualified',
+          sourceClass: 'public_web',
+          decision: 'admitted',
+          reasonCodes: [],
+        },
+      ],
+      review: {
+        summary:
+          'The implementation reports single-GPU operation, but the GPU class is not defined.',
+        portfolio: [
+          {
+            rank: 1,
+            title: 'Qualified single-GPU trial',
+            statement:
+              'Treat the implementation as a consumer-GPU candidate, not an established consumer-GPU deployment.',
+            rationale:
+              'The source establishes one-GPU operation while leaving consumer-grade hardware undefined.',
+            constraints: [
+              'Consumer-card identity, VRAM, latency, thermals, and power remain unverified.',
+            ],
+            nextValidation:
+              'Run the implementation on a named consumer card and record peak VRAM, latency, thermals, and power.',
+            evidenceIndexes: [1],
+          },
+        ],
+        unresolvedConstraints: [
+          'Consumer GPU is not defined by the admitted source and remains unresolved.',
+        ],
+        answerBullets: [
+          {
+            statement:
+              'Single-GPU operation is established; consumer-GPU suitability is only suggestive.',
+            evidenceIndexes: [1],
+          },
+        ],
+        mechanisms: [
+          {
+            statement:
+              'The directly observed mechanism is execution within one GPU boundary.',
+            evidenceIndexes: [1],
+          },
+        ],
+        dissent: [
+          {
+            statement:
+              'A single-GPU statement does not identify card class, memory capacity, power, or sustained thermal limits.',
+            evidenceIndexes: [1],
+          },
+        ],
+        boundaryConditions: [
+          {
+            statement:
+              'Consumer-GPU suitability remains conditional on a named card and measured resource use.',
+            evidenceIndexes: [1],
+          },
+        ],
+        hypotheses: [
+          {
+            statement:
+              'The implementation may fit a named consumer GPU under a bounded workload.',
+            falsifier:
+              'Peak VRAM exceeds the named card or the workload fails its latency and thermal limits.',
+            evidenceIndexes: [1],
+          },
+        ],
+        experimentProposals: [
+          {
+            statement:
+              'Compare the implementation on one named consumer card against the documented single-GPU baseline.',
+            resolvesUncertainty:
+              'Whether the unspecified single GPU can be replaced by an explicitly defined consumer card.',
+            threshold:
+              'Pass only if peak VRAM stays below 90% of capacity across 3 runs and latency is no more than 10% worse than baseline.',
+            safetyBoundary:
+              'Stop if thermal throttling occurs, power exceeds the card limit, or the workload touches private data.',
+            evidenceIndexes: [1],
+          },
+        ],
+        weaknesses: [
+          'The admitted source omits the GPU model and measured resource envelope.',
+        ],
+        suggestedSearches: ['named consumer GPU measured benchmark'],
+      },
+    });
+
+    expect(review.overall).toBe('pass');
+    expect(
+      review.criteria.find((item) => item.criterionId === 'evidence-binding'),
+    ).toMatchObject({ passed: false, requiredForOverall: false });
+    expect(
+      review.criteria.find(
+        (item) => item.criterionId === 'uncertainty-handling',
+      ),
+    ).toMatchObject({ passed: true, requiredForOverall: true });
+    expect(review.evidenceGaps.length).toBeGreaterThan(0);
+    expect(review.decisionConstraints[0]).toMatchObject({ passed: true });
   });
 
   it('is deterministic for a fixed clock and catalog', () => {

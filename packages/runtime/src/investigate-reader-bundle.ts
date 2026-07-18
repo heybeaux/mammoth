@@ -660,7 +660,10 @@ export function composeGovernedInvestigationBundle(
       ? '> **Research status: evidence-bound.** This offline report preserves admitted evidence and its limitations.'
       : execution.acceptanceReview.overall === 'fail'
         ? '> **Research status: partial.** The report contains useful admitted evidence, but one or more decision-quality checks remain unresolved. Weak inferences are labelled below instead of being discarded.'
-        : '> **Research status: accepted.** The report passed the configured decision-quality checks.',
+        : execution.acceptanceReview.evidenceGaps.length > 0 ||
+            (execution.liveReview?.unresolvedConstraints?.length ?? 0) > 0
+          ? '> **Research status: accepted with qualifications.** The research product passed its decision-quality checks because every material uncertainty is explicit and usable; the affected claims remain suggestive rather than established.'
+          : '> **Research status: accepted.** The report passed the configured decision-quality checks.',
     '',
     '## Direct answer',
     '',
